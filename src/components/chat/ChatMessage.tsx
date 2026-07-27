@@ -12,6 +12,7 @@ export interface ChatMessageData {
     title: string;
     subtitle?: string;
     url?: string;
+    origin?: "hub" | "web";
     data?: Record<string, unknown>;
   }>;
   chips?: Array<{
@@ -20,6 +21,7 @@ export interface ChatMessageData {
     action?: string;
     prompt?: string;
   }>;
+  sourceLabel?: string;
 }
 
 interface ChatMessageProps {
@@ -98,6 +100,12 @@ export function ChatMessage({ message, isStreaming, onChipClick, onSpeak }: Chat
               </button>
             ))}
           </div>
+        )}
+
+        {message.sourceLabel && !isStreaming && (
+          <p className="mt-2 text-[10px] text-muted">
+            Sources: {message.sourceLabel}
+          </p>
         )}
 
         {!isUser && !isStreaming && message.content && onSpeak && (

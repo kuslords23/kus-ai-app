@@ -23,6 +23,23 @@ The companion does **not** run its own LLM pipeline. All intelligence flows thro
   "userContext": {
     "user": { "id", "name", "email" },
     "navigation": { "activeTab", "source": "kus-ai-app" },
+    "retrieval": {
+      "strategy": "hub-first",
+      "webFallback": true,
+      "matchAttachmentsToSearch": true
+    },
+    "persona": { "name": "Royal", "systemPrompt", "silentMode", "energyLevel" },
+    "agent": { "agentId", "agentName", "skills", "persona", "speed" },
+    "companionMemory": { "emotionalHistory", "recentDecisions", "regrettedPatterns", "..." }
+  },
+  "history": [{ "role": "user"|"assistant", "content": "..." }],
+  "attachments": [{ "kind", "name", "mimeType", "url", "hubFirst": true }]
+}
+```
+
+Hub returns `sources`, `recommendations`, `usedWebSearch`, `dataSource`, and optional `videos`/`music`/`articles`. The companion renders **hub items first**, then web fallbacks, with linked summaries and embedded video/music previews when URLs are present.
+
+## RAG context fields (reference)
     "companion": { "id": "ai", "name": "Kus AI", "surface": "standalone" },
     "persona": { "name": "Royal", "systemPrompt", "silentMode", "energyLevel" },
     "agent": { "agentId", "agentName", "skills", "persona", "speed" },

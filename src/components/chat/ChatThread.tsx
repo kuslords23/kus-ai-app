@@ -10,6 +10,8 @@ import { ActionConfirmModal } from "@/components/actions/ActionConfirmModal";
 import { ComposerDock } from "@/components/shell/ComposerDock";
 import { streamRag, type RagAction } from "@/lib/rag/client";
 import { getSuggestionChips, WELCOME_TEXT } from "@/lib/rag/chips";
+import { enrichQueryWithAttachments, sourceTypeFromAttachments } from "@/lib/rag/attachments";
+import { buildEnrichedCards, dataSourceLabel } from "@/lib/rag/enrichment";
 import {
   buildFullRagContext,
   saveCompanionMemory,
@@ -128,6 +130,7 @@ export function ChatThreadView({
       content: m.content,
       cards: m.cards,
       chips: m.chips,
+      sourceLabel: m.sourceLabel,
     }));
   }, [thread, showWelcome, userContext.user?.name, agent.name, agent.icon]);
 
@@ -187,9 +190,10 @@ export function ChatThreadView({
 
       if (thread.messages.length === 0) onFirstMessage?.();
 
-      const displayQuery =
-        query || `Shared ${outgoing.length} file${outgoing.length > 1 ? "s" : ""}`;
       const sentAttachments = [...outgoing];
+      const displayQuery =
+        query || `Shared ${sentAttachments.length} file${sentAttachments.length > 1 ? "s" : ""}`;
+      const ragQuery = enrichQueryWithAttachments(displayQuery, sentAttachments);
       if (!overrideAttachments) setAttachments([]);
 
       const userMsg = {
@@ -237,18 +241,22 @@ export function ChatThreadView({
         settings: appSettings,
         agent: ragAgent,
         royalMemory: royal,
+        hasAttachments: sentAttachments.length > 0,
+        attachmentKinds: sentAttachments.map((a) => a.kind),
       });
+
+      const attachmentSourceType = sourceTypeFromAttachments(sentAttachments);
 
       try {
         let assembled = "";
         const result = await streamRag(
-          displayQuery,
+          ragQuery,
           {
             userContext: ctx,
             history: [...history, { role: "user", content: displayQuery }],
             attachments: attachmentsForRag(sentAttachments),
             agentId: activeAgentId,
-            sourceType: ragAgent.sourceType,
+            sourceType: ragAgent.sourceType || attachmentSourceType,
           },
           {
             onMeta: () => setStatus(`${agent.name} thinking…`),
@@ -266,19 +274,8 @@ export function ChatThreadView({
           assembled.trim() ||
           "Kus AI hiccuped — try “help” or ask again.";
 
-        const cards = result.sportsData
-          ? [
-              {
-                type: "match",
-                title: "Sports data",
-                subtitle: "Open in Sports companion",
-                url:
-                  process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL ||
-                  "https://kus-sports.vercel.app",
-                data: result.sportsData as Record<string, unknown>,
-              },
-            ]
-          : undefined;
+        const cards = buildEnrichedCards(result);
+        const enrichedCards = cards.length > 0 ? cards : undefined;
 
         const actionChips = result.action?.tab
           ? [
@@ -297,8 +294,9 @@ export function ChatThreadView({
         onUpdate(thread.id, (t) =>
           updateThreadMessage([t], t.id, replyId, {
             content: finalText,
-            cards,
+            cards: enrichedCards,
             chips: actionChips,
+            sourceLabel: dataSourceLabel(result) ?? undefined,
           })[0]
         );
 
@@ -311,10 +309,12 @@ export function ChatThreadView({
 
         setStatus(
           result.usedWebSearch
-            ? "News"
-            : result.mode === "sports"
-              ? "Sports"
-              : agent.name
+            ? "Web · Hub checked first"
+            : result.dataSource?.toLowerCase().includes("hub")
+              ? "Hub"
+              : result.mode === "sports"
+                ? "Sports"
+                : agent.name
         );
 
         handleAction(result.action, result.actionTaken);

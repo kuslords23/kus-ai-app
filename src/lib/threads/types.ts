@@ -8,6 +8,7 @@ export type ThreadMessage = {
     title: string;
     subtitle?: string;
     url?: string;
+    origin?: "hub" | "web";
     data?: Record<string, unknown>;
   }>;
   chips?: Array<{
@@ -16,6 +17,7 @@ export type ThreadMessage = {
     action?: string;
     prompt?: string;
   }>;
+  sourceLabel?: string;
 };
 
 export type ChatThread = {
