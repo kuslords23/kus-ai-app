@@ -441,13 +441,13 @@ export function ChatThreadView({
       </div>
 
       <ComposerDock className="space-y-1.5">
-        {status && <p className="text-[10px] text-muted px-1">{status}</p>}
+        {status && <p className="text-[10px] text-muted px-0.5">{status}</p>}
         <SuggestionChips chips={chips} onSelect={onChip} />
         <ChatInput
           onSend={sendMessage}
           disabled={isStreaming}
           autoFocus={autoFocus}
-          placeholder="Ask anything about sports, wallet, music, leagues…"
+          placeholder="Message Royal…"
           attachments={attachments}
           onRemoveAttachment={(id) =>
             setAttachments((prev) => prev.filter((a) => a.id !== id))
@@ -455,6 +455,7 @@ export function ChatThreadView({
           onOpenAttachMenu={() => setAttachMenuOpen(true)}
           activeAgent={{ icon: agent.icon, name: agent.name }}
           onAgentClick={() => setAgentPickerOpen(true)}
+          hideAgentChip
           onFocus={() => {
             scrollRef.current?.scrollTo({
               top: scrollRef.current.scrollHeight,
