@@ -85,8 +85,20 @@ export async function queryKingdomKnowledge(opts: {
     .from("golden_qa_pairs")
     .select("question, answer, department_id")
     .in("department_id", departments)
+    .eq("verification_status", "verified")
     .order("confidence", { ascending: false })
-    .limit(3);
+    .limit(8);
+
+  const qaFiltered = (() => {
+    const list = qa ?? [];
+    if (!needle) return list.slice(0, 3);
+    const words = needle.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+    const matched = list.filter((q) => {
+      const text = `${q.question} ${q.answer}`.toLowerCase();
+      return words.some((w) => text.includes(w));
+    });
+    return (matched.length ? matched : list).slice(0, 3);
+  })();
 
   const { data: agents } = await supabase
     .from("kingdom_sub_agents")
@@ -119,7 +131,7 @@ export async function queryKingdomKnowledge(opts: {
     query: opts.query,
     departments,
     hits,
-    goldenQa: (qa ?? []).map((q) => ({
+    goldenQa: qaFiltered.map((q) => ({
       question: q.question,
       answer: q.answer,
       department: q.department_id ?? undefined,
