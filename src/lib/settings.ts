@@ -12,6 +12,7 @@ export type AppSettings = {
   memoryDecay: "balanced" | "keep-all" | "minimal";
   creativeConstraints: string;
   skillShadowing: boolean;
+  pushNotifications: boolean;
 };
 
 const KEY = "kus_ai_settings";
@@ -28,6 +29,7 @@ const DEFAULTS: AppSettings = {
   memoryDecay: "balanced",
   creativeConstraints: "",
   skillShadowing: true,
+  pushNotifications: false,
 };
 
 export function loadSettings(): AppSettings {

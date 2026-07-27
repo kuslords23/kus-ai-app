@@ -1,4 +1,5 @@
 import type { RagAction } from "@/lib/rag/client";
+import { openCompanionUrl } from "@/lib/auth/hubBridge";
 import { companionDeepLink } from "@/lib/companions/registry";
 
 export type ActionRisk = "low" | "medium" | "high";
@@ -50,7 +51,7 @@ export function buildPendingAction(
 
 export function executeAction(action: RagAction): boolean {
   if (action.url) {
-    window.open(String(action.url), "_blank");
+    openCompanionUrl(String(action.url));
     return true;
   }
 
@@ -59,7 +60,7 @@ export function executeAction(action: RagAction): boolean {
     const sub = action.sportsSubTab ? `?tab=${action.sportsSubTab}` : "";
     const url = companionDeepLink("sports", sub);
     if (url) {
-      window.open(url, "_blank");
+      openCompanionUrl(url);
       return true;
     }
   }
@@ -70,7 +71,7 @@ export function executeAction(action: RagAction): boolean {
       : "?tab=marketplace";
     const url = companionDeepLink("hub", sub);
     if (url) {
-      window.open(url, "_blank");
+      openCompanionUrl(url);
       return true;
     }
   }
@@ -78,14 +79,14 @@ export function executeAction(action: RagAction): boolean {
   if (tab === "messages") {
     const url = companionDeepLink("chat");
     if (url) {
-      window.open(url, "_blank");
+      openCompanionUrl(url);
       return true;
     }
   }
 
   const hub = companionDeepLink("hub");
   if (hub) {
-    window.open(hub, "_blank");
+    openCompanionUrl(hub);
     return true;
   }
   return false;

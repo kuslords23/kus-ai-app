@@ -24,7 +24,12 @@ export type RagRequestOptions = {
   userContext?: RagUserContext;
   history?: RagHistoryItem[];
   attachments?: RagAttachment[];
+  accessToken?: string | null;
 };
+
+function authHeaders(token?: string | null): Record<string, string> {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 function buildRagBody(query: string, options?: RagRequestOptions, stream?: boolean) {
   const userContext = { ...(options?.userContext ?? {}) } as Record<string, unknown>;
@@ -77,6 +82,8 @@ export type StreamHandlers = {
   onMeta?: (meta: Record<string, unknown>) => void;
   onToken?: (text: string) => void;
   signal?: AbortSignal;
+  /** When true, user abort returns partial text instead of non-stream fallback. */
+  userAbort?: boolean;
 };
 
 function parseSseBlock(
@@ -113,7 +120,10 @@ export async function askRag(
   try {
     const res = await fetch("/api/ai/rag", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(options?.accessToken),
+      },
       body: JSON.stringify(buildRagBody(query, options)),
     });
     const data = await res.json().catch(() => ({}));
@@ -170,6 +180,12 @@ export async function streamRag(
   handlers?: StreamHandlers
 ): Promise<RagResult> {
   const parse = parseSseBlock;
+  const streamState: {
+    assembled: string;
+    final: RagResult | null;
+    error: string | null;
+  } = { assembled: "", final: null, error: null };
+
   try {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 55_000);
@@ -184,6 +200,7 @@ export async function streamRag(
         headers: {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
+          ...authHeaders(options?.accessToken),
         },
         body: JSON.stringify(buildRagBody(query, options, true)),
         signal: controller.signal,
@@ -213,11 +230,7 @@ export async function streamRag(
     const decoder = new TextDecoder();
     let buffer = "";
     let eventName = "message";
-    const state: {
-      assembled: string;
-      final: RagResult | null;
-      error: string | null;
-    } = { assembled: "", final: null, error: null };
+    const state = streamState;
 
     const onEvent = (name: string, data: Record<string, unknown>) => {
       if (name === "meta") {
@@ -289,6 +302,16 @@ export async function streamRag(
     return askRag(query, options);
   } catch (e) {
     if (e instanceof DOMException && e.name === "AbortError") {
+      if (handlers?.userAbort || handlers?.signal?.aborted) {
+        return {
+          ok: true,
+          answer: streamState.assembled.trim() || "(stopped)",
+          actionTaken: false,
+          sources: [],
+          mode: "stopped",
+          error: "stopped",
+        };
+      }
       try {
         return await askRag(query, options);
       } catch {

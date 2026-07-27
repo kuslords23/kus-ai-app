@@ -70,12 +70,22 @@ export function HomeCanvas({
       if (!cancelled) {
         setBriefing(text);
         setBriefingLoading(false);
+        if (settings.pushNotifications && text.trim()) {
+          void fetch("/api/push/notify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: "Royal daily briefing",
+              body: text,
+            }),
+          });
+        }
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [user?.id, settings.dailyBriefings]);
+  }, [user?.id, settings.dailyBriefings, settings.pushNotifications]);
 
   const handleSend = (text: string) => {
     onSend(text, attachments.length ? attachments : undefined);
@@ -171,6 +181,7 @@ export function HomeCanvas({
       <AttachmentMenu
         open={attachMenuOpen}
         onClose={() => setAttachMenuOpen(false)}
+        existingAttachments={attachments}
         onAttachments={(files) =>
           setAttachments((prev) => [...prev, ...files].slice(0, 4))
         }

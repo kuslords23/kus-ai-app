@@ -7,6 +7,8 @@ import type { ChatAttachment } from "@/lib/attachments/types";
 interface ChatInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
+  isStreaming?: boolean;
+  onStop?: () => void;
   placeholder?: string;
   autoFocus?: boolean;
   voiceSupported?: boolean;
@@ -27,6 +29,8 @@ interface ChatInputProps {
 export function ChatInput({
   onSend,
   disabled,
+  isStreaming,
+  onStop,
   placeholder,
   autoFocus,
   voiceSupported,
@@ -179,20 +183,30 @@ export function ChatInput({
 
         <motion.button
           whileTap={{ scale: 0.92 }}
-          onClick={handleSubmit}
-          disabled={disabled || (!value.trim() && attachments.length === 0)}
-          className="w-9 h-9 rounded-full bg-gold text-background flex items-center justify-center shrink-0 disabled:opacity-25"
-          aria-label="Send"
+          onClick={isStreaming && onStop ? onStop : handleSubmit}
+          disabled={!isStreaming && (disabled || (!value.trim() && attachments.length === 0))}
+          className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 disabled:opacity-25 ${
+            isStreaming
+              ? "bg-danger/90 text-white"
+              : "bg-gold text-background"
+          }`}
+          aria-label={isStreaming ? "Stop" : "Send"}
         >
-          <svg
-            className="w-4 h-4"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.5}
-          >
-            <path d="M12 19V5M5 12l7-7 7 7" />
-          </svg>
+          {isStreaming ? (
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="1" />
+            </svg>
+          ) : (
+            <svg
+              className="w-4 h-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+          )}
         </motion.button>
       </div>
     </div>

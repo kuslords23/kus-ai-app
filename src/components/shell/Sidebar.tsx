@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { ChatThread } from "@/lib/threads/types";
 import type { User } from "@supabase/supabase-js";
 import { COMPANIONS } from "@/lib/companions/registry";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 function lastMessagePreview(thread: ChatThread) {
   const last = [...thread.messages].reverse().find((m) => m.content.trim());
@@ -36,7 +37,7 @@ interface SidebarProps {
   user: User | null;
   onSelect: (id: string) => void;
   onNew: () => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<void>;
   onOpenSettings: () => void;
   searchFn: (q: string) => ChatThread[];
   syncing?: boolean;
@@ -58,6 +59,7 @@ export function Sidebar({
   onRefresh,
 }: SidebarProps) {
   const [query, setQuery] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const filtered = useMemo(
     () => (query.trim() ? searchFn(query) : threads),
     [query, searchFn, threads]
@@ -155,9 +157,9 @@ export function Sidebar({
                     <p className="text-[10px] text-muted/70">{formatWhen(t.updatedAt)}</p>
                   </button>
                   <button
-                    onClick={() => onDelete(t.id)}
-                    className="opacity-0 group-hover:opacity-100 px-2 text-muted hover:text-danger text-xs"
-                    aria-label="Delete"
+                    onClick={() => setPendingDelete(t.id)}
+                    className="shrink-0 px-2.5 py-2 text-muted hover:text-danger text-sm sm:opacity-60 sm:group-hover:opacity-100"
+                    aria-label={`Delete ${t.title}`}
                   >
                     ✕
                   </button>
@@ -201,6 +203,18 @@ export function Sidebar({
               </button>
             </div>
           </motion.aside>
+          <ConfirmDialog
+            open={!!pendingDelete}
+            title="Delete conversation?"
+            message="This removes the chat from this device and the cloud. This cannot be undone."
+            confirmLabel="Delete"
+            danger
+            onCancel={() => setPendingDelete(null)}
+            onConfirm={() => {
+              if (pendingDelete) void onDelete(pendingDelete);
+              setPendingDelete(null);
+            }}
+          />
         </>
       )}
     </AnimatePresence>

@@ -12,12 +12,15 @@ import {
 } from "@/lib/memory/royalMemory";
 import { useAuth } from "@/lib/hooks/useAuth";
 
+import { usePushNotifications } from "@/lib/push/client";
+
 interface SettingsPanelProps {
   open: boolean;
   onClose: () => void;
   settings: AppSettings;
   onChange: (patch: Partial<AppSettings>) => void;
   onSignOut: () => void;
+  userId?: string;
 }
 
 export function SettingsPanel({
@@ -26,8 +29,14 @@ export function SettingsPanel({
   settings,
   onChange,
   onSignOut,
+  userId,
 }: SettingsPanelProps) {
   const { user } = useAuth();
+  const { toggle: togglePush } = usePushNotifications(
+    settings.pushNotifications,
+    userId ?? user?.id,
+    (enabled) => onChange({ pushNotifications: enabled })
+  );
 
   return (
     <AnimatePresence>
@@ -81,6 +90,19 @@ export function SettingsPanel({
             </label>
             <p className="text-[10px] text-muted -mt-2">
               Only speaks when you may be stuck or about to make a mistake.
+            </p>
+
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>Push notifications</span>
+              <input
+                type="checkbox"
+                checked={settings.pushNotifications}
+                onChange={() => void togglePush()}
+                className="accent-[var(--gold)] w-4 h-4"
+              />
+            </label>
+            <p className="text-[10px] text-muted -mt-2">
+              Daily briefings and important Royal alerts.
             </p>
 
             <label className="flex items-center justify-between gap-3 text-sm">

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { toast } from "sonner";
+import { hubLoginUrl } from "@/lib/auth/hubBridge";
 
 export function LoginForm({ onSuccess }: { onSuccess?: () => void }) {
   const [email, setEmail] = useState("");
@@ -75,6 +76,27 @@ export function LoginForm({ onSuccess }: { onSuccess?: () => void }) {
           {loading ? "Loading..." : isSignUp ? "Create Account" : "Sign In"}
         </button>
       </form>
+
+      <div className="mt-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-border" />
+          <span className="text-[10px] text-muted uppercase">or</span>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            window.location.href = hubLoginUrl();
+          }}
+          className="w-full py-3 rounded-xl border border-gold/40 text-gold text-sm font-medium hover:bg-gold/10 transition-colors"
+        >
+          Sign in via Hub
+        </button>
+        <p className="text-[10px] text-center text-muted leading-relaxed">
+          Hub unlocks wallet, sports, and kingdom actions. A{" "}
+          <strong className="text-gold">← Royal</strong> button on Hub brings you back here.
+        </p>
+      </div>
 
       <button
         onClick={() => setIsSignUp(!isSignUp)}

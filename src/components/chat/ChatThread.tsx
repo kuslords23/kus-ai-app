@@ -50,6 +50,9 @@ import {
   logAction,
   type PendingAction,
 } from "@/lib/actions/executor";
+import { notifyError } from "@/lib/errors/notify";
+import { openCompanionUrl, openHub } from "@/lib/auth/hubBridge";
+import { MAX_TOTAL_ATTACHMENT_BYTES } from "@/lib/attachments/limits";
 
 interface ChatThreadProps {
   thread: ChatThread | null;
@@ -80,7 +83,7 @@ export function ChatThreadView({
   onAgentChange,
   settings,
 }: ChatThreadProps) {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const userContext = useMemo(
     () =>
       buildFullRagContext({
@@ -102,6 +105,8 @@ export function ChatThreadView({
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const stoppedRef = useRef(false);
 
   const messages: ChatMessageData[] = useMemo(() => {
     if (!thread) return [];
@@ -166,19 +171,20 @@ export function ChatThreadView({
       if ((!query && !hasAttachments) || isStreaming || !thread) return;
 
       if (query === "__open_sports__") {
-        window.open(
+        openCompanionUrl(
           process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL ||
-            "https://kus-sports.vercel.app",
-          "_blank"
+            "https://kus-sports.vercel.app"
         );
         return;
       }
       if (query === "__open_hub__") {
-        window.open(
-          process.env.NEXT_PUBLIC_HUB_URL ||
-            "https://sport-clan-nexus.vercel.app",
-          "_blank"
-        );
+        openHub();
+        return;
+      }
+
+      const totalSize = outgoing.reduce((s, a) => s + a.size, 0);
+      if (totalSize > MAX_TOTAL_ATTACHMENT_BYTES) {
+        notifyError("Attachments too large", "Max 20 MB total per message.");
         return;
       }
 
@@ -214,6 +220,8 @@ export function ChatThreadView({
 
       setIsStreaming(true);
       setStatus(`${agent.name} thinking…`);
+      stoppedRef.current = false;
+      abortRef.current = new AbortController();
 
       const history = thread.messages
         .filter((m) => m.content)
@@ -251,6 +259,7 @@ export function ChatThreadView({
             attachments: attachmentsForRag(sentAttachments),
             agentId: activeAgentId,
             sourceType: ragAgent.sourceType || attachmentSourceType,
+            accessToken: session?.access_token,
           },
           {
             onMeta: () => setStatus(`${agent.name} thinking…`),
@@ -260,8 +269,24 @@ export function ChatThreadView({
                 updateThreadMessage([t], t.id, replyId, { content: assembled })[0]
               );
             },
+            signal: abortRef.current.signal,
+            userAbort: true,
           }
         );
+
+        if (result.error === "stopped" || result.mode === "stopped") {
+          setStatus("Stopped");
+          if (!assembled.trim() && !result.answer?.trim()) {
+            onUpdate(thread.id, (t) =>
+              updateThreadMessage([t], t.id, replyId, { content: "(stopped)" })[0]
+            );
+          }
+          return;
+        }
+
+        if (!result.ok && result.error) {
+          notifyError("Royal couldn't respond", result.error);
+        }
 
         const finalText =
           result.answer?.trim() ||
@@ -354,15 +379,22 @@ export function ChatThreadView({
           });
         }
       } catch {
-        onUpdate(thread.id, (t) =>
-          updateThreadMessage([t], t.id, replyId, {
-            content:
-              "Couldn’t reach Kus AI just now — check your connection and try again.",
-          })[0]
-        );
+        if (!stoppedRef.current) {
+          notifyError(
+            "Couldn’t reach Royal",
+            "Check your connection and try again."
+          );
+          onUpdate(thread.id, (t) =>
+            updateThreadMessage([t], t.id, replyId, {
+              content:
+                "Couldn’t reach Kus AI just now — check your connection and try again.",
+            })[0]
+          );
+        }
         setStatus("");
       } finally {
         setIsStreaming(false);
+        abortRef.current = null;
       }
     },
     [
@@ -379,8 +411,16 @@ export function ChatThreadView({
       ragAgent,
       activeAgentId,
       handleAction,
+      session?.access_token,
     ]
   );
+
+  const stopStreaming = useCallback(() => {
+    stoppedRef.current = true;
+    abortRef.current?.abort();
+    setIsStreaming(false);
+    setStatus("Stopped");
+  }, []);
 
   const onChip = useCallback(
     (chip: { label: string; prompt?: string; url?: string }) => {
@@ -439,6 +479,8 @@ export function ChatThreadView({
         <ChatInput
           onSend={sendMessage}
           disabled={isStreaming}
+          isStreaming={isStreaming}
+          onStop={stopStreaming}
           autoFocus={autoFocus}
           placeholder="Message Royal…"
           attachments={attachments}
@@ -461,6 +503,7 @@ export function ChatThreadView({
       <AttachmentMenu
         open={attachMenuOpen}
         onClose={() => setAttachMenuOpen(false)}
+        existingAttachments={attachments}
         onAttachments={(files) =>
           setAttachments((prev) => [...prev, ...files].slice(0, 4))
         }

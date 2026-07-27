@@ -6,11 +6,15 @@ import { COMPANIONS } from "@/lib/companions/registry";
 import { AGENTS } from "@/lib/agents/registry";
 import type { ChatAttachment } from "@/lib/attachments/types";
 import { fileToAttachment } from "@/lib/attachments/types";
+import { validateAttachmentBatch } from "@/lib/attachments/limits";
+import { notifyError } from "@/lib/errors/notify";
+import { openCompanionUrl } from "@/lib/auth/hubBridge";
 
 interface AttachmentMenuProps {
   open: boolean;
   onClose: () => void;
   onAttachments: (files: ChatAttachment[]) => void;
+  existingAttachments?: ChatAttachment[];
   onSelectAgent?: (agentId: string) => void;
   onSelectCompanion?: (url: string) => void;
 }
@@ -19,6 +23,7 @@ export function AttachmentMenu({
   open,
   onClose,
   onAttachments,
+  existingAttachments = [],
   onSelectAgent,
   onSelectCompanion,
 }: AttachmentMenuProps) {
@@ -28,8 +33,19 @@ export function AttachmentMenu({
 
   const handleFiles = async (list: FileList | null) => {
     if (!list?.length) return;
+    const files = Array.from(list);
+
+    const check = validateAttachmentBatch(
+      existingAttachments.map((a) => ({ size: a.size })),
+      files
+    );
+    if (!check.ok) {
+      notifyError("Can't attach file", check.reason);
+      return;
+    }
+
     const out: ChatAttachment[] = [];
-    for (const file of Array.from(list).slice(0, 4)) {
+    for (const file of files) {
       out.push(await fileToAttachment(file));
     }
     onAttachments(out);
@@ -37,21 +53,9 @@ export function AttachmentMenu({
   };
 
   const items = [
-    {
-      label: "Camera",
-      icon: "📷",
-      action: () => cameraRef.current?.click(),
-    },
-    {
-      label: "Photos",
-      icon: "🖼",
-      action: () => photosRef.current?.click(),
-    },
-    {
-      label: "Files",
-      icon: "📎",
-      action: () => filesRef.current?.click(),
-    },
+    { label: "Camera", icon: "📷", action: () => cameraRef.current?.click() },
+    { label: "Photos", icon: "🖼", action: () => photosRef.current?.click() },
+    { label: "Files", icon: "📎", action: () => filesRef.current?.click() },
   ];
 
   return (
@@ -95,6 +99,7 @@ export function AttachmentMenu({
                 <button
                   key={c.id}
                   onClick={() => {
+                    openCompanionUrl(c.url);
                     onSelectCompanion?.(c.url);
                     onClose();
                   }}
@@ -143,7 +148,7 @@ export function AttachmentMenu({
             <input
               ref={filesRef}
               type="file"
-              accept="*/*"
+              accept="image/*,video/*,application/pdf,text/*"
               multiple
               className="hidden"
               onChange={(e) => handleFiles(e.target.files)}
