@@ -6,6 +6,12 @@ export type AppSettings = {
   mode: "royal" | "fast";
   theme: ThemeMode;
   activeAgentId: string;
+  silentMode: boolean;
+  energyLevel: "auto" | "low" | "medium" | "high";
+  dailyBriefings: boolean;
+  memoryDecay: "balanced" | "keep-all" | "minimal";
+  creativeConstraints: string;
+  skillShadowing: boolean;
 };
 
 const KEY = "kus_ai_settings";
@@ -16,6 +22,12 @@ const DEFAULTS: AppSettings = {
   mode: "royal",
   theme: "dark",
   activeAgentId: "auto",
+  silentMode: false,
+  energyLevel: "auto",
+  dailyBriefings: true,
+  memoryDecay: "balanced",
+  creativeConstraints: "",
+  skillShadowing: true,
 };
 
 export function loadSettings(): AppSettings {

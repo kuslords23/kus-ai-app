@@ -31,7 +31,12 @@ export function ActionConfirmModal({
           >
             <h3 className="text-lg font-semibold text-gold">{pending.title}</h3>
             <p className="text-sm text-foreground">{pending.summary}</p>
-            {pending.risk === "high" && (
+            {pending.regretWarning && (
+              <p className="text-xs text-danger border border-danger/30 rounded-xl p-3 bg-danger/5">
+                You flagged something similar as regretted before. Proceed only if you are sure.
+              </p>
+            )}
+            {pending.risk === "high" && !pending.regretWarning && (
               <p className="text-xs text-danger">
                 This involves money or account changes. Please confirm carefully.
               </p>

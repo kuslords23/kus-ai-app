@@ -9,6 +9,7 @@ export type PendingAction = {
   summary: string;
   risk: ActionRisk;
   action: RagAction;
+  regretWarning?: string;
 };
 
 const HIGH_RISK_TABS = new Set(["wallet", "betting", "dream"]);
@@ -31,13 +32,19 @@ export function describeAction(action: RagAction): string {
   return parts ? `Open ${parts} in companion app` : "Open companion feature";
 }
 
-export function buildPendingAction(action: RagAction): PendingAction {
+export function buildPendingAction(
+  action: RagAction,
+  regretWarning?: string
+): PendingAction {
   return {
     id: `act_${Date.now()}`,
-    title: "Confirm action",
-    summary: describeAction(action),
+    title: regretWarning ? "Regret warning" : "Confirm action",
+    summary: regretWarning
+      ? `${regretWarning}\n\n${describeAction(action)}`
+      : describeAction(action),
     risk: classifyAction(action),
     action,
+    regretWarning,
   };
 }
 
