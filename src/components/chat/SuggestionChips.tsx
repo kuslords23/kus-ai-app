@@ -1,39 +1,44 @@
 "use client";
 
 import { motion } from "framer-motion";
-
-const SUGGESTIONS = [
-  { label: "Show live scores", action: "live_scores" },
-  { label: "My clan stats", action: "clan_stats" },
-  { label: "Top players today", action: "top_players" },
-  { label: "Upcoming matches", action: "upcoming_matches" },
-  { label: "Open Sports", url: "" },
-  { label: "Open Hub", url: "" },
-];
+import { QUICK_ACTIONS } from "@/lib/companion/persona";
 
 interface SuggestionChipsProps {
   onSelect: (suggestion: { label: string; action?: string; url?: string }) => void;
   sportsUrl?: string;
   hubUrl?: string;
+  compact?: boolean;
 }
 
-export function SuggestionChips({ onSelect, sportsUrl, hubUrl }: SuggestionChipsProps) {
-  const chips = SUGGESTIONS.map((s) => {
-    if (s.label === "Open Sports") return { ...s, url: sportsUrl || "#" };
-    if (s.label === "Open Hub") return { ...s, url: hubUrl || "#" };
-    return s;
+export function SuggestionChips({
+  onSelect,
+  sportsUrl,
+  hubUrl,
+  compact,
+}: SuggestionChipsProps) {
+  const chips = QUICK_ACTIONS.map((s) => {
+    if ("url" in s && s.url === "sports") return { label: s.label, url: sportsUrl || "#" };
+    if ("url" in s && s.url === "hub") return { label: s.label, url: hubUrl || "#" };
+    return {
+      label: s.label,
+      action: "action" in s ? s.action : undefined,
+    };
   });
 
   return (
-    <div className="flex flex-wrap gap-2 justify-center px-4">
+    <div
+      className={`flex gap-2 overflow-x-auto no-scrollbar px-1 ${
+        compact ? "pb-2" : "flex-wrap justify-center"
+      }`}
+    >
       {chips.map((chip, i) => (
         <motion.button
           key={chip.label}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.05 }}
+          transition={{ delay: i * 0.04 }}
           onClick={() => onSelect(chip)}
-          className="px-4 py-2 text-xs rounded-full border border-gold/30 text-gold/80 hover:bg-gold/10 hover:text-gold hover:border-gold/50 transition-all"
+          className="shrink-0 px-3.5 py-1.5 text-[11px] rounded-full border border-gold/25 bg-purple-soft/40 text-gold/90 hover:bg-gold/10 hover:border-gold/45 transition-all whitespace-nowrap"
         >
           {chip.label}
         </motion.button>

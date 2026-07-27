@@ -1,17 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0c0a14;
-  --foreground: #e8e4ef;
+  --background: #0b0814;
+  --foreground: #efeaf8;
   --gold: #d4a843;
   --gold-light: #f0d078;
   --gold-dim: #9a7a2e;
-  --surface: #16131f;
-  --surface-hover: #1e1a2a;
-  --border: #2a2538;
-  --muted: #8b8598;
+  --purple: #6b4ea3;
+  --purple-soft: #2a1a45;
+  --surface: rgba(28, 20, 48, 0.72);
+  --surface-solid: #161025;
+  --surface-hover: #221833;
+  --border: rgba(212, 168, 67, 0.18);
+  --muted: #9a91ad;
   --danger: #e85454;
   --success: #4ade80;
+  --glass: rgba(18, 12, 32, 0.55);
 }
 
 @theme inline {
@@ -20,9 +24,11 @@
   --color-gold: var(--gold);
   --color-gold-light: var(--gold-light);
   --color-gold-dim: var(--gold-dim);
-  --color-surface: var(--surface);
+  --color-purple: var(--purple);
+  --color-purple-soft: var(--purple-soft);
+  --color-surface: var(--surface-solid);
   --color-surface-hover: var(--surface-hover);
-  --color-border: var(--border);
+  --color-border: #2e2542;
   --color-muted: var(--muted);
   --color-danger: var(--danger);
   --color-success: var(--success);
@@ -30,15 +36,24 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  height: 100%;
+  overflow: hidden;
 }
 
-/* Scrollbar */
+body {
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(107, 78, 163, 0.28), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 100% 100%, rgba(212, 168, 67, 0.08), transparent 45%),
+    var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  overscroll-behavior: none;
+}
+
 ::-webkit-scrollbar {
-  width: 4px;
+  width: 3px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -48,7 +63,6 @@ body {
   border-radius: 4px;
 }
 
-/* Gold shimmer animation */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
@@ -61,10 +75,33 @@ body {
 }
 
 @keyframes pulse-gold {
-  0%, 100% { box-shadow: 0 0 8px rgba(212, 168, 67, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(212, 168, 67, 0.6); }
+  0%, 100% { box-shadow: 0 0 8px rgba(212, 168, 67, 0.25); }
+  50% { box-shadow: 0 0 18px rgba(212, 168, 67, 0.55); }
 }
 
 .pulse-gold {
   animation: pulse-gold 2s ease-in-out infinite;
+}
+
+@keyframes typing-dot {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
+}
+
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.bubble-user {
+  background: linear-gradient(145deg, rgba(212, 168, 67, 0.28), rgba(212, 168, 67, 0.12));
+  border: 1px solid rgba(212, 168, 67, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.bubble-ai {
+  background: rgba(28, 20, 48, 0.7);
+  border: 1px solid rgba(212, 168, 67, 0.22);
+  backdrop-filter: blur(12px);
 }

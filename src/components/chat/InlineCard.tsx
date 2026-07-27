@@ -11,14 +11,23 @@ interface CardData {
 }
 
 export function InlineCard({ card }: { card: CardData }) {
+  const icon =
+    card.type === "match"
+      ? "⚽"
+      : card.type === "clan"
+        ? "🛡"
+        : card.type === "player"
+          ? "⭐"
+          : "↗";
+
   const content = (
     <motion.div
-      whileHover={{ scale: 1.02 }}
-      className="rounded-xl border border-gold/20 bg-background/60 p-3 cursor-pointer hover:border-gold/40 transition-colors"
+      whileHover={{ scale: 1.015 }}
+      className="rounded-xl border border-gold/20 bg-background/50 p-3 cursor-pointer hover:border-gold/40 transition-colors"
     >
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-gold/10 flex items-center justify-center text-gold text-sm">
-          {card.type === "match" ? "VS" : card.type === "clan" ? "C" : "i"}
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-lg bg-gold/10 border border-gold/20 flex items-center justify-center text-sm">
+          {icon}
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{card.title}</p>
