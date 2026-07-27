@@ -60,7 +60,10 @@ import {
   emitRetrievalMiss,
 } from "@/lib/learning/emit";
 import { isLikelyRetrievalMiss } from "@/lib/learning/retrievalMiss";
-import { fetchKingdomKnowledge } from "@/lib/kingdom/client";
+import {
+  fetchKingdomKnowledge,
+  looksLikeHubMetaJunk,
+} from "@/lib/kingdom/client";
 
 interface ChatThreadProps {
   thread: ChatThread | null;
@@ -317,34 +320,48 @@ export function ChatThreadView({
           }
         }
 
-        const finalText =
+        const hubText =
           result.answer?.trim() ||
           assembled.trim() ||
+          "";
+
+        const useKingdom =
+          Boolean(kingdom.directAnswer) &&
+          (looksLikeHubMetaJunk(hubText) ||
+            !hubText ||
+            (kingdom.departments[0] === "finance" &&
+              /league|betting|marketplace|dream/i.test(hubText)));
+
+        const finalText =
+          (useKingdom ? kingdom.directAnswer : hubText) ||
           "Kus AI hiccuped — try “help” or ask again.";
 
-        const cards = buildEnrichedCards(result);
-        const enrichedCards = cards.length > 0 ? cards : undefined;
+        const cards = useKingdom ? undefined : buildEnrichedCards(result);
+        const enrichedCards = cards && cards.length > 0 ? cards : undefined;
 
-        const actionChips = result.action?.tab
-          ? [
-              {
-                label: `Open ${result.action.tab}`,
-                action: "navigate",
-                url:
-                  result.action.tab === "leagues" ||
-                  result.action.tab === "sports"
-                    ? process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL
-                    : process.env.NEXT_PUBLIC_HUB_URL,
-              },
-            ]
-          : undefined;
+        const actionChips =
+          !useKingdom && result.action?.tab
+            ? [
+                {
+                  label: `Open ${result.action.tab}`,
+                  action: "navigate",
+                  url:
+                    result.action.tab === "leagues" ||
+                    result.action.tab === "sports"
+                      ? process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL
+                      : process.env.NEXT_PUBLIC_HUB_URL,
+                },
+              ]
+            : undefined;
 
         onUpdate(thread.id, (t) =>
           updateThreadMessage([t], t.id, replyId, {
             content: finalText,
             cards: enrichedCards,
             chips: actionChips,
-            sourceLabel: dataSourceLabel(result) ?? undefined,
+            sourceLabel: useKingdom
+              ? "Kingdom Knowledge"
+              : dataSourceLabel(result) ?? undefined,
           })[0]
         );
 
