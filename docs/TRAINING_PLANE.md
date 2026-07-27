@@ -28,17 +28,28 @@ flowchart LR
 
 - `POST /api/learning/event` — authenticated event ingest
 - `GET /api/cron/training-tick` — processes batch (Vercel cron every 30m)
+- `GET /api/cron/swarm-tick` — sub-agent swarm dispatch + scrape (every 15m)
+- `POST /api/kingdom-knowledge/query` — fetch Kingdom Knowledge for RAG
 - Chat 👍/👎 → `correction` / `helpful` events
-- Retrieval miss heuristic after weak RAG answers
+- Retrieval miss heuristic after weak RAG answers → also dispatches sub-agent swarm
 - RAG errors → `rag_error` events
 - Settings → **Help improve Royal** toggle (`contributeToLearning`)
 
+See also: [KINGDOM_SWARM.md](./KINGDOM_SWARM.md)
+
 ## Supabase setup
 
-Run migration:
+Run migrations:
 
 ```bash
 # supabase/migrations/001_training_plane.sql
+# supabase/migrations/002_sub_agent_swarm.sql
+```
+
+Seed ~10k sub-agents:
+
+```bash
+node scripts/seed-sub-agents.mjs
 ```
 
 Create storage buckets: `knowledge-raw`, `knowledge-normalized`.
@@ -48,6 +59,7 @@ Required env:
 ```
 SUPABASE_SERVICE_ROLE_KEY=   # cron + worker only (never client)
 CRON_SECRET=                 # Vercel cron auth
+KINGDOM_SCOUT_ENABLED=false  # set true when Hub /api/ai/scout is live
 ```
 
 ## Hub — to implement next
@@ -61,7 +73,7 @@ CRON_SECRET=                 # Vercel cron auth
 
 | Type | Source | Orchestrator action |
 |------|--------|---------------------|
-| `retrieval_miss` | Both | Queue `auto-search-scout` job |
+| `retrieval_miss` | Both | Queue `auto-search-scout` job + dispatch sub-agent swarm |
 | `correction` | User 👎 | Queue `fact-checker-style` job |
 | `helpful` | User 👍 | Insert `golden_qa_pairs` |
 | `rag_error` | Companion | Logged (monitoring) |
@@ -74,3 +86,19 @@ CRON_SECRET=                 # Vercel cron auth
 ## Why no weight training
 
 Updating pgvector + golden Q&A gives instant knowledge and style without model collapse. Optional future: per-domain LoRA adapters stored in Supabase, loaded at Hub inference time.
+
+## Two deepen setups (companion)
+
+| Setup | Status | What it does |
+|-------|--------|--------------|
+| **1. Training Plane** | Merged (PR #19) | Learning events → ingestion jobs → Hub harvest |
+| **2. Kingdom Swarm** | PR #20 | ~10k sub-agents → scrape_tasks → knowledge_chunks |
+
+Both call Hub `POST /api/ai/harvest` when enabled.
+
+```
+HUB_HARVEST_ENABLED=true
+HUB_HARVEST_SECRET=<same secret Hub expects on /api/ai/harvest>
+# or reuse CRON_SECRET if Hub accepts it
+KINGDOM_SCOUT_ENABLED=true   # also enables Hub harvest for swarm
+```

@@ -7,7 +7,8 @@
     "prebuild": "node scripts/generate-icons.mjs && node scripts/generate-sw.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed:sub-agents": "node scripts/seed-sub-agents.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

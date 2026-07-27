@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/training-tick",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/swarm-tick",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
