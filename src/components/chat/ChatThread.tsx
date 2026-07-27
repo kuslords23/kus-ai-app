@@ -60,6 +60,7 @@ import {
   emitRetrievalMiss,
 } from "@/lib/learning/emit";
 import { isLikelyRetrievalMiss } from "@/lib/learning/retrievalMiss";
+import { fetchKingdomKnowledge } from "@/lib/kingdom/client";
 
 interface ChatThreadProps {
   thread: ChatThread | null;
@@ -249,6 +250,13 @@ export function ChatThreadView({
         );
       }
 
+      const kingdom = await fetchKingdomKnowledge(displayQuery);
+      if (kingdom.hitCount > 0) {
+        setStatus(
+          `Kingdom Knowledge · ${kingdom.departments.slice(0, 3).join(", ")}`
+        );
+      }
+
       const ctx = buildFullRagContext({
         user,
         settings: appSettings,
@@ -256,6 +264,7 @@ export function ChatThreadView({
         royalMemory: royal,
         hasAttachments: sentAttachments.length > 0,
         attachmentKinds: sentAttachments.map((a) => a.kind),
+        kingdomKnowledge: kingdom.context || undefined,
       });
 
       const attachmentSourceType = sourceTypeFromAttachments(sentAttachments);

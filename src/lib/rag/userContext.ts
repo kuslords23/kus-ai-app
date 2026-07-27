@@ -9,6 +9,7 @@ import {
 } from "@/lib/memory/royalMemory";
 import type { AgentDefinition } from "@/lib/agents/registry";
 import { buildAgentContext } from "@/lib/agents/registry";
+import { buildKingdomModelContext } from "@/lib/kingdom/model";
 
 /**
  * Lightweight userContext shape compatible with hub AIAssistantPanel.
@@ -49,6 +50,8 @@ export function buildFullRagContext(opts: {
   royalMemory?: RoyalMemory | null;
   hasAttachments?: boolean;
   attachmentKinds?: string[];
+  /** Pre-fetched Kingdom Knowledge context from sub-agent swarm */
+  kingdomKnowledge?: string;
 }) {
   const base = buildUserContext(opts.user);
   const memory =
@@ -87,6 +90,7 @@ export function buildFullRagContext(opts: {
       hasAttachments: opts.hasAttachments,
       attachmentKinds: opts.attachmentKinds,
     }),
+    kingdomKnowledge: buildKingdomModelContext(opts.kingdomKnowledge),
   };
 }
 

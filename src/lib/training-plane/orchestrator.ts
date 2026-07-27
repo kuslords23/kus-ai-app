@@ -4,6 +4,7 @@
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { dispatchSwarmForQuery } from "@/lib/training-plane/swarmDispatch";
 
 export type ProcessResult = {
   processed: number;
@@ -99,6 +100,11 @@ async function handleEvent(
         },
       });
       if (error) throw error;
+
+      // Also dispatch sub-agent swarm for faster parallel scraping
+      if (event.event_type === "retrieval_miss" && query) {
+        await dispatchSwarmForQuery(supabase, query);
+      }
       break;
     }
     case "correction": {
@@ -186,5 +192,16 @@ export async function runTrainingTick(): Promise<{
 }> {
   const events = await processLearningBatch();
   const jobs = await processIngestionJobs();
+
+  // Run sub-agent swarm in same tick when service role available
+  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const { runSwarmTick } = await import("@/lib/training-plane/swarm");
+      await runSwarmTick();
+    } catch {
+      // swarm optional if tables not migrated yet
+    }
+  }
+
   return { events, jobs };
 }
