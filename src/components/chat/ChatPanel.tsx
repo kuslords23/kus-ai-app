@@ -131,20 +131,23 @@ export function ChatPanel() {
   const isEmpty = messages.length === 0;
 
   return (
-    <div className="flex flex-col h-full">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-6">
+    <div className="flex flex-col h-full min-h-0">
+      <div
+        ref={scrollRef}
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4"
+      >
         {isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-full gap-6">
-            <div className="w-16 h-16 rounded-full bg-gold/10 border-2 border-gold/30 flex items-center justify-center pulse-gold">
-              <svg className="w-8 h-8 text-gold" viewBox="0 0 24 24" fill="currentColor">
+          <div className="flex flex-col items-center justify-center min-h-full gap-5 py-6">
+            <div className="w-14 h-14 rounded-full bg-gold/10 border-2 border-gold/30 flex items-center justify-center pulse-gold">
+              <svg className="w-7 h-7 text-gold" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
               </svg>
             </div>
-            <div className="text-center space-y-2">
-              <h2 className="text-xl font-semibold text-foreground">
+            <div className="text-center space-y-2 px-2">
+              <h2 className="text-lg font-semibold text-foreground">
                 The Royal Advisor
               </h2>
-              <p className="text-sm text-muted max-w-sm">
+              <p className="text-sm text-muted max-w-sm mx-auto">
                 Your guide to the whole kingdom. Ask about scores, clans,
                 players, or anything in the realm.
               </p>
@@ -171,7 +174,7 @@ export function ChatPanel() {
         )}
       </div>
 
-      <div className="p-4 border-t border-border bg-background/80 backdrop-blur-sm">
+      <div className="shrink-0 border-t border-border bg-background px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <ChatInput onSend={sendMessage} disabled={isStreaming} />
       </div>
     </div>
