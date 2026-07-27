@@ -36,6 +36,7 @@ export function generateSubAgentDefinitions(): Array<{
   source_hints: string[];
 }> {
   const agents: ReturnType<typeof generateSubAgentDefinitions> = [];
+  const seen = new Set<string>();
   const perDept = Math.ceil(TARGET_SUB_AGENT_COUNT / KINGDOM_DEPARTMENTS.length);
 
   for (const dept of KINGDOM_DEPARTMENTS) {
@@ -43,13 +44,16 @@ export function generateSubAgentDefinitions(): Array<{
     let count = 0;
     let topicIdx = 0;
     let variantIdx = 0;
+    let guard = 0;
 
-    while (count < perDept && agents.length < TARGET_SUB_AGENT_COUNT) {
+    while (count < perDept && agents.length < TARGET_SUB_AGENT_COUNT && guard < perDept * 20) {
+      guard++;
       const topic = topics[topicIdx % topics.length];
       const variant = VARIANTS[variantIdx % VARIANTS.length] as KingdomVariant;
       const slug = `${dept.id}.${topic}.${variant}`;
 
-      if (!agents.some((a) => a.slug === slug)) {
+      if (!seen.has(slug)) {
+        seen.add(slug);
         const searchQuery = buildSearchQuery(topic, dept.id, variant);
         agents.push({
           slug,
@@ -79,6 +83,14 @@ export function generateSubAgentDefinitions(): Array<{
   }
 
   return agents;
+}
+
+/** Cached generator — avoid rebuilding ~10k defs on every cron/seed hit */
+let cachedSubAgents: ReturnType<typeof generateSubAgentDefinitions> | null = null;
+
+export function getSubAgentDefinitions() {
+  if (!cachedSubAgents) cachedSubAgents = generateSubAgentDefinitions();
+  return cachedSubAgents;
 }
 
 export async function ensureDepartmentsSeeded(

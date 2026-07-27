@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { KINGDOM_DEPARTMENTS } from "@/lib/kingdom/domains";
-import { generateSubAgentDefinitions } from "@/lib/training-plane/swarm";
+import { getSubAgentDefinitions } from "@/lib/training-plane/swarm";
 
 /**
  * Phone-friendly seed for ~10k kingdom sub-agents.
- * Open in Safari/Chrome after setting SUPABASE_SERVICE_ROLE_KEY + CRON_SECRET on Vercel:
  *
  *   https://kus-ai-app.vercel.app/api/admin/seed-sub-agents?secret=YOUR_CRON_SECRET
  *
- * Auto-continues batch-by-batch until done (Vercel time limits).
+ * Small batches + instant "starting" page so mobile Safari doesn't hang.
  */
-const BATCH = 250;
+const BATCH = 75;
 
 function unauthorized() {
   return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -42,35 +41,43 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const secret = request.nextUrl.searchParams.get("secret") ?? "";
   const offset = Math.max(
     0,
     Number(request.nextUrl.searchParams.get("offset") ?? "0") || 0
   );
+  const go = request.nextUrl.searchParams.get("go") === "1";
   const html = request.nextUrl.searchParams.get("format") !== "json";
+
+  // Instant first paint on phone — then auto-continue into real work
+  if (html && !go) {
+    const startPath = `/api/admin/seed-sub-agents?secret=${encodeURIComponent(secret)}&offset=${offset}&go=1`;
+    return new NextResponse(startingHtml(startPath), {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+  }
 
   const supabase = createClient(url, key, { auth: { persistSession: false } });
 
-  // Departments every time (cheap upsert)
-  for (const dept of KINGDOM_DEPARTMENTS) {
-    const { error } = await supabase.from("kingdom_departments").upsert(
-      {
-        id: dept.id,
-        name: dept.name,
-        description: dept.description,
-        icon: dept.icon,
-        priority: dept.priority,
-      },
-      { onConflict: "id" }
+  // One round-trip for all departments
+  const { error: deptErr } = await supabase.from("kingdom_departments").upsert(
+    KINGDOM_DEPARTMENTS.map((dept) => ({
+      id: dept.id,
+      name: dept.name,
+      description: dept.description,
+      icon: dept.icon,
+      priority: dept.priority,
+    })),
+    { onConflict: "id" }
+  );
+  if (deptErr) {
+    return NextResponse.json(
+      { ok: false, error: `departments: ${deptErr.message}` },
+      { status: 500 }
     );
-    if (error) {
-      return NextResponse.json(
-        { ok: false, error: `department ${dept.id}: ${error.message}` },
-        { status: 500 }
-      );
-    }
   }
 
-  const agents = generateSubAgentDefinitions();
+  const agents = getSubAgentDefinitions();
   const total = agents.length;
   const slice = agents.slice(offset, offset + BATCH);
 
@@ -115,8 +122,7 @@ export async function GET(request: NextRequest) {
 
   const nextOffset = offset + slice.length;
   const done = nextOffset >= total;
-  const secret = request.nextUrl.searchParams.get("secret") ?? "";
-  const continuePath = `/api/admin/seed-sub-agents?secret=${encodeURIComponent(secret)}&offset=${nextOffset}`;
+  const continuePath = `/api/admin/seed-sub-agents?secret=${encodeURIComponent(secret)}&offset=${nextOffset}&go=1`;
 
   const body = {
     ok: true,
@@ -133,6 +139,24 @@ export async function GET(request: NextRequest) {
   return new NextResponse(progressHtml(body, continuePath), {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });
+}
+
+function startingHtml(startPath: string) {
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="refresh" content="0;url=${startPath}"/>
+<title>Starting seed</title>
+<style>
+  body{font-family:system-ui;background:#0b1220;color:#e8eefc;padding:24px;line-height:1.5}
+  a{color:#7dd3fc}
+</style>
+</head><body>
+  <h1>Starting…</h1>
+  <p>Seeding Kingdom Swarm. Keep this tab open.</p>
+  <p><a href="${startPath}">Tap if it doesn’t continue</a></p>
+</body></html>`;
 }
 
 function progressHtml(
@@ -184,7 +208,7 @@ function doneHtml(body: {
 </head><body>
   <p class="ok">✓ ${body.message}</p>
   <p>${body.departments} departments · ${body.seeded} / ${body.total} sub-agents</p>
-  <p>Next: set Hub harvest env vars on Vercel, then use the app normally.</p>
+  <p>You’re done seeding. Use the Royal app normally after this.</p>
 </body></html>`;
 }
 
