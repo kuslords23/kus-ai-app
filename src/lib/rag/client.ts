@@ -62,6 +62,11 @@ export type RagResult = {
   recommendations?: unknown[];
   usedWebSearch?: boolean;
   dataSource?: string;
+  webResults?: unknown[];
+  media?: unknown[];
+  videos?: unknown[];
+  music?: unknown[];
+  articles?: unknown[];
   agentsUsed?: string[];
   intentReason?: string;
   cacheBackend?: string;
@@ -135,6 +140,11 @@ export async function askRag(
       recommendations: data.recommendations,
       usedWebSearch: data.usedWebSearch,
       dataSource: data.dataSource,
+      webResults: data.webResults,
+      media: data.media,
+      videos: data.videos,
+      music: data.music,
+      articles: data.articles,
       agentsUsed: data.agentsUsed,
       intentReason: data.intentReason,
       cacheBackend: data.cacheBackend,
@@ -228,6 +238,11 @@ export async function streamRag(
           recommendations: data.recommendations as unknown[] | undefined,
           usedWebSearch: data.usedWebSearch as boolean | undefined,
           dataSource: data.dataSource as string | undefined,
+          webResults: data.webResults as unknown[] | undefined,
+          media: data.media as unknown[] | undefined,
+          videos: data.videos as unknown[] | undefined,
+          music: data.music as unknown[] | undefined,
+          articles: data.articles as unknown[] | undefined,
           agentsUsed: data.agentsUsed as string[] | undefined,
           intentReason: data.intentReason as string | undefined,
           cacheBackend: data.cacheBackend as string | undefined,

@@ -1,6 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import type { AppSettings } from "@/lib/settings";
 import { buildRoyalPersonaContext } from "@/lib/persona/royal";
+import { buildRetrievalContext } from "@/lib/rag/retrieval";
 import {
   loadRoyalMemory,
   royalMemoryForRag,
@@ -46,6 +47,8 @@ export function buildFullRagContext(opts: {
   settings: AppSettings;
   agent: AgentDefinition;
   royalMemory?: RoyalMemory | null;
+  hasAttachments?: boolean;
+  attachmentKinds?: string[];
 }) {
   const base = buildUserContext(opts.user);
   const memory =
@@ -78,7 +81,12 @@ export function buildFullRagContext(opts: {
       memoryDecay: opts.settings.memoryDecay,
       creativeConstraints: opts.settings.creativeConstraints || null,
       skillShadowing: opts.settings.skillShadowing,
+      conversationStyle: "adaptive",
     },
+    retrieval: buildRetrievalContext({
+      hasAttachments: opts.hasAttachments,
+      attachmentKinds: opts.attachmentKinds,
+    }),
   };
 }
 

@@ -47,5 +47,7 @@ export function attachmentsForRag(attachments: ChatAttachment[]) {
     mimeType: a.mimeType,
     url: a.dataUrl,
     size: a.size,
+    matchToSearch: true,
+    hubFirst: true,
   }));
 }
