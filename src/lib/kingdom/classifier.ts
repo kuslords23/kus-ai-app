@@ -22,8 +22,9 @@ const KEYWORD_MAP: Record<string, string[]> = {
     "strategy", "operations",
   ],
   finance: [
-    "invest", "stock", "crypto", "bitcoin", "wallet", "momo", "tax", "loan",
-    "savings", "budget",
+    "invest", "stock", "crypto", "bitcoin", "wallet", "momo", "mobile money",
+    "mtn momo", "telecel cash", "vodafone cash", "at money", "fintech",
+    "tax", "loan", "savings", "budget", "bank", "cedi",
   ],
   religion: [
     "god", "jesus", "allah", "prayer", "church", "mosque", "bible", "quran",

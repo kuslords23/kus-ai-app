@@ -265,6 +265,7 @@ export function ChatThreadView({
         hasAttachments: sentAttachments.length > 0,
         attachmentKinds: sentAttachments.map((a) => a.kind),
         kingdomKnowledge: kingdom.context || undefined,
+        departments: kingdom.departments,
       });
 
       const attachmentSourceType = sourceTypeFromAttachments(sentAttachments);

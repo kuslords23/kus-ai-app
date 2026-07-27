@@ -10,11 +10,15 @@ import {
 import type { AgentDefinition } from "@/lib/agents/registry";
 import { buildAgentContext } from "@/lib/agents/registry";
 import { buildKingdomModelContext } from "@/lib/kingdom/model";
+import { navigationForDepartments } from "@/lib/kingdom/navigation";
 
 /**
  * Lightweight userContext shape compatible with hub AIAssistantPanel.
  */
-export function buildUserContext(user: User | null) {
+export function buildUserContext(
+  user: User | null,
+  departments: string[] = ["general"]
+) {
   const name =
     (user?.user_metadata?.full_name as string | undefined) ||
     (user?.user_metadata?.name as string | undefined) ||
@@ -29,11 +33,7 @@ export function buildUserContext(user: User | null) {
           email: user.email ?? null,
         }
       : null,
-    navigation: {
-      activeTab: "sports",
-      sportsSubTab: "scores",
-      source: "kus-ai-app",
-    },
+    navigation: navigationForDepartments(departments),
     companion: {
       id: "ai",
       name: "Royal",
@@ -52,8 +52,13 @@ export function buildFullRagContext(opts: {
   attachmentKinds?: string[];
   /** Pre-fetched Kingdom Knowledge context from sub-agent swarm */
   kingdomKnowledge?: string;
+  /** Departments classified from the user query */
+  departments?: string[];
 }) {
-  const base = buildUserContext(opts.user);
+  const departments = opts.departments?.length
+    ? opts.departments
+    : ["general"];
+  const base = buildUserContext(opts.user, departments);
   const memory =
     opts.royalMemory ??
     (opts.user?.id ? loadRoyalMemory(opts.user.id) : null);
@@ -67,6 +72,13 @@ export function buildFullRagContext(opts: {
           : "medium"
       : opts.settings.energyLevel;
 
+  const kingdom = buildKingdomModelContext(opts.kingdomKnowledge);
+  const agentCtx = buildAgentContext(opts.agent);
+  const topicGuard =
+    departments[0] && departments[0] !== "sports"
+      ? ` The user question is about ${departments.join(", ")} — answer that topic directly. Do not open sports leagues, betting, or unrelated marketplace tabs unless the user asked for them.`
+      : "";
+
   return {
     ...base,
     persona: buildRoyalPersonaContext({
@@ -75,7 +87,10 @@ export function buildFullRagContext(opts: {
       creativeConstraints: opts.settings.creativeConstraints,
       memoryDecay: opts.settings.memoryDecay,
     }),
-    agent: buildAgentContext(opts.agent),
+    agent: {
+      ...agentCtx,
+      persona: `${agentCtx.persona}${topicGuard}`,
+    },
     companionMemory: memory ? royalMemoryForRag(memory) : undefined,
     behaviors: {
       silentMode: opts.settings.silentMode,
@@ -86,11 +101,17 @@ export function buildFullRagContext(opts: {
       skillShadowing: opts.settings.skillShadowing,
       conversationStyle: "adaptive",
     },
-    retrieval: buildRetrievalContext({
-      hasAttachments: opts.hasAttachments,
-      attachmentKinds: opts.attachmentKinds,
-    }),
-    kingdomKnowledge: buildKingdomModelContext(opts.kingdomKnowledge),
+    retrieval: {
+      ...buildRetrievalContext({
+        hasAttachments: opts.hasAttachments,
+        attachmentKinds: opts.attachmentKinds,
+      }),
+      departments,
+      preferAnswerOverNavigation: true,
+    },
+    kingdomKnowledge: kingdom,
+    // Extra Hub-visible knowledge block (some Hub builds read free-text context)
+    knowledgeContext: opts.kingdomKnowledge || undefined,
   };
 }
 
