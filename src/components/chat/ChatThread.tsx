@@ -106,23 +106,17 @@ export function ChatThreadView({
   const messages: ChatMessageData[] = useMemo(() => {
     if (!thread) return [];
     if (thread.messages.length === 0 && showWelcome) {
-      const welcome: ChatMessageData[] = [
-        { id: "ai_welcome", role: "assistant", content: WELCOME_TEXT },
-      ];
       const name = userContext.user?.name;
-      if (name) {
-        welcome.push({
-          id: "ai_welcome_ctx",
+      const greeting = name
+        ? `Hey **${name}** — I'm **Royal**, your Kus-lords companion.`
+        : WELCOME_TEXT;
+      return [
+        {
+          id: "ai_welcome",
           role: "assistant",
-          content: `Hey **${name}** — good to see you. I'm **Royal**, same soul as hub AI, in your own home.`,
-        });
-      }
-      welcome.push({
-        id: "ai_welcome_agent",
-        role: "assistant",
-        content: `Active agent: **${agent.name}** ${agent.icon} — tap the chip below to switch skills, or use **+** for files, photos, camera, and companion connectors.`,
-      });
-      return welcome;
+          content: `${greeting} Ask anything, attach files, or switch agents with the **+** menu.`,
+        },
+      ];
     }
     return thread.messages.map((m) => ({
       id: m.id,
@@ -132,7 +126,7 @@ export function ChatThreadView({
       chips: m.chips,
       sourceLabel: m.sourceLabel,
     }));
-  }, [thread, showWelcome, userContext.user?.name, agent.name, agent.icon]);
+  }, [thread, showWelcome, userContext.user?.name]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -403,10 +397,9 @@ export function ChatThreadView({
   useEffect(() => {
     if (bootstrapQuery && !bootstrapped.current && thread) {
       bootstrapped.current = true;
-      sendMessage(
-        bootstrapQuery,
-        bootstrapAttachments?.length ? bootstrapAttachments : undefined
-      );
+      const query = bootstrapQuery;
+      const files = bootstrapAttachments?.length ? bootstrapAttachments : undefined;
+      void sendMessage(query, files);
       onBootstrapConsumed?.();
     }
   }, [bootstrapQuery, bootstrapAttachments, thread, sendMessage, onBootstrapConsumed]);
