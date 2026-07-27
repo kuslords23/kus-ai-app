@@ -5,6 +5,10 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { dispatchSwarmForQuery } from "@/lib/training-plane/swarmDispatch";
+import {
+  callHubHarvest,
+  isHubHarvestEnabled,
+} from "@/lib/training-plane/hubHarvest";
 
 export type ProcessResult = {
   processed: number;
@@ -144,7 +148,7 @@ async function handleEvent(
   }
 }
 
-/** Process queued ingestion jobs (harvest → gate → embed stubs). */
+/** Process queued ingestion jobs — deepen via Hub /api/ai/harvest when enabled. */
 export async function processIngestionJobs(limit = 10): Promise<ProcessResult> {
   const supabase = adminClient();
   const result: ProcessResult = { processed: 0, jobsCreated: 0, errors: [] };
@@ -162,16 +166,78 @@ export async function processIngestionJobs(limit = 10): Promise<ProcessResult> {
 
   for (const job of jobs ?? []) {
     try {
-      // Phase 1 stub: mark as gated — full harvest/embed in Hub worker deployment
+      const meta = (job.metadata ?? {}) as Record<string, unknown>;
+      const query = String(meta.query ?? job.source_url ?? "");
+
+      if (isHubHarvestEnabled() && query) {
+        const harvested = await callHubHarvest({
+          query,
+          sourceUrl: job.source_url,
+          agent: job.agent,
+          department: String(meta.department ?? "general"),
+          topic: String(meta.topic ?? query.slice(0, 64)),
+          metadata: meta,
+        });
+
+        if (harvested.ok) {
+          let chunkId: string | undefined;
+          if (harvested.markdown) {
+            const content = harvested.markdown;
+            const contentHash = await hashContent(content);
+            const { data: chunk } = await supabase
+              .from("knowledge_chunks")
+              .upsert(
+                {
+                  content,
+                  content_hash: contentHash,
+                  domain: String(meta.department ?? "general"),
+                  department_id: String(meta.department ?? "general"),
+                  verification_status: "verified",
+                  confidence: 0.8,
+                  token_count: Math.ceil(content.length / 4),
+                  source_url:
+                    job.source_url ||
+                    harvested.sources?.[0] ||
+                    `hub-harvest://${job.id}`,
+                },
+                { onConflict: "content_hash", ignoreDuplicates: false }
+              )
+              .select("id")
+              .single();
+            chunkId = chunk?.id;
+          }
+
+          await supabase
+            .from("ingestion_jobs")
+            .update({
+              status: "embedded",
+              updated_at: new Date().toISOString(),
+              metadata: {
+                ...meta,
+                hubHarvest: true,
+                chunkId,
+                hubChunkIds: harvested.chunkIds,
+                sources: harvested.sources,
+              },
+            })
+            .eq("id", job.id);
+          result.processed++;
+          continue;
+        }
+
+        result.errors.push(`${job.id}: ${harvested.error ?? "harvest failed"}`);
+      }
+
       await supabase
         .from("ingestion_jobs")
         .update({
           status: "gated",
           updated_at: new Date().toISOString(),
           metadata: {
-            ...(job.metadata as object),
-            stub: true,
-            message: "Awaiting full harvester/scout implementation on Hub",
+            ...meta,
+            message: isHubHarvestEnabled()
+              ? "Hub harvest failed or returned empty — queued for retry"
+              : "Set HUB_HARVEST_ENABLED=true + HUB_HARVEST_SECRET to deepen via Hub",
           },
         })
         .eq("id", job.id);
@@ -184,6 +250,14 @@ export async function processIngestionJobs(limit = 10): Promise<ProcessResult> {
   }
 
   return result;
+}
+
+async function hashContent(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text.slice(0, 4000));
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 export async function runTrainingTick(): Promise<{

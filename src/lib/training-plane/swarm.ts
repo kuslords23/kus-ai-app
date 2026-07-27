@@ -276,22 +276,10 @@ async function extractKnowledgeSnippet(
   topic: string,
   department: string
 ): Promise<string> {
-  // Optional: call Hub scout or SerpAPI when configured
-  const hubUrl = process.env.NEXT_PUBLIC_HUB_URL;
-  if (hubUrl && process.env.KINGDOM_SCOUT_ENABLED === "true") {
-    try {
-      const res = await fetch(`${hubUrl}/api/ai/scout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, department, topic }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.markdown) return String(data.markdown).slice(0, 8000);
-      }
-    } catch {
-      // fall through to structured stub
-    }
+  const { callHubHarvest } = await import("@/lib/training-plane/hubHarvest");
+  const harvested = await callHubHarvest({ query, topic, department });
+  if (harvested.ok && harvested.markdown) {
+    return harvested.markdown;
   }
 
   return [
@@ -299,9 +287,11 @@ async function extractKnowledgeSnippet(
     "",
     `Research query: ${query}`,
     "",
-    `This knowledge packet was harvested by the Kingdom sub-agent swarm.`,
+    `This knowledge packet was queued by the Kingdom sub-agent swarm.`,
     `Department: ${department}. Topic: ${topic}.`,
-    `Verified for ingestion into pgvector — expand via Hub scout when live scrape is enabled.`,
+    harvested.error
+      ? `Hub harvest note: ${harvested.error}`
+      : `Enable HUB_HARVEST_ENABLED=true + HUB_HARVEST_SECRET to deepen via Hub /api/ai/harvest.`,
     "",
     `Key areas to cover: definitions, best practices, Ghana/Africa context where relevant,`,
     `and links to official documentation for technical topics.`,

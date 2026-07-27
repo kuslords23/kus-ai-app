@@ -93,9 +93,18 @@ When chat detects a weak RAG answer and `contributeToLearning` is on:
 2. Orchestrator queues ingestion job **and** dispatches 8 sub-agents matching query departments
 3. Swarm cron processes tasks → `knowledge_chunks`
 
-## Hub next steps
+## Hub wiring (companion side left)
 
-1. Implement `POST /api/ai/scout` — live web scrape → markdown
-2. Set `KINGDOM_SCOUT_ENABLED=true` on companion
-3. Wire Hub RAG to read `userContext.kingdomKnowledge.memory`
-4. Replace stub chunk extraction with real embed pipeline
+Hub exposes `POST /api/ai/harvest` (auth required). Companion calls it from both Training Plane jobs and the Kingdom swarm.
+
+On Vercel (companion):
+
+```
+HUB_HARVEST_ENABLED=true
+HUB_HARVEST_SECRET=<Hub harvest bearer secret>
+KINGDOM_SCOUT_ENABLED=true
+SUPABASE_SERVICE_ROLE_KEY=
+CRON_SECRET=
+```
+
+Then: merge PR #20 → run migration `002` → `npm run seed:sub-agents`.

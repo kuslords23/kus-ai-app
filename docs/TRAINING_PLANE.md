@@ -86,3 +86,19 @@ KINGDOM_SCOUT_ENABLED=false  # set true when Hub /api/ai/scout is live
 ## Why no weight training
 
 Updating pgvector + golden Q&A gives instant knowledge and style without model collapse. Optional future: per-domain LoRA adapters stored in Supabase, loaded at Hub inference time.
+
+## Two deepen setups (companion)
+
+| Setup | Status | What it does |
+|-------|--------|--------------|
+| **1. Training Plane** | Merged (PR #19) | Learning events → ingestion jobs → Hub harvest |
+| **2. Kingdom Swarm** | PR #20 | ~10k sub-agents → scrape_tasks → knowledge_chunks |
+
+Both call Hub `POST /api/ai/harvest` when enabled.
+
+```
+HUB_HARVEST_ENABLED=true
+HUB_HARVEST_SECRET=<same secret Hub expects on /api/ai/harvest>
+# or reuse CRON_SECRET if Hub accepts it
+KINGDOM_SCOUT_ENABLED=true   # also enables Hub harvest for swarm
+```
