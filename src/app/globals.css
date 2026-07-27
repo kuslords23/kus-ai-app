@@ -68,7 +68,7 @@
   --vv-height: 100dvh;
   --keyboard-open: 0;
   --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-bottom: 0px;
 }
 
 html {
@@ -174,10 +174,9 @@ html.keyboard-open .app-shell {
   padding-top: max(0.5rem, var(--safe-top));
 }
 
-/* ChatGPT-style composer — no border slab, tight to bottom */
+/* Composer flush to screen bottom — no home-indicator padding */
 .composer-bar {
   flex-shrink: 0;
-  padding: 0.375rem 0.75rem;
-  padding-bottom: calc(0.375rem + env(safe-area-inset-bottom, 0px));
+  padding: 0.5rem 0.75rem;
   background: var(--background);
 }
