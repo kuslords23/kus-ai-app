@@ -11,6 +11,7 @@ import { useVoiceInput } from "@/lib/hooks/useVoice";
 import { loadSettings, saveSettings, applyTheme, type AppSettings } from "@/lib/settings";
 import { getAgent } from "@/lib/agents/registry";
 import type { ChatAttachment } from "@/lib/attachments/types";
+import { useKeyboardInset } from "@/lib/hooks/useKeyboardInset";
 
 type View = "home" | "thread";
 
@@ -92,11 +93,13 @@ export function GrokShell() {
 
   const activeAgent = getAgent(settings.activeAgentId);
 
+  useKeyboardInset();
+
   const showHome =
     view === "home" && !bootstrapQuery && !activeThread?.messages.length;
 
   return (
-    <div className="flex flex-col h-dvh max-h-dvh overflow-hidden bg-background">
+    <div className="flex flex-col h-[100dvh] max-h-[100dvh] overflow-hidden bg-background supports-[height:100dvh]:h-dvh">
       <header className="shrink-0 flex items-center justify-between px-3 pt-[max(0.65rem,env(safe-area-inset-top))] pb-2 border-b border-border glass">
         <button
           onClick={() => setSidebarOpen(true)}
