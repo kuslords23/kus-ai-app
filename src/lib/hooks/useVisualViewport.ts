@@ -3,31 +3,36 @@
 import { useEffect } from "react";
 
 /**
- * Pins the app shell to the iOS visual viewport so the header never slides
- * under the status bar and the composer stays flush above the keyboard /
- * home indicator without a phantom gap.
+ * When the keyboard is open, shrink the app shell to the visual viewport.
+ * When closed, the shell uses CSS `inset: 0` to fill the full screen (no bottom gap).
  */
 export function useVisualViewport() {
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
 
+    const root = document.documentElement;
+
     const sync = () => {
       const top = Math.max(0, Math.round(vv.offsetTop));
-      const left = Math.max(0, Math.round(vv.offsetLeft));
-      const width = Math.round(vv.width);
-      const height = Math.round(vv.height);
       const keyboard = Math.max(
         0,
-        Math.round(window.innerHeight - height - top)
+        Math.round(window.innerHeight - vv.height - top)
       );
 
-      const root = document.documentElement;
-      root.style.setProperty("--vv-top", `${top}px`);
-      root.style.setProperty("--vv-left", `${left}px`);
-      root.style.setProperty("--vv-width", `${width}px`);
-      root.style.setProperty("--vv-height", `${height}px`);
-      root.style.setProperty("--keyboard-open", keyboard > 0 ? "1" : "0");
+      if (keyboard > 0) {
+        root.classList.add("keyboard-open");
+        root.style.setProperty("--vv-top", `${top}px`);
+        root.style.setProperty("--vv-left", `${Math.round(vv.offsetLeft)}px`);
+        root.style.setProperty("--vv-width", `${Math.round(vv.width)}px`);
+        root.style.setProperty("--vv-height", `${Math.round(vv.height)}px`);
+      } else {
+        root.classList.remove("keyboard-open");
+        root.style.removeProperty("--vv-top");
+        root.style.removeProperty("--vv-left");
+        root.style.removeProperty("--vv-width");
+        root.style.removeProperty("--vv-height");
+      }
     };
 
     sync();
@@ -39,12 +44,11 @@ export function useVisualViewport() {
       vv.removeEventListener("resize", sync);
       vv.removeEventListener("scroll", sync);
       window.removeEventListener("orientationchange", sync);
-      const root = document.documentElement;
+      root.classList.remove("keyboard-open");
       root.style.removeProperty("--vv-top");
       root.style.removeProperty("--vv-left");
       root.style.removeProperty("--vv-width");
       root.style.removeProperty("--vv-height");
-      root.style.removeProperty("--keyboard-open");
     };
   }, []);
 }
