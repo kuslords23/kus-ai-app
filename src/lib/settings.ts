@@ -1,7 +1,10 @@
+export type ThemeMode = "dark" | "light" | "system";
+
 export type AppSettings = {
   voiceModeDefault: boolean;
   voiceReplies: boolean;
   mode: "royal" | "fast";
+  theme: ThemeMode;
 };
 
 const KEY = "kus_ai_settings";
@@ -10,6 +13,7 @@ const DEFAULTS: AppSettings = {
   voiceModeDefault: false,
   voiceReplies: false,
   mode: "royal",
+  theme: "dark",
 };
 
 export function loadSettings(): AppSettings {
@@ -30,4 +34,27 @@ export function saveSettings(patch: Partial<AppSettings>) {
     // ignore
   }
   return next;
+}
+
+export function resolveTheme(theme: ThemeMode): "dark" | "light" {
+  if (theme === "system" && typeof window !== "undefined") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+  return theme === "light" ? "light" : "dark";
+}
+
+export function applyTheme(theme: ThemeMode) {
+  if (typeof document === "undefined") return;
+  const resolved = resolveTheme(theme);
+  document.documentElement.setAttribute("data-theme", resolved);
+  document.documentElement.style.colorScheme = resolved;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) {
+    meta.setAttribute(
+      "content",
+      resolved === "light" ? "#f8f6fc" : "#0b0814"
+    );
+  }
 }

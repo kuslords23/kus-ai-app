@@ -67,8 +67,8 @@ export function ChatMessage({ message, isStreaming, onChipClick, onSpeak }: Chat
       <div
         className={`max-w-[85%] md:max-w-[70%] rounded-2xl px-3.5 py-2.5 ${
           isUser
-            ? "bg-gold/20 border border-gold/30 rounded-br-md"
-            : "bg-surface/90 border border-border rounded-bl-md"
+            ? "bubble-user rounded-br-md"
+            : "bubble-ai rounded-bl-md"
         }`}
       >
         <div className="whitespace-pre-wrap text-[13.5px] leading-relaxed">

@@ -29,6 +29,8 @@ interface SidebarProps {
   onDelete: (id: string) => void;
   onOpenSettings: () => void;
   searchFn: (q: string) => ChatThread[];
+  syncing?: boolean;
+  onRefresh?: () => void;
 }
 
 export function Sidebar({
@@ -42,6 +44,8 @@ export function Sidebar({
   onDelete,
   onOpenSettings,
   searchFn,
+  syncing,
+  onRefresh,
 }: SidebarProps) {
   const [query, setQuery] = useState("");
   const filtered = useMemo(
@@ -103,10 +107,20 @@ export function Sidebar({
               />
             </div>
 
-            <div className="px-3 pb-2">
-              <p className="text-[10px] uppercase tracking-wider text-muted mb-2">
+            <div className="px-3 pb-2 flex items-center justify-between">
+              <p className="text-[10px] uppercase tracking-wider text-muted">
                 Conversations
               </p>
+              {syncing ? (
+                <span className="text-[10px] text-gold">Syncing…</span>
+              ) : onRefresh ? (
+                <button
+                  onClick={onRefresh}
+                  className="text-[10px] text-muted hover:text-gold"
+                >
+                  Refresh
+                </button>
+              ) : null}
             </div>
 
             <div className="flex-1 overflow-y-auto px-2 space-y-1">

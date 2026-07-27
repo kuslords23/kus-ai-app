@@ -54,9 +54,10 @@ export function ChatInput({
 
   return (
     <div
-      className={`flex items-end gap-2 border border-border bg-surface/90 backdrop-blur-md ${
+      className={`flex items-end gap-2 border border-border backdrop-blur-md ${
         large ? "rounded-full px-4 py-3" : "rounded-2xl p-2.5"
       }`}
+      style={{ background: "var(--composer-bg)" }}
     >
       <textarea
         ref={textareaRef}

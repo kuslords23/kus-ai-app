@@ -8,7 +8,7 @@ import { ChatThreadView } from "@/components/chat/ChatThread";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useThreads } from "@/lib/hooks/useThreads";
 import { useVoiceInput } from "@/lib/hooks/useVoice";
-import { loadSettings, saveSettings, type AppSettings } from "@/lib/settings";
+import { loadSettings, saveSettings, applyTheme, type AppSettings } from "@/lib/settings";
 
 type View = "home" | "thread";
 
@@ -24,6 +24,8 @@ export function GrokShell() {
     deleteThread,
     updateThread,
     search,
+    syncing,
+    refreshFromCloud,
   } = useThreads(user?.id ?? null);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -57,7 +59,9 @@ export function GrokShell() {
   );
 
   useEffect(() => {
-    setSettings(loadSettings());
+    const s = loadSettings();
+    setSettings(s);
+    applyTheme(s.theme);
   }, []);
 
   useEffect(() => {
@@ -68,7 +72,11 @@ export function GrokShell() {
   }, [ready, activeThread]);
 
   const patchSettings = useCallback((patch: Partial<AppSettings>) => {
-    setSettings(saveSettings(patch));
+    const next = saveSettings(patch);
+    setSettings(next);
+    if (patch.theme !== undefined) {
+      applyTheme(next.theme);
+    }
   }, []);
 
   const showHome =
@@ -153,6 +161,8 @@ export function GrokShell() {
         onDelete={deleteThread}
         onOpenSettings={() => setSettingsOpen(true)}
         searchFn={search}
+        syncing={syncing}
+        onRefresh={refreshFromCloud}
       />
 
       <SettingsPanel

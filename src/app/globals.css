@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
-:root {
+/* Dark (default) */
+:root,
+[data-theme="dark"] {
   --background: #0b0814;
   --foreground: #efeaf8;
   --gold: #d4a843;
@@ -15,6 +17,30 @@
   --danger: #e85454;
   --success: #4ade80;
   --glass: rgba(18, 12, 32, 0.72);
+  --composer-bg: rgba(22, 16, 37, 0.92);
+  --body-gradient-1: rgba(139, 111, 192, 0.22);
+  --body-gradient-2: rgba(212, 168, 67, 0.08);
+}
+
+/* Light */
+[data-theme="light"] {
+  --background: #f8f6fc;
+  --foreground: #1a1228;
+  --gold: #b8860b;
+  --gold-light: #d4a843;
+  --gold-dim: #8a6d2e;
+  --purple: #6b4ea3;
+  --purple-soft: #5a4588;
+  --surface: #ffffff;
+  --surface-hover: #f0ebf8;
+  --border: #ddd5ec;
+  --muted: #6b6280;
+  --danger: #c73e3e;
+  --success: #15803d;
+  --glass: rgba(255, 255, 255, 0.88);
+  --composer-bg: rgba(255, 255, 255, 0.95);
+  --body-gradient-1: rgba(139, 111, 192, 0.12);
+  --body-gradient-2: rgba(212, 168, 67, 0.1);
 }
 
 @theme inline {
@@ -43,12 +69,13 @@ body {
 
 body {
   background:
-    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(139, 111, 192, 0.22), transparent 55%),
-    radial-gradient(ellipse 80% 50% at 100% 100%, rgba(212, 168, 67, 0.08), transparent 45%),
+    radial-gradient(ellipse 120% 80% at 50% -20%, var(--body-gradient-1), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 100% 100%, var(--body-gradient-2), transparent 45%),
     var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   overscroll-behavior: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 ::-webkit-scrollbar {
@@ -72,4 +99,24 @@ body {
 
 .pulse-gold {
   animation: pulse-gold 2s ease-in-out infinite;
+}
+
+[data-theme="light"] .bubble-user {
+  background: linear-gradient(145deg, rgba(184, 134, 11, 0.18), rgba(184, 134, 11, 0.08));
+  border: 1px solid rgba(184, 134, 11, 0.28);
+}
+
+[data-theme="light"] .bubble-ai {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--border);
+}
+
+.bubble-user {
+  background: linear-gradient(145deg, rgba(212, 168, 67, 0.28), rgba(212, 168, 67, 0.12));
+  border: 1px solid rgba(212, 168, 67, 0.35);
+}
+
+.bubble-ai {
+  background: rgba(28, 20, 48, 0.7);
+  border: 1px solid rgba(212, 168, 67, 0.22);
 }

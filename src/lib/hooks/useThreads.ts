@@ -9,23 +9,50 @@ import {
   saveActiveThreadId,
   saveThreads,
 } from "@/lib/threads/storage";
+import { fetchCloudThreads, mergeThreads } from "@/lib/threads/sync";
 
 export function useThreads(userId: string | null) {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    const loaded = loadThreads(userId);
-    const savedActive = loadActiveThreadId(userId);
-    const active =
-      savedActive && loaded.some((t) => t.id === savedActive)
-        ? savedActive
-        : loaded[0]?.id ?? null;
+    let cancelled = false;
 
-    setThreads(loaded);
-    setActiveId(active);
-    setReady(true);
+    async function boot() {
+      const local = loadThreads(userId);
+      let merged = local;
+
+      if (userId) {
+        setSyncing(true);
+        try {
+          const cloud = await fetchCloudThreads(userId);
+          merged = mergeThreads(local, cloud);
+          saveThreads(userId, merged);
+        } catch {
+          merged = local;
+        } finally {
+          if (!cancelled) setSyncing(false);
+        }
+      }
+
+      if (cancelled) return;
+
+      setThreads(merged);
+      const savedActive = loadActiveThreadId(userId);
+      const active =
+        savedActive && merged.some((t) => t.id === savedActive)
+          ? savedActive
+          : merged[0]?.id ?? null;
+      setActiveId(active);
+      setReady(true);
+    }
+
+    boot();
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
   const persist = useCallback(
@@ -69,6 +96,18 @@ export function useThreads(userId: string | null) {
     [persist, threads]
   );
 
+  const refreshFromCloud = useCallback(async () => {
+    if (!userId) return;
+    setSyncing(true);
+    try {
+      const cloud = await fetchCloudThreads(userId);
+      const merged = mergeThreads(loadThreads(userId), cloud);
+      persist(merged);
+    } finally {
+      setSyncing(false);
+    }
+  }, [userId, persist]);
+
   const activeThread = threads.find((t) => t.id === activeId) ?? null;
 
   const search = useCallback(
@@ -89,11 +128,13 @@ export function useThreads(userId: string | null) {
     activeThread,
     activeId,
     ready,
+    syncing,
     setActive,
     newThread,
     deleteThread,
     updateThread,
     persist,
     search,
+    refreshFromCloud,
   };
 }

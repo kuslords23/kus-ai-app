@@ -16,6 +16,7 @@ import {
   titleFromMessage,
   updateThreadMessage,
 } from "@/lib/threads/storage";
+import { persistMessageToCloud } from "@/lib/threads/sync";
 import type { ChatThread } from "@/lib/threads/types";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useVoiceOutput } from "@/lib/hooks/useVoice";
@@ -153,6 +154,10 @@ export function ChatThreadView({
         })[0];
       });
 
+      if (user?.id) {
+        void persistMessageToCloud(user.id, thread.id, "user", query);
+      }
+
       setIsStreaming(true);
       setStatus("Thinking…");
 
@@ -240,6 +245,16 @@ export function ChatThreadView({
         );
 
         handleDeepLink(result.action);
+
+        if (user?.id) {
+          void persistMessageToCloud(
+            user.id,
+            thread.id,
+            "assistant",
+            finalText,
+            result.agentsUsed
+          );
+        }
 
         const settings = loadSettings();
         if ((voiceReplies ?? settings.voiceReplies) && finalText) {

@@ -60,6 +60,25 @@ export function SettingsPanel({
             </label>
 
             <div className="space-y-2">
+              <p className="text-sm">Appearance</p>
+              <div className="flex gap-2 flex-wrap">
+                {(["dark", "light", "system"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => onChange({ theme: t })}
+                    className={`px-3 py-1.5 rounded-full text-xs border capitalize ${
+                      settings.theme === t
+                        ? "border-gold bg-gold/15 text-gold"
+                        : "border-border text-muted"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <p className="text-sm">Mode</p>
               <div className="flex gap-2">
                 {(["royal", "fast"] as const).map((m) => (
@@ -77,6 +96,11 @@ export function SettingsPanel({
                 ))}
               </div>
             </div>
+
+            <p className="text-xs text-muted leading-relaxed">
+              Conversations sync to your account via Supabase — same credentials as
+              Hub. Chats appear on both Kus AI and Hub when signed in.
+            </p>
 
             <p className="text-xs text-muted leading-relaxed">
               Same hub assistant brain — answers from hub RAG + internet. Sign-in
