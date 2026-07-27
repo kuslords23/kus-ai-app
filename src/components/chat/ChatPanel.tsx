@@ -299,7 +299,7 @@ export function ChatPanel() {
         ))}
       </div>
 
-      <div className="shrink-0 px-3 pt-1 space-y-2 pb-[max(0.7rem,env(safe-area-inset-bottom))]">
+      <div className="shrink-0 px-3 pt-1 space-y-2 pb-2">
         {status && (
           <p className="text-[10px] text-muted px-1">{status}</p>
         )}
