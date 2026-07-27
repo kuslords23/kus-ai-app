@@ -1,17 +1,52 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatMessage, type ChatMessageData } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { SuggestionChips } from "./SuggestionChips";
-import { streamRagResponse, type RagMessage } from "@/lib/rag/client";
+import { streamRag, type RagAction } from "@/lib/rag/client";
+import { getSuggestionChips, WELCOME_TEXT } from "@/lib/rag/chips";
+import {
+  buildUserContext,
+  loadChatHistory,
+  saveChatHistory,
+  loadCompanionMemory,
+  saveCompanionMemory,
+} from "@/lib/rag/userContext";
 import { useAuth } from "@/lib/hooks/useAuth";
 
+function handleDeepLink(action?: RagAction) {
+  if (!action) return;
+  const hub = process.env.NEXT_PUBLIC_HUB_URL || "https://sport-clan-nexus.vercel.app";
+  const sports =
+    process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL || "https://kus-sports.vercel.app";
+
+  if (action.url) {
+    window.open(String(action.url), "_blank");
+    return;
+  }
+
+  const tab = action.tab;
+  if (tab === "leagues" || tab === "sports" || action.sportsSubTab) {
+    const sub = action.sportsSubTab ? `?tab=${action.sportsSubTab}` : "";
+    window.open(`${sports}${sub}`, "_blank");
+    return;
+  }
+  if (tab === "marketplace" || tab === "wallet" || tab === "messages" || tab === "feed") {
+    window.open(hub, "_blank");
+  }
+}
+
 export function ChatPanel() {
+  const { user } = useAuth();
+  const userContext = useMemo(() => buildUserContext(user), [user]);
+  const chips = useMemo(() => getSuggestionChips(userContext), [userContext]);
+
   const [messages, setMessages] = useState<ChatMessageData[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [status, setStatus] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { session } = useAuth();
+  const bootRef = useRef(false);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -24,158 +59,256 @@ export function ChatPanel() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+  }, [messages, isStreaming, scrollToBottom]);
+
+  // Hub-style welcome + restore history
+  useEffect(() => {
+    if (bootRef.current) return;
+    bootRef.current = true;
+
+    const uid = user?.id ?? null;
+    const history = loadChatHistory(uid);
+    const welcome: ChatMessageData = {
+      id: "ai_welcome",
+      role: "assistant",
+      content: WELCOME_TEXT,
+    };
+
+    if (history.length >= 4) {
+      setMessages(
+        history.map((h, i) => ({
+          id: `hist_${i}_${h.at || i}`,
+          role: h.role,
+          content: h.content,
+        }))
+      );
+    } else {
+      const name = userContext.user?.name;
+      const personalized: ChatMessageData[] = [welcome];
+      if (name) {
+        personalized.push({
+          id: "ai_welcome_ctx",
+          role: "assistant",
+          content: `Hey **${name}** — good to see you. You're in the standalone Kus AI companion. What's on your mind?`,
+        });
+      }
+      setMessages(personalized);
+    }
+  }, [user?.id, userContext.user?.name]);
+
+  useEffect(() => {
+    const uid = user?.id ?? null;
+    if (!uid || messages.length === 0) return;
+    const toStore = messages
+      .filter((m) => m.id !== "ai_welcome" && m.content.trim())
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+        at: Date.now(),
+      }));
+    saveChatHistory(uid, toStore);
+  }, [messages, user?.id]);
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (raw: string) => {
+      const query = raw.trim();
+      if (!query || isStreaming) return;
+
+      if (query === "__open_sports__") {
+        window.open(
+          process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL ||
+            "https://kus-sports.vercel.app",
+          "_blank"
+        );
+        return;
+      }
+      if (query === "__open_hub__") {
+        window.open(
+          process.env.NEXT_PUBLIC_HUB_URL ||
+            "https://sport-clan-nexus.vercel.app",
+          "_blank"
+        );
+        return;
+      }
+
       const userMsg: ChatMessageData = {
-        id: crypto.randomUUID(),
+        id: `ai_u_${Date.now()}`,
         role: "user",
-        content,
+        content: query,
       };
+      const replyId = `ai_r_${Date.now()}`;
       const assistantMsg: ChatMessageData = {
-        id: crypto.randomUUID(),
+        id: replyId,
         role: "assistant",
         content: "",
       };
 
       setMessages((prev) => [...prev, userMsg, assistantMsg]);
       setIsStreaming(true);
+      setStatus("Thinking…");
 
-      const ragMessages: RagMessage[] = [
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
-        { role: "user" as const, content },
-      ];
+      const history = messages
+        .filter((m) => m.content && (m.role === "user" || m.role === "assistant"))
+        .filter((m) => m.id !== "ai_welcome" && m.id !== "ai_welcome_ctx")
+        .slice(-16)
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      const memory = user?.id ? loadCompanionMemory(user.id) : null;
+      const ctx = {
+        ...userContext,
+        companionMemory: memory ?? undefined,
+      };
 
       try {
-        for await (const chunk of streamRagResponse(
-          ragMessages,
-          session?.access_token
-        )) {
-          if (chunk.type === "text" && chunk.content) {
-            setMessages((prev) => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              updated[updated.length - 1] = {
-                ...last,
-                content: last.content + chunk.content,
-              };
-              return updated;
-            });
-          } else if (chunk.type === "card" && chunk.data) {
-            setMessages((prev) => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              updated[updated.length - 1] = {
-                ...last,
-                cards: [
-                  ...(last.cards ?? []),
-                  chunk.data as NonNullable<ChatMessageData["cards"]>[0],
-                ],
-              };
-              return updated;
-            });
-          } else if (chunk.type === "chip" && chunk.data) {
-            setMessages((prev) => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              updated[updated.length - 1] = {
-                ...last,
-                chips: [
-                  ...(last.chips ?? []),
-                  chunk.data as NonNullable<ChatMessageData["chips"]>[0],
-                ],
-              };
-              return updated;
-            });
-          } else if (chunk.type === "error") {
-            setMessages((prev) => {
-              const updated = [...prev];
-              const last = updated[updated.length - 1];
-              updated[updated.length - 1] = {
-                ...last,
-                content: chunk.content ?? "Something went wrong. Try again.",
-              };
-              return updated;
-            });
+        let assembled = "";
+        const result = await streamRag(
+          query,
+          {
+            userContext: ctx,
+            history: [...history, { role: "user", content: query }],
+          },
+          {
+            onMeta: () => setStatus("Thinking…"),
+            onToken: (text) => {
+              assembled += text;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === replyId ? { ...m, content: assembled } : m
+                )
+              );
+            },
           }
+        );
+
+        const finalText =
+          result.answer?.trim() ||
+          assembled.trim() ||
+          "Kus AI hiccuped — try “help” or ask again.";
+
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== replyId) return m;
+            const cards = [];
+            if (result.sportsData) {
+              cards.push({
+                type: "match",
+                title: "Sports data",
+                subtitle: "Open in Sports companion",
+                url:
+                  process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL ||
+                  "https://kus-sports.vercel.app",
+                data: result.sportsData as Record<string, unknown>,
+              });
+            }
+            const actionChips = [];
+            if (result.action?.tab) {
+              actionChips.push({
+                label: `Open ${result.action.tab}`,
+                action: "navigate",
+                url:
+                  result.action.tab === "leagues" ||
+                  result.action.tab === "sports"
+                    ? process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL
+                    : process.env.NEXT_PUBLIC_HUB_URL,
+              });
+            }
+            return {
+              ...m,
+              content: finalText,
+              cards: cards.length ? cards : m.cards,
+              chips: actionChips.length ? actionChips : m.chips,
+            };
+          })
+        );
+
+        setStatus(
+          result.usedWebSearch
+            ? "News"
+            : result.mode === "sports"
+              ? "Sports"
+              : "Kus AI"
+        );
+
+        handleDeepLink(result.action);
+
+        if (user?.id) {
+          const topics = [
+            ...(memory?.recentTopics ?? []),
+            query.slice(0, 48),
+          ].slice(0, 12);
+          saveCompanionMemory({
+            userId: user.id,
+            preferenceSummary: memory?.preferenceSummary || "",
+            episodicSummary: memory?.episodicSummary || "",
+            toneNotes:
+              memory?.toneNotes ||
+              "collaborative, concise, producer-aware",
+            recentTopics: topics,
+            updatedAt: new Date().toISOString(),
+          });
         }
       } catch {
-        setMessages((prev) => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          updated[updated.length - 1] = {
-            ...last,
-            content: last.content || "Connection error. Please try again.",
-          };
-          return updated;
-        });
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === replyId
+              ? {
+                  ...m,
+                  content:
+                    m.content ||
+                    "Couldn’t reach Kus AI just now — check your connection and try again.",
+                }
+              : m
+          )
+        );
+        setStatus("");
       } finally {
         setIsStreaming(false);
       }
     },
-    [messages, session?.access_token]
+    [isStreaming, messages, user?.id, userContext]
   );
 
-  const handleChipClick = useCallback(
-    (chip: { label: string; url?: string; action?: string }) => {
-      if (chip.url && chip.url !== "#") {
+  const onChip = useCallback(
+    (chip: { label: string; prompt?: string; url?: string }) => {
+      if (chip.url) {
         window.open(chip.url, "_blank");
-      } else if (chip.action || chip.label) {
-        sendMessage(chip.label);
+        return;
       }
+      sendMessage(chip.prompt || chip.label);
     },
     [sendMessage]
   );
-
-  const isEmpty = messages.length === 0;
 
   return (
     <div className="flex flex-col h-full min-h-0">
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4"
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3"
       >
-        {isEmpty ? (
-          <div className="flex flex-col items-center justify-center min-h-full gap-5 py-6">
-            <div className="w-14 h-14 rounded-full bg-gold/10 border-2 border-gold/30 flex items-center justify-center pulse-gold">
-              <svg className="w-7 h-7 text-gold" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-              </svg>
-            </div>
-            <div className="text-center space-y-2 px-2">
-              <h2 className="text-lg font-semibold text-foreground">
-                The Royal Advisor
-              </h2>
-              <p className="text-sm text-muted max-w-sm mx-auto">
-                Your guide to the whole kingdom. Ask about scores, clans,
-                players, or anything in the realm.
-              </p>
-            </div>
-            <SuggestionChips
-              onSelect={handleChipClick}
-              sportsUrl={process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL}
-              hubUrl={process.env.NEXT_PUBLIC_HUB_URL}
-            />
-          </div>
-        ) : (
-          messages.map((msg, i) => (
-            <ChatMessage
-              key={msg.id}
-              message={msg}
-              isStreaming={
-                isStreaming &&
-                i === messages.length - 1 &&
-                msg.role === "assistant"
-              }
-              onChipClick={handleChipClick}
-            />
-          ))
-        )}
+        {messages.map((msg, i) => (
+          <ChatMessage
+            key={msg.id}
+            message={msg}
+            isStreaming={
+              isStreaming &&
+              i === messages.length - 1 &&
+              msg.role === "assistant"
+            }
+            onChipClick={onChip}
+          />
+        ))}
       </div>
 
-      <div className="shrink-0 border-t border-border bg-background px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <ChatInput onSend={sendMessage} disabled={isStreaming} />
+      <div className="shrink-0 px-3 pt-1 space-y-2 pb-[max(0.7rem,env(safe-area-inset-bottom))]">
+        {status && (
+          <p className="text-[10px] text-muted px-1">{status}</p>
+        )}
+        <SuggestionChips chips={chips} onSelect={onChip} />
+        <ChatInput
+          onSend={sendMessage}
+          disabled={isStreaming}
+          placeholder="Ask Kus AI — sports, wallet, music, leagues…"
+        />
       </div>
     </div>
   );

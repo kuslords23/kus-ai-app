@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 interface ChatInputProps {
@@ -29,7 +29,7 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
   };
 
   return (
-    <div className="flex items-end gap-2 p-3 bg-surface border border-border rounded-2xl">
+    <div className="flex items-end gap-2 p-2.5 bg-surface border border-border rounded-2xl">
       <textarea
         ref={textareaRef}
         value={value}
@@ -40,16 +40,17 @@ export function ChatInput({ onSend, disabled, placeholder }: ChatInputProps) {
             handleSubmit();
           }
         }}
-        placeholder={placeholder ?? "Ask the Royal Advisor..."}
+        placeholder={placeholder ?? "Ask Kus AI…"}
         disabled={disabled}
         rows={1}
-        className="flex-1 bg-transparent text-foreground text-sm placeholder:text-muted resize-none outline-none min-h-[20px]"
+        className="flex-1 bg-transparent text-foreground text-sm placeholder:text-muted resize-none outline-none min-h-[36px] py-2"
       />
       <motion.button
         whileTap={{ scale: 0.9 }}
         onClick={handleSubmit}
         disabled={disabled || !value.trim()}
         className="w-9 h-9 rounded-xl bg-gold text-background flex items-center justify-center shrink-0 disabled:opacity-30 transition-opacity"
+        aria-label="Send"
       >
         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
           <path d="M5 12h14M12 5l7 7-7 7" />

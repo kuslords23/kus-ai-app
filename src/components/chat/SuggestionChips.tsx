@@ -2,38 +2,26 @@
 
 import { motion } from "framer-motion";
 
-const SUGGESTIONS = [
-  { label: "Show live scores", action: "live_scores" },
-  { label: "My clan stats", action: "clan_stats" },
-  { label: "Top players today", action: "top_players" },
-  { label: "Upcoming matches", action: "upcoming_matches" },
-  { label: "Open Sports", url: "" },
-  { label: "Open Hub", url: "" },
-];
-
 interface SuggestionChipsProps {
-  onSelect: (suggestion: { label: string; action?: string; url?: string }) => void;
-  sportsUrl?: string;
-  hubUrl?: string;
+  chips: Array<{ label: string; prompt?: string; primary?: boolean }>;
+  onSelect: (chip: { label: string; prompt?: string; url?: string }) => void;
 }
 
-export function SuggestionChips({ onSelect, sportsUrl, hubUrl }: SuggestionChipsProps) {
-  const chips = SUGGESTIONS.map((s) => {
-    if (s.label === "Open Sports") return { ...s, url: sportsUrl || "#" };
-    if (s.label === "Open Hub") return { ...s, url: hubUrl || "#" };
-    return s;
-  });
-
+export function SuggestionChips({ chips, onSelect }: SuggestionChipsProps) {
   return (
-    <div className="flex flex-wrap gap-2 justify-center px-4">
+    <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
       {chips.map((chip, i) => (
         <motion.button
-          key={chip.label}
-          initial={{ opacity: 0, y: 8 }}
+          key={`${chip.label}-${i}`}
+          initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.05 }}
+          transition={{ delay: i * 0.03 }}
           onClick={() => onSelect(chip)}
-          className="px-4 py-2 text-xs rounded-full border border-gold/30 text-gold/80 hover:bg-gold/10 hover:text-gold hover:border-gold/50 transition-all"
+          className={`shrink-0 px-3 py-1.5 text-[11px] rounded-full border transition-all whitespace-nowrap ${
+            chip.primary
+              ? "border-gold/45 bg-gold/15 text-gold"
+              : "border-gold/25 bg-surface/60 text-gold/85 hover:bg-gold/10"
+          }`}
         >
           {chip.label}
         </motion.button>
