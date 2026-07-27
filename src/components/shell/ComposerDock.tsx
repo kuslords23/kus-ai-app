@@ -8,7 +8,7 @@ interface ComposerDockProps {
 }
 
 /**
- * Bottom composer — flush to screen edge. No home-indicator / safe-area padding.
+ * Bottom composer — ChatGPT-style ~12px gap under the pill. No home-indicator padding.
  */
 export function ComposerDock({ children, className = "" }: ComposerDockProps) {
   return (

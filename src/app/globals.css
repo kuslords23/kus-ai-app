@@ -167,10 +167,10 @@ html.keyboard-open .app-shell {
   padding-top: 0.5rem;
 }
 
-/* Composer — zero bottom padding, no safe-area */
+/* Composer — ChatGPT-style gap (~12px), no home-indicator reserve */
 .composer-bar {
   flex-shrink: 0;
-  padding: 0.375rem 0.75rem 0;
+  padding: 0.5rem 0.75rem 0.75rem;
   margin: 0;
   background: var(--background);
 }
