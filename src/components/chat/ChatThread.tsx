@@ -423,7 +423,7 @@ export function ChatThreadView({
     <div className="flex flex-col h-full min-h-0">
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 chat-scroll-pad"
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3"
       >
         {messages.map((msg, i) => (
           <ChatMessage
@@ -455,6 +455,12 @@ export function ChatThreadView({
           onOpenAttachMenu={() => setAttachMenuOpen(true)}
           activeAgent={{ icon: agent.icon, name: agent.name }}
           onAgentClick={() => setAgentPickerOpen(true)}
+          onFocus={() => {
+            scrollRef.current?.scrollTo({
+              top: scrollRef.current.scrollHeight,
+              behavior: "smooth",
+            });
+          }}
         />
       </ComposerDock>
 

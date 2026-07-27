@@ -70,10 +70,7 @@ export function AttachmentMenu({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.96 }}
             className="fixed left-4 right-4 z-50 max-w-md mx-auto glass border border-border rounded-3xl p-4 shadow-2xl"
-            style={{
-              bottom:
-                "calc(var(--composer-height) + var(--keyboard-inset) + var(--safe-bottom) + 0.5rem)",
-            }}
+            style={{ bottom: "min(42vh, 320px)" }}
           >
             <div className="grid grid-cols-3 gap-3 mb-4">
               {items.map((item) => (

@@ -1,42 +1,17 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 interface ComposerDockProps {
   children: ReactNode;
   className?: string;
 }
 
-/**
- * Fixed bottom composer — sits above home indicator or keyboard (iPhone X+).
- */
+/** In-flow bottom composer — lives inside the visual-viewport shell (not position:fixed). */
 export function ComposerDock({ children, className = "" }: ComposerDockProps) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    const setHeight = () => {
-      document.documentElement.style.setProperty(
-        "--composer-height",
-        `${el.offsetHeight}px`
-      );
-    };
-
-    setHeight();
-    const ro = new ResizeObserver(setHeight);
-    ro.observe(el);
-    return () => {
-      ro.disconnect();
-      document.documentElement.style.setProperty("--composer-height", "0px");
-    };
-  }, []);
-
   return (
     <div
-      ref={ref}
-      className={`composer-dock ${className}`.trim()}
+      className={`shrink-0 border-t border-border/60 bg-background/95 backdrop-blur-md px-3 pt-1.5 pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] ${className}`.trim()}
     >
       {children}
     </div>
