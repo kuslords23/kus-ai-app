@@ -7,7 +7,7 @@ export function Header() {
   const { user, signOut } = useAuth();
 
   return (
-    <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background/80 backdrop-blur-sm">
+    <header className="shrink-0 flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 border-b border-border bg-background">
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 rounded-full bg-gold/10 border border-gold/30 flex items-center justify-center">
           <svg className="w-4 h-4 text-gold" viewBox="0 0 24 24" fill="currentColor">
