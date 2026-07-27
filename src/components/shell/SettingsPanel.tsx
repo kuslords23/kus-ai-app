@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import type { AppSettings } from "@/lib/settings";
+import { AGENTS } from "@/lib/agents/registry";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -92,6 +93,25 @@ export function SettingsPanel({
                     }`}
                   >
                     {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm">Default agent</p>
+              <div className="flex gap-2 flex-wrap">
+                {AGENTS.slice(0, 4).map((a) => (
+                  <button
+                    key={a.id}
+                    onClick={() => onChange({ activeAgentId: a.id })}
+                    className={`px-3 py-1.5 rounded-full text-xs border ${
+                      settings.activeAgentId === a.id
+                        ? "border-gold bg-gold/15 text-gold"
+                        : "border-border text-muted"
+                    }`}
+                  >
+                    {a.icon} {a.name}
                   </button>
                 ))}
               </div>

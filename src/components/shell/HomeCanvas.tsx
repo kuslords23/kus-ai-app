@@ -1,21 +1,27 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { SuggestionChips } from "@/components/chat/SuggestionChips";
+import { AttachmentMenu } from "@/components/attachments/AttachmentMenu";
+import { AgentPicker } from "@/components/agents/AgentPicker";
 import { getSuggestionChips } from "@/lib/rag/chips";
 import { buildUserContext } from "@/lib/rag/userContext";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { useMemo } from "react";
 import type { AppSettings } from "@/lib/settings";
+import { getAgent } from "@/lib/agents/registry";
+import type { ChatAttachment } from "@/lib/attachments/types";
 
 interface HomeCanvasProps {
-  onSend: (text: string) => void;
+  onSend: (text: string, attachments?: ChatAttachment[]) => void;
   onSpeak: () => void;
   listening?: boolean;
   voiceSupported?: boolean;
   settings: AppSettings;
   disabled?: boolean;
+  activeAgentId: string;
+  onAgentChange: (id: string) => void;
 }
 
 export function HomeCanvas({
@@ -25,10 +31,22 @@ export function HomeCanvas({
   voiceSupported,
   settings,
   disabled,
+  activeAgentId,
+  onAgentChange,
 }: HomeCanvasProps) {
   const { user } = useAuth();
   const userContext = useMemo(() => buildUserContext(user), [user]);
   const chips = useMemo(() => getSuggestionChips(userContext), [userContext]);
+  const agent = getAgent(activeAgentId);
+
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+
+  const handleSend = (text: string) => {
+    onSend(text, attachments.length ? attachments : undefined);
+    setAttachments([]);
+  };
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -48,8 +66,15 @@ export function HomeCanvas({
           </p>
         </div>
 
-        <div className="flex gap-2">
-          <span className="px-3 py-1 rounded-full text-[11px] border border-gold/35 bg-gold/10 text-gold capitalize">
+        <div className="flex gap-2 flex-wrap justify-center">
+          <button
+            type="button"
+            onClick={() => setAgentPickerOpen(true)}
+            className="px-3 py-1 rounded-full text-[11px] border border-gold/35 bg-gold/10 text-gold"
+          >
+            {agent.icon} {agent.name}
+          </button>
+          <span className="px-3 py-1 rounded-full text-[11px] border border-border bg-surface/60 text-muted capitalize">
             {settings.mode}
           </span>
           {settings.voiceModeDefault && (
@@ -84,14 +109,38 @@ export function HomeCanvas({
 
         <ChatInput
           large
-          onSend={onSend}
+          onSend={handleSend}
           disabled={disabled}
           placeholder="Ask anything…"
           voiceSupported={voiceSupported}
           listening={listening}
           onToggleListen={onSpeak}
+          attachments={attachments}
+          onRemoveAttachment={(id) =>
+            setAttachments((prev) => prev.filter((a) => a.id !== id))
+          }
+          onOpenAttachMenu={() => setAttachMenuOpen(true)}
+          activeAgent={{ icon: agent.icon, name: agent.name }}
+          onAgentClick={() => setAgentPickerOpen(true)}
         />
       </div>
+
+      <AttachmentMenu
+        open={attachMenuOpen}
+        onClose={() => setAttachMenuOpen(false)}
+        onAttachments={(files) =>
+          setAttachments((prev) => [...prev, ...files].slice(0, 4))
+        }
+        onSelectAgent={(id) => onAgentChange(id)}
+        onSelectCompanion={(url) => window.open(url, "_blank")}
+      />
+
+      <AgentPicker
+        open={agentPickerOpen}
+        onClose={() => setAgentPickerOpen(false)}
+        activeId={activeAgentId}
+        onSelect={onAgentChange}
+      />
     </div>
   );
 }
