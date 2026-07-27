@@ -123,3 +123,18 @@ For cross-device memory sync, add a Supabase table `royal_companion_memory` mirr
 ## Agents
 
 Specialist agents in `src/lib/agents/registry.ts` layer persona hints on top of Royal. The hub can route by `userContext.agent.agentId` and `sourceType`.
+
+**Background training agents** (harvester, gatekeeper, scout) are **not** in this registry — see `docs/TRAINING_PLANE.md`.
+
+## Training Plane (learning without fine-tuning)
+
+Royal emits learning signals to shared Supabase; Hub consumes the same pgvector memory.
+
+| Companion endpoint | Purpose |
+|--------------------|---------|
+| `POST /api/learning/event` | Ingest `retrieval_miss`, `correction`, etc. |
+| `GET /api/cron/training-tick` | Process event queue (service role) |
+
+Apply `supabase/migrations/001_training_plane.sql` on the kingdom Supabase project.
+
+Hub must implement retrieval from `knowledge_embeddings` and emit its own `learning_events` with `source: 'hub'`.

@@ -13,6 +13,7 @@ export type AppSettings = {
   creativeConstraints: string;
   skillShadowing: boolean;
   pushNotifications: boolean;
+  contributeToLearning: boolean;
 };
 
 const KEY = "kus_ai_settings";
@@ -30,6 +31,7 @@ const DEFAULTS: AppSettings = {
   creativeConstraints: "",
   skillShadowing: true,
   pushNotifications: false,
+  contributeToLearning: true,
 };
 
 export function loadSettings(): AppSettings {
