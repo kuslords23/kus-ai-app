@@ -9,6 +9,7 @@ export type KingdomFetchResult = {
   departments: string[];
   hitCount: number;
   subAgentsQueried: number;
+  directAnswer?: string;
 };
 
 export async function fetchKingdomKnowledge(
@@ -37,14 +38,31 @@ export async function fetchKingdomKnowledge(
     if (!res.ok) return empty;
 
     const data = await res.json();
+    const hits = Array.isArray(data.hits) ? data.hits : [];
+    const goldenQa = Array.isArray(data.goldenQa) ? data.goldenQa : [];
     return {
       ok: Boolean(data.ok),
       context: String(data.context ?? ""),
       departments: Array.isArray(data.departments) ? data.departments : [],
-      hitCount: Array.isArray(data.hits) ? data.hits.length : 0,
+      hitCount: hits.length + goldenQa.length,
       subAgentsQueried: Number(data.subAgentsQueried ?? 0),
+      directAnswer:
+        typeof data.directAnswer === "string" ? data.directAnswer : undefined,
     };
   } catch {
     return empty;
   }
+}
+
+/** Hub sometimes returns app-meta junk instead of answering the question. */
+export function looksLikeHubMetaJunk(answer: string): boolean {
+  const a = answer.toLowerCase();
+  return (
+    a.includes("vector embeddings") ||
+    a.includes("rag agent") ||
+    a.includes("kus ai rag") ||
+    a.includes("kue ai") ||
+    a.includes("live tv channel catalogs") ||
+    (a.includes("marketplace") && a.includes("leagues") && a.includes("embeddings"))
+  );
 }

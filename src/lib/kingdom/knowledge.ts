@@ -5,6 +5,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { classifyDepartments } from "./classifier";
+import { STARTER_PACKETS } from "./starterKnowledge";
 
 export type KingdomKnowledgeHit = {
   id: string;
@@ -22,6 +23,8 @@ export type KingdomKnowledgeResult = {
   departments: string[];
   hits: KingdomKnowledgeHit[];
   goldenQa: Array<{ question: string; answer: string; department?: string }>;
+  /** Best direct answer for the companion to use if Hub drifts */
+  directAnswer?: string;
   subAgentsQueried: number;
   error?: string;
 };
@@ -33,6 +36,17 @@ function adminClient(): SupabaseClient | null {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
+}
+
+function matchStarterPackets(query: string) {
+  const q = query.toLowerCase();
+  const words = q.split(/\s+/).filter((w) => w.length > 2);
+  return STARTER_PACKETS.filter((p) => {
+    const hay = `${p.question} ${p.answer} ${p.content}`.toLowerCase();
+    if (q.includes("momo") && hay.includes("momo")) return true;
+    const score = words.filter((w) => hay.includes(w)).length;
+    return score >= 2;
+  });
 }
 
 export async function queryKingdomKnowledge(opts: {
@@ -47,14 +61,29 @@ export async function queryKingdomKnowledge(opts: {
       ? opts.departments
       : classifyDepartments(opts.query, 5);
 
+  const starters = matchStarterPackets(opts.query);
+  const starterHits: KingdomKnowledgeHit[] = starters.map((p, i) => ({
+    id: `starter-${i}`,
+    content: p.content,
+    departmentId: p.departmentId,
+    domain: p.domain,
+    confidence: 0.9,
+  }));
+  const starterQa = starters.map((p) => ({
+    question: p.question,
+    answer: p.answer,
+    department: p.departmentId,
+  }));
+
   const supabase = adminClient();
   if (!supabase) {
     return {
-      ok: false,
+      ok: starterHits.length > 0,
       query: opts.query,
       departments,
-      hits: [],
-      goldenQa: [],
+      hits: starterHits,
+      goldenQa: starterQa,
+      directAnswer: starterQa[0]?.answer,
       subAgentsQueried: 0,
       error: "Supabase not configured",
     };
@@ -62,13 +91,36 @@ export async function queryKingdomKnowledge(opts: {
 
   const needle = opts.query.trim().slice(0, 200);
 
-  const { data: chunks } = await supabase
-    .from("knowledge_chunks")
-    .select("id, content, department_id, domain, source_url, confidence, sub_agent_id")
-    .in("department_id", departments)
-    .eq("verification_status", "verified")
-    .order("confidence", { ascending: false })
-    .limit(limit * 2);
+  let chunks: Array<{
+    id: string;
+    content: string;
+    department_id?: string | null;
+    domain?: string | null;
+    source_url?: string | null;
+    confidence: number;
+  }> | null = null;
+
+  {
+    const withDept = await supabase
+      .from("knowledge_chunks")
+      .select("id, content, department_id, domain, source_url, confidence")
+      .in("department_id", departments)
+      .eq("verification_status", "verified")
+      .order("confidence", { ascending: false })
+      .limit(limit * 2);
+    if (!withDept.error) {
+      chunks = withDept.data;
+    } else {
+      const withDomain = await supabase
+        .from("knowledge_chunks")
+        .select("id, content, department_id, domain, source_url, confidence")
+        .in("domain", departments)
+        .eq("verification_status", "verified")
+        .order("confidence", { ascending: false })
+        .limit(limit * 2);
+      chunks = withDomain.data;
+    }
+  }
 
   const filtered = (() => {
     const list = chunks ?? [];
@@ -81,20 +133,38 @@ export async function queryKingdomKnowledge(opts: {
     return (matched.length ? matched : list).slice(0, limit);
   })();
 
-  const { data: qa } = await supabase
-    .from("golden_qa_pairs")
-    .select("question, answer, department_id")
-    .in("department_id", departments)
-    .eq("verification_status", "verified")
-    .order("confidence", { ascending: false })
-    .limit(8);
+  let qa: Array<{
+    question: string;
+    answer: string;
+    department_id?: string | null;
+  }> | null = null;
+  {
+    const withDept = await supabase
+      .from("golden_qa_pairs")
+      .select("question, answer, department_id")
+      .in("department_id", departments)
+      .eq("verification_status", "verified")
+      .order("confidence", { ascending: false })
+      .limit(8);
+    if (!withDept.error) qa = withDept.data;
+    else {
+      const withDomain = await supabase
+        .from("golden_qa_pairs")
+        .select("question, answer, department_id")
+        .in("domain", departments)
+        .eq("verification_status", "verified")
+        .order("confidence", { ascending: false })
+        .limit(8);
+      qa = withDomain.data;
+    }
+  }
 
   const qaFiltered = (() => {
     const list = qa ?? [];
     if (!needle) return list.slice(0, 3);
     const words = needle.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
-    const matched = list.filter((q) => {
-      const text = `${q.question} ${q.answer}`.toLowerCase();
+    const matched = list.filter((row) => {
+      const text = `${row.question} ${row.answer}`.toLowerCase();
       return words.some((w) => text.includes(w));
     });
     return (matched.length ? matched : list).slice(0, 3);
@@ -107,7 +177,7 @@ export async function queryKingdomKnowledge(opts: {
     .eq("status", "active")
     .limit(50);
 
-  const hits: KingdomKnowledgeHit[] = filtered.map((c) => ({
+  const dbHits: KingdomKnowledgeHit[] = filtered.map((c) => ({
     id: c.id,
     content: c.content,
     departmentId: c.department_id ?? undefined,
@@ -115,6 +185,13 @@ export async function queryKingdomKnowledge(opts: {
     sourceUrl: c.source_url ?? undefined,
     confidence: c.confidence,
   }));
+
+  const hits = [...starterHits, ...dbHits].slice(0, limit);
+  const goldenQa = [...starterQa, ...qaFiltered.map((q) => ({
+    question: q.question,
+    answer: q.answer,
+    department: q.department_id ?? undefined,
+  }))].slice(0, 4);
 
   if (opts.userId) {
     void supabase.from("kingdom_knowledge_queries").insert({
@@ -131,11 +208,8 @@ export async function queryKingdomKnowledge(opts: {
     query: opts.query,
     departments,
     hits,
-    goldenQa: qaFiltered.map((q) => ({
-      question: q.question,
-      answer: q.answer,
-      department: q.department_id ?? undefined,
-    })),
+    goldenQa,
+    directAnswer: goldenQa[0]?.answer,
     subAgentsQueried: agents?.length ?? 0,
   };
 }
@@ -147,6 +221,7 @@ export function formatKingdomContext(result: KingdomKnowledgeResult): string {
   const parts: string[] = [
     "## Kingdom Knowledge (sub-agent swarm memory)",
     `Departments: ${result.departments.join(", ")}`,
+    "Use this knowledge to answer the user. Do not open sports or marketplace unless asked.",
   ];
 
   for (const qa of result.goldenQa) {
