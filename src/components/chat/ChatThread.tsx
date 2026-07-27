@@ -10,8 +10,7 @@ import { ActionConfirmModal } from "@/components/actions/ActionConfirmModal";
 import { streamRag, type RagAction } from "@/lib/rag/client";
 import { getSuggestionChips, WELCOME_TEXT } from "@/lib/rag/chips";
 import {
-  buildUserContext,
-  loadCompanionMemory,
+  buildFullRagContext,
   saveCompanionMemory,
 } from "@/lib/rag/userContext";
 import {
@@ -25,15 +24,25 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useVoiceOutput } from "@/lib/hooks/useVoice";
 import { loadSettings } from "@/lib/settings";
 import {
-  buildAgentContext,
   getAgent,
   resolveAgentForRag,
 } from "@/lib/agents/registry";
 import type { ChatAttachment } from "@/lib/attachments/types";
 import { attachmentsForRag } from "@/lib/attachments/types";
 import {
+  applyMemoryDecay,
+  addDecision,
+  findRegretWarning,
+  inferEmotionalMood,
+  loadRoyalMemory,
+  recordEmotionalSnapshot,
+  saveRoyalMemory,
+} from "@/lib/memory/royalMemory";
+import { shouldSpeakInSilentMode } from "@/lib/briefings/daily";
+import {
   buildPendingAction,
   classifyAction,
+  describeAction,
   executeAction,
   logAction,
   type PendingAction,
@@ -51,6 +60,7 @@ interface ChatThreadProps {
   onBootstrapConsumed?: () => void;
   activeAgentId: string;
   onAgentChange: (id: string) => void;
+  settings: import("@/lib/settings").AppSettings;
 }
 
 export function ChatThreadView({
@@ -65,9 +75,18 @@ export function ChatThreadView({
   onBootstrapConsumed,
   activeAgentId,
   onAgentChange,
+  settings,
 }: ChatThreadProps) {
   const { user } = useAuth();
-  const userContext = useMemo(() => buildUserContext(user), [user]);
+  const userContext = useMemo(
+    () =>
+      buildFullRagContext({
+        user,
+        settings,
+        agent: resolveAgentForRag(activeAgentId),
+      }),
+    [user, settings, activeAgentId]
+  );
   const chips = useMemo(() => getSuggestionChips(userContext), [userContext]);
   const { speak } = useVoiceOutput();
   const agent = getAgent(activeAgentId);
@@ -92,7 +111,7 @@ export function ChatThreadView({
         welcome.push({
           id: "ai_welcome_ctx",
           role: "assistant",
-          content: `Hey **${name}** — good to see you. Same soul as hub AI, in your own home.`,
+          content: `Hey **${name}** — good to see you. I'm **Royal**, same soul as hub AI, in your own home.`,
         });
       }
       welcome.push({
@@ -121,13 +140,22 @@ export function ChatThreadView({
   const handleAction = useCallback(
     (action?: RagAction, actionTaken?: boolean) => {
       if (!action || !actionTaken) return;
+      const summary = describeAction(action);
+      const royal = user?.id ? loadRoyalMemory(user.id) : null;
+      const regret = royal ? findRegretWarning(royal, summary) : null;
       const risk = classifyAction(action);
-      if (risk === "low") {
+
+      if (risk === "low" && !regret) {
         executeAction(action);
         logAction(user?.id, `Opened ${action.tab || action.url || "companion"}`);
         return;
       }
-      setPendingAction(buildPendingAction(action));
+      setPendingAction(
+        buildPendingAction(
+          action,
+          regret ? `Similar to a past regret: "${regret.pattern}"` : undefined
+        )
+      );
     },
     [user?.id]
   );
@@ -193,12 +221,22 @@ export function ChatThreadView({
         .slice(-16)
         .map((m) => ({ role: m.role, content: m.content }));
 
-      const memory = user?.id ? loadCompanionMemory(user.id) : null;
-      const ctx = {
-        ...userContext,
-        companionMemory: memory ?? undefined,
-        agent: buildAgentContext(ragAgent),
-      };
+      const appSettings = loadSettings();
+      let royal = user?.id ? loadRoyalMemory(user.id) : null;
+      if (royal && user?.id) {
+        royal = applyMemoryDecay(royal, appSettings.memoryDecay);
+        royal = recordEmotionalSnapshot(
+          royal,
+          inferEmotionalMood(displayQuery)
+        );
+      }
+
+      const ctx = buildFullRagContext({
+        user,
+        settings: appSettings,
+        agent: ragAgent,
+        royalMemory: royal,
+      });
 
       try {
         let assembled = "";
@@ -290,22 +328,33 @@ export function ChatThreadView({
           );
         }
 
-        const settings = loadSettings();
-        if ((voiceReplies ?? settings.voiceReplies) && finalText) {
+        const appSettingsAfter = loadSettings();
+        const speakAllowed =
+          (voiceReplies ?? appSettingsAfter.voiceReplies) &&
+          finalText &&
+          (!appSettingsAfter.silentMode ||
+            shouldSpeakInSilentMode(finalText, result.actionTaken));
+
+        if (speakAllowed) {
           speak(finalText, true);
         }
 
-        if (user?.id) {
-          saveCompanionMemory({
-            userId: user.id,
-            preferenceSummary: memory?.preferenceSummary || "",
-            episodicSummary: memory?.episodicSummary || "",
-            toneNotes:
-              memory?.toneNotes || "collaborative, concise, producer-aware",
+        if (user?.id && royal) {
+          const updatedRoyal = {
+            ...royal,
             recentTopics: [
-              ...(memory?.recentTopics ?? []),
+              ...(royal.recentTopics ?? []),
               displayQuery.slice(0, 48),
             ].slice(0, 12),
+            toneNotes: royal.toneNotes || "collaborative, concise, royal",
+          };
+          saveRoyalMemory(updatedRoyal);
+          saveCompanionMemory({
+            userId: user.id,
+            preferenceSummary: updatedRoyal.preferenceSummary || "",
+            episodicSummary: updatedRoyal.episodicSummary || "",
+            toneNotes: updatedRoyal.toneNotes,
+            recentTopics: updatedRoyal.recentTopics,
             updatedAt: new Date().toISOString(),
           });
         }
@@ -431,6 +480,15 @@ export function ChatThreadView({
           if (pendingAction) {
             executeAction(pendingAction.action);
             logAction(user?.id, pendingAction.summary);
+            if (user?.id) {
+              const royal = loadRoyalMemory(user.id);
+              addDecision(
+                royal,
+                pendingAction.title,
+                pendingAction.summary,
+                true
+              );
+            }
           }
           setPendingAction(null);
         }}

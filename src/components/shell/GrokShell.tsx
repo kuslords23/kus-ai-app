@@ -109,7 +109,7 @@ export function GrokShell() {
         </button>
 
         <div className="text-center min-w-0 px-2">
-          <p className="text-sm font-semibold">Kus AI</p>
+          <p className="text-sm font-semibold">Royal</p>
           <p className="text-[10px] text-muted truncate">
             {activeThread?.title && view === "thread"
               ? activeThread.title
@@ -159,6 +159,7 @@ export function GrokShell() {
             }}
             activeAgentId={settings.activeAgentId}
             onAgentChange={handleAgentChange}
+            settings={settings}
           />
         )}
       </main>

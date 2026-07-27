@@ -128,4 +128,4 @@ export function getSuggestionChips(userContext?: {
 }
 
 export const WELCOME_TEXT =
-  "Hey — Kus AI here. We can just talk, or I can help with news, sports, music, and the app. What's on your mind?";
+  "Hey — I'm **Royal**, your Kus-lords companion. We can talk, take actions in the app, or I can brief you on sports, wallet, and more. What's on your mind?";

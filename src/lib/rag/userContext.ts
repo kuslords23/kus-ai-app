@@ -1,9 +1,16 @@
 import type { User } from "@supabase/supabase-js";
+import type { AppSettings } from "@/lib/settings";
+import { buildRoyalPersonaContext } from "@/lib/persona/royal";
+import {
+  loadRoyalMemory,
+  royalMemoryForRag,
+  type RoyalMemory,
+} from "@/lib/memory/royalMemory";
+import type { AgentDefinition } from "@/lib/agents/registry";
+import { buildAgentContext } from "@/lib/agents/registry";
 
 /**
  * Lightweight userContext shape compatible with hub AIAssistantPanel.
- * Full hub context (wallet, dreamLeague, sportsPrefs) is enriched by hub RAG
- * from the shared session when available.
  */
 export function buildUserContext(user: User | null) {
   const name =
@@ -27,12 +34,55 @@ export function buildUserContext(user: User | null) {
     },
     companion: {
       id: "ai",
-      name: "Kus AI",
+      name: "Royal",
       surface: "standalone",
     },
   };
 }
 
+/** Full RAG context: user + Royal persona + agent + long-term memory. */
+export function buildFullRagContext(opts: {
+  user: User | null;
+  settings: AppSettings;
+  agent: AgentDefinition;
+  royalMemory?: RoyalMemory | null;
+}) {
+  const base = buildUserContext(opts.user);
+  const memory =
+    opts.royalMemory ??
+    (opts.user?.id ? loadRoyalMemory(opts.user.id) : null);
+
+  const energy =
+    opts.settings.energyLevel === "auto"
+      ? memory?.emotionalHistory.at(-1)?.mood === "tired"
+        ? "low"
+        : memory?.emotionalHistory.at(-1)?.mood === "excited"
+          ? "high"
+          : "medium"
+      : opts.settings.energyLevel;
+
+  return {
+    ...base,
+    persona: buildRoyalPersonaContext({
+      silentMode: opts.settings.silentMode,
+      energyLevel: energy,
+      creativeConstraints: opts.settings.creativeConstraints,
+      memoryDecay: opts.settings.memoryDecay,
+    }),
+    agent: buildAgentContext(opts.agent),
+    companionMemory: memory ? royalMemoryForRag(memory) : undefined,
+    behaviors: {
+      silentMode: opts.settings.silentMode,
+      dailyBriefings: opts.settings.dailyBriefings,
+      energyLevel: energy,
+      memoryDecay: opts.settings.memoryDecay,
+      creativeConstraints: opts.settings.creativeConstraints || null,
+      skillShadowing: opts.settings.skillShadowing,
+    },
+  };
+}
+
+/** @deprecated Use Royal memory — kept for hub localStorage compat. */
 export type CompanionMemory = {
   userId: string;
   preferenceSummary?: string;
