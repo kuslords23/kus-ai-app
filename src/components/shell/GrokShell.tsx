@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { SettingsPanel } from "./SettingsPanel";
 import { HomeCanvas } from "./HomeCanvas";
@@ -37,11 +37,24 @@ export function GrokShell() {
   const [view, setView] = useState<View>("home");
   const [bootstrapQuery, setBootstrapQuery] = useState<string | null>(null);
   const [bootstrapAttachments, setBootstrapAttachments] = useState<ChatAttachment[] | null>(null);
+  const pendingThreadRef = useRef<import("@/lib/threads/types").ChatThread | null>(null);
 
   const ensureThread = useCallback(() => {
     if (activeThread) return activeThread;
-    return newThread();
+    const t = newThread();
+    pendingThreadRef.current = t;
+    return t;
   }, [activeThread, newThread]);
+
+  const chatThread = useMemo(() => {
+    if (activeThread) {
+      if (pendingThreadRef.current?.id === activeThread.id) {
+        pendingThreadRef.current = null;
+      }
+      return activeThread;
+    }
+    return pendingThreadRef.current;
+  }, [activeThread]);
 
   const handleSend = useCallback(
     (text: string, attachments?: ChatAttachment[]) => {
@@ -71,10 +84,10 @@ export function GrokShell() {
 
   useEffect(() => {
     if (!ready) return;
-    if (activeThread && activeThread.messages.length > 0) {
+    if (activeThread?.messages.length) {
       setView("thread");
     }
-  }, [ready, activeThread]);
+  }, [ready, activeThread?.id, activeThread?.messages.length]);
 
   const patchSettings = useCallback((patch: Partial<AppSettings>) => {
     const next = saveSettings(patch);
@@ -96,7 +109,7 @@ export function GrokShell() {
   useVisualViewport();
 
   const showHome =
-    view === "home" && !bootstrapQuery && !activeThread?.messages.length;
+    view === "home" && !bootstrapQuery && !chatThread?.messages.length;
 
   return (
     <div className="app-shell">
@@ -149,11 +162,13 @@ export function GrokShell() {
           />
         ) : (
           <ChatThreadView
-            key={`${activeThread?.id}-${bootstrapQuery ?? "idle"}`}
-            thread={activeThread}
+            key={chatThread?.id ?? "no-thread"}
+            thread={chatThread}
             onUpdate={updateThread}
             voiceReplies={settings.voiceReplies}
-            showWelcome={!activeThread?.messages.length && !bootstrapQuery}
+            showWelcome={
+              !bootstrapQuery && !chatThread?.messages.length && view === "thread"
+            }
             bootstrapQuery={bootstrapQuery}
             bootstrapAttachments={bootstrapAttachments}
             onBootstrapConsumed={() => {

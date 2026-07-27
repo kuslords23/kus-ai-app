@@ -6,6 +6,15 @@ import type { ChatThread } from "@/lib/threads/types";
 import type { User } from "@supabase/supabase-js";
 import { COMPANIONS } from "@/lib/companions/registry";
 
+function lastMessagePreview(thread: ChatThread) {
+  const last = [...thread.messages].reverse().find((m) => m.content.trim());
+  if (!last) return "No messages yet";
+  const text = last.content.replace(/\s+/g, " ").trim();
+  const prefix = last.role === "user" ? "You: " : "Royal: ";
+  const body = text.length > 56 ? `${text.slice(0, 56)}…` : text;
+  return `${prefix}${body}`;
+}
+
 function formatWhen(ts: number) {
   const d = new Date(ts);
   const now = new Date();
@@ -140,7 +149,10 @@ export function Sidebar({
                     className="flex-1 text-left px-3 py-2.5 min-w-0"
                   >
                     <p className="text-sm truncate">{t.title}</p>
-                    <p className="text-[10px] text-muted">{formatWhen(t.updatedAt)}</p>
+                    <p className="text-[10px] text-muted truncate">
+                      {lastMessagePreview(t)}
+                    </p>
+                    <p className="text-[10px] text-muted/70">{formatWhen(t.updatedAt)}</p>
                   </button>
                   <button
                     onClick={() => onDelete(t.id)}
@@ -152,7 +164,11 @@ export function Sidebar({
                 </div>
               ))}
               {filtered.length === 0 && (
-                <p className="text-xs text-muted px-3 py-4">No chats yet</p>
+                <p className="text-xs text-muted px-3 py-4">
+                  {query.trim()
+                    ? "No matching conversations"
+                    : "No chats yet — start one from the home screen"}
+                </p>
               )}
             </div>
 

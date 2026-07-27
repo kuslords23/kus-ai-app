@@ -11,6 +11,24 @@ import {
 } from "@/lib/threads/storage";
 import { fetchCloudThreads, mergeThreads } from "@/lib/threads/sync";
 
+function pickActiveThreadId(
+  merged: ChatThread[],
+  savedActive: string | null
+): string | null {
+  if (
+    savedActive &&
+    merged.some((t) => t.id === savedActive && t.messages.length > 0)
+  ) {
+    return savedActive;
+  }
+  const withMessages = merged.find((t) => t.messages.length > 0);
+  if (withMessages) return withMessages.id;
+  if (savedActive && merged.some((t) => t.id === savedActive)) {
+    return savedActive;
+  }
+  return merged[0]?.id ?? null;
+}
+
 export function useThreads(userId: string | null) {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -41,11 +59,7 @@ export function useThreads(userId: string | null) {
 
       setThreads(merged);
       const savedActive = loadActiveThreadId(userId);
-      const active =
-        savedActive && merged.some((t) => t.id === savedActive)
-          ? savedActive
-          : merged[0]?.id ?? null;
-      setActiveId(active);
+      setActiveId(pickActiveThreadId(merged, savedActive));
       setReady(true);
     }
 
@@ -56,9 +70,12 @@ export function useThreads(userId: string | null) {
   }, [userId]);
 
   const persist = useCallback(
-    (next: ChatThread[]) => {
-      setThreads(next);
-      saveThreads(userId, next);
+    (next: ChatThread[] | ((prev: ChatThread[]) => ChatThread[])) => {
+      setThreads((prev) => {
+        const resolved = typeof next === "function" ? next(prev) : next;
+        saveThreads(userId, resolved);
+        return resolved;
+      });
     },
     [userId]
   );
@@ -73,27 +90,35 @@ export function useThreads(userId: string | null) {
 
   const newThread = useCallback(() => {
     const t = createThread();
-    persist([t, ...threads]);
+    persist((prev) => [t, ...prev]);
     setActive(t.id);
     return t;
-  }, [persist, setActive, threads]);
+  }, [persist, setActive]);
 
   const deleteThread = useCallback(
     (id: string) => {
-      const next = threads.filter((t) => t.id !== id);
-      persist(next);
-      if (activeId === id) {
-        setActive(next[0]?.id ?? null);
-      }
+      setThreads((prev) => {
+        const next = prev.filter((t) => t.id !== id);
+        saveThreads(userId, next);
+        setActiveId((current) => {
+          if (current !== id) return current;
+          const newActive = next[0]?.id ?? null;
+          saveActiveThreadId(userId, newActive);
+          return newActive;
+        });
+        return next;
+      });
     },
-    [activeId, persist, setActive, threads]
+    [userId]
   );
 
   const updateThread = useCallback(
     (id: string, updater: (t: ChatThread) => ChatThread) => {
-      persist(threads.map((t) => (t.id === id ? updater(t) : t)));
+      persist((prev) =>
+        prev.map((t) => (t.id === id ? updater(t) : t))
+      );
     },
-    [persist, threads]
+    [persist]
   );
 
   const refreshFromCloud = useCallback(async () => {
