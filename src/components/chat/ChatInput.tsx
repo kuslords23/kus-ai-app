@@ -19,6 +19,7 @@ interface ChatInputProps {
   onOpenAttachMenu?: () => void;
   activeAgent?: { icon: string; name: string };
   onAgentClick?: () => void;
+  onFocus?: () => void;
 }
 
 export function ChatInput({
@@ -36,6 +37,7 @@ export function ChatInput({
   onOpenAttachMenu,
   activeAgent,
   onAgentClick,
+  onFocus,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -144,6 +146,7 @@ export function ChatInput({
           placeholder={placeholder ?? "Ask anything…"}
           disabled={disabled}
           rows={1}
+          onFocus={onFocus}
           className="flex-1 bg-transparent text-foreground text-sm placeholder:text-muted resize-none outline-none min-h-[36px] py-1.5"
         />
 
