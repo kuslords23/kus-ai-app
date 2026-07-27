@@ -148,23 +148,7 @@ export function HomeCanvas({
         />
       </div>
 
-      <ComposerDock className="space-y-2">
-        {voiceSupported && (
-          <div className="flex justify-center">
-            <motion.button
-              whileTap={{ scale: 0.96 }}
-              onClick={onSpeak}
-              className={`px-6 py-2 rounded-full text-sm font-medium border ${
-                listening
-                  ? "bg-danger/20 border-danger/40 text-danger"
-                  : "bg-foreground text-background border-foreground"
-              }`}
-            >
-              {listening ? "Listening…" : "Speak"}
-            </motion.button>
-          </div>
-        )}
-
+      <ComposerDock>
         <ChatInput
           large
           onSend={handleSend}
@@ -180,6 +164,7 @@ export function HomeCanvas({
           onOpenAttachMenu={() => setAttachMenuOpen(true)}
           activeAgent={{ icon: agent.icon, name: agent.name }}
           onAgentClick={() => setAgentPickerOpen(true)}
+          hideAgentChip
         />
       </ComposerDock>
 

@@ -20,6 +20,8 @@ interface ChatInputProps {
   activeAgent?: { icon: string; name: string };
   onAgentClick?: () => void;
   onFocus?: () => void;
+  /** Hide agent chip row (e.g. agent shown in header) */
+  hideAgentChip?: boolean;
 }
 
 export function ChatInput({
@@ -38,6 +40,7 @@ export function ChatInput({
   activeAgent,
   onAgentClick,
   onFocus,
+  hideAgentChip,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -67,11 +70,11 @@ export function ChatInput({
 
   return (
     <div className="space-y-1.5">
-      {activeAgent && onAgentClick && (
+      {!hideAgentChip && activeAgent && onAgentClick && (
         <button
           type="button"
           onClick={onAgentClick}
-          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] border border-border bg-surface/60 hover:border-gold/40"
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] border border-border/80 bg-surface/50 hover:border-gold/40"
         >
           <span>{activeAgent.icon}</span>
           <span>{activeAgent.name}</span>
@@ -80,11 +83,11 @@ export function ChatInput({
       )}
 
       {attachments.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto px-1">
+        <div className="flex gap-2 overflow-x-auto">
           {attachments.map((a) => (
             <div
               key={a.id}
-              className="relative shrink-0 w-14 h-14 rounded-xl border border-border overflow-hidden bg-surface"
+              className="relative shrink-0 w-12 h-12 rounded-xl border border-border overflow-hidden bg-surface"
             >
               {a.previewUrl && a.kind === "image" ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -94,7 +97,7 @@ export function ChatInput({
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-lg">
+                <div className="w-full h-full flex items-center justify-center text-base">
                   {a.kind === "video" ? "🎬" : "📄"}
                 </div>
               )}
@@ -102,7 +105,7 @@ export function ChatInput({
                 <button
                   type="button"
                   onClick={() => onRemoveAttachment(a.id)}
-                  className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-background border border-border text-[10px]"
+                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-background border border-border text-[9px]"
                   aria-label="Remove"
                 >
                   ✕
@@ -113,21 +116,22 @@ export function ChatInput({
         </div>
       )}
 
+      {/* ChatGPT-style floating pill */}
       <div
-        className={`flex items-end gap-2 border border-border backdrop-blur-md ${
-          large ? "rounded-full px-3 py-2.5" : "rounded-2xl p-2"
+        className={`flex items-center gap-1.5 border border-border/80 shadow-sm ${
+          large ? "rounded-[1.75rem] px-2 py-1.5" : "rounded-2xl px-2 py-1.5"
         }`}
         style={{ background: "var(--composer-bg)" }}
       >
         {onOpenAttachMenu && (
           <motion.button
-            whileTap={{ scale: 0.9 }}
+            whileTap={{ scale: 0.92 }}
             type="button"
             onClick={onOpenAttachMenu}
-            className="w-9 h-9 rounded-full border border-border flex items-center justify-center shrink-0 text-muted hover:text-gold hover:border-gold/40"
-            aria-label="Add files or connectors"
+            className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-muted hover:text-foreground"
+            aria-label="Add"
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M12 5v14M5 12h14" />
             </svg>
           </motion.button>
@@ -147,39 +151,37 @@ export function ChatInput({
           disabled={disabled}
           rows={1}
           onFocus={onFocus}
-          className="flex-1 bg-transparent text-foreground text-sm placeholder:text-muted resize-none outline-none min-h-[36px] py-1.5"
+          className="flex-1 bg-transparent text-foreground text-[15px] placeholder:text-muted resize-none outline-none min-h-[36px] max-h-[120px] py-2 leading-snug"
         />
 
         {voiceSupported && (
           <motion.button
-            whileTap={{ scale: 0.9 }}
+            whileTap={{ scale: 0.92 }}
             type="button"
             onClick={onToggleListen}
             className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-              listening
-                ? "bg-danger/20 text-danger pulse-gold"
-                : "text-muted hover:text-gold hover:bg-gold/10"
+              listening ? "text-danger" : "text-muted hover:text-foreground"
             }`}
-            aria-label="Voice input"
+            aria-label="Voice"
           >
             <svg
-              className="w-4 h-4"
+              className="w-5 h-5"
               viewBox="0 0 24 24"
               fill={listening ? "currentColor" : "none"}
               stroke="currentColor"
               strokeWidth={2}
             >
               <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-              <path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" />
+              <path d="M19 10v2a7 7 0 01-14 0v-2" />
             </svg>
           </motion.button>
         )}
 
         <motion.button
-          whileTap={{ scale: 0.9 }}
+          whileTap={{ scale: 0.92 }}
           onClick={handleSubmit}
           disabled={disabled || (!value.trim() && attachments.length === 0)}
-          className="w-9 h-9 rounded-full bg-gold text-background flex items-center justify-center shrink-0 disabled:opacity-30"
+          className="w-9 h-9 rounded-full bg-gold text-background flex items-center justify-center shrink-0 disabled:opacity-25"
           aria-label="Send"
         >
           <svg
@@ -189,7 +191,7 @@ export function ChatInput({
             stroke="currentColor"
             strokeWidth={2.5}
           >
-            <path d="M5 12h14M12 5l7 7-7 7" />
+            <path d="M12 19V5M5 12l7-7 7 7" />
           </svg>
         </motion.button>
       </div>
