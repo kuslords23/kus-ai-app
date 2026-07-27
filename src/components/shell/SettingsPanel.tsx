@@ -93,6 +93,21 @@ export function SettingsPanel({
             </p>
 
             <label className="flex items-center justify-between gap-3 text-sm">
+              <span>Help improve Royal</span>
+              <input
+                type="checkbox"
+                checked={settings.contributeToLearning}
+                onChange={(e) =>
+                  onChange({ contributeToLearning: e.target.checked })
+                }
+                className="accent-[var(--gold)] w-4 h-4"
+              />
+            </label>
+            <p className="text-[10px] text-muted -mt-2">
+              Share anonymous learning signals (missed answers, corrections) with the kingdom training plane.
+            </p>
+
+            <label className="flex items-center justify-between gap-3 text-sm">
               <span>Push notifications</span>
               <input
                 type="checkbox"

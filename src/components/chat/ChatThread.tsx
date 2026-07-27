@@ -53,6 +53,13 @@ import {
 import { notifyError } from "@/lib/errors/notify";
 import { openCompanionUrl, openHub } from "@/lib/auth/hubBridge";
 import { MAX_TOTAL_ATTACHMENT_BYTES } from "@/lib/attachments/limits";
+import {
+  emitCorrection,
+  emitHelpful,
+  emitRagError,
+  emitRetrievalMiss,
+} from "@/lib/learning/emit";
+import { isLikelyRetrievalMiss } from "@/lib/learning/retrievalMiss";
 
 interface ChatThreadProps {
   thread: ChatThread | null;
@@ -104,6 +111,9 @@ export function ChatThreadView({
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [messageFeedback, setMessageFeedback] = useState<
+    Record<string, "helpful" | "not_helpful">
+  >({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const stoppedRef = useRef(false);
@@ -130,8 +140,9 @@ export function ChatThreadView({
       cards: m.cards,
       chips: m.chips,
       sourceLabel: m.sourceLabel,
+      feedback: messageFeedback[m.id],
     }));
-  }, [thread, showWelcome, userContext.user?.name]);
+  }, [thread, showWelcome, userContext.user?.name, messageFeedback]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -286,6 +297,14 @@ export function ChatThreadView({
 
         if (!result.ok && result.error) {
           notifyError("Royal couldn't respond", result.error);
+          if (settings.contributeToLearning) {
+            emitRagError({
+              query: displayQuery,
+              sessionId: thread.id,
+              error: result.error,
+              agentId: activeAgentId,
+            });
+          }
         }
 
         const finalText =
@@ -338,6 +357,20 @@ export function ChatThreadView({
 
         handleAction(result.action, result.actionTaken);
 
+        if (
+          settings.contributeToLearning &&
+          isLikelyRetrievalMiss(result, displayQuery)
+        ) {
+          emitRetrievalMiss({
+            query: displayQuery,
+            sessionId: thread.id,
+            dataSource: result.dataSource,
+            usedWebSearch: result.usedWebSearch,
+            sourceCount: result.sources?.length ?? 0,
+            agentId: activeAgentId,
+          });
+        }
+
         if (user?.id) {
           void persistMessageToCloud(
             user.id,
@@ -384,6 +417,14 @@ export function ChatThreadView({
             "Couldn’t reach Royal",
             "Check your connection and try again."
           );
+          if (settings.contributeToLearning) {
+            emitRagError({
+              query: displayQuery,
+              sessionId: thread.id,
+              error: "network_or_hub_error",
+              agentId: activeAgentId,
+            });
+          };
           onUpdate(thread.id, (t) =>
             updateThreadMessage([t], t.id, replyId, {
               content:
@@ -412,7 +453,38 @@ export function ChatThreadView({
       activeAgentId,
       handleAction,
       session?.access_token,
+      settings.contributeToLearning,
     ]
+  );
+
+  const handleFeedback = useCallback(
+    (messageId: string, type: "helpful" | "not_helpful") => {
+      if (!settings.contributeToLearning || !thread) return;
+      setMessageFeedback((prev) => ({ ...prev, [messageId]: type }));
+      const idx = thread.messages.findIndex((m) => m.id === messageId);
+      const assistant = thread.messages[idx];
+      const userMsg = [...thread.messages]
+        .slice(0, idx)
+        .reverse()
+        .find((m) => m.role === "user");
+      if (!assistant) return;
+      if (type === "helpful") {
+        emitHelpful({
+          messageId,
+          sessionId: thread.id,
+          userQuery: userMsg?.content,
+          assistantReply: assistant.content,
+        });
+      } else {
+        emitCorrection({
+          messageId,
+          sessionId: thread.id,
+          userQuery: userMsg?.content,
+          assistantReply: assistant.content,
+        });
+      }
+    },
+    [settings.contributeToLearning, thread]
   );
 
   const stopStreaming = useCallback(() => {
@@ -469,6 +541,8 @@ export function ChatThreadView({
             }
             onChipClick={onChip}
             onSpeak={(text) => speak(text, true)}
+            showFeedback={settings.contributeToLearning}
+            onFeedback={(type) => handleFeedback(msg.id, type)}
           />
         ))}
       </div>

@@ -22,6 +22,7 @@ export interface ChatMessageData {
     prompt?: string;
   }>;
   sourceLabel?: string;
+  feedback?: "helpful" | "not_helpful";
 }
 
 interface ChatMessageProps {
@@ -34,6 +35,8 @@ interface ChatMessageProps {
     prompt?: string;
   }) => void;
   onSpeak?: (text: string) => void;
+  onFeedback?: (type: "helpful" | "not_helpful") => void;
+  showFeedback?: boolean;
 }
 
 /** Lightweight **bold** rendering for hub-style answers. */
@@ -51,7 +54,14 @@ function renderContent(text: string) {
   });
 }
 
-export function ChatMessage({ message, isStreaming, onChipClick, onSpeak }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  isStreaming,
+  onChipClick,
+  onSpeak,
+  onFeedback,
+  showFeedback,
+}: ChatMessageProps) {
   const isUser = message.role === "user";
 
   return (
@@ -109,12 +119,40 @@ export function ChatMessage({ message, isStreaming, onChipClick, onSpeak }: Chat
         )}
 
         {!isUser && !isStreaming && message.content && onSpeak && (
-          <button
-            onClick={() => onSpeak(message.content)}
-            className="mt-2 text-[10px] text-muted hover:text-gold transition-colors"
-          >
-            ▶ Listen
-          </button>
+          <div className="mt-2 flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => onSpeak(message.content)}
+              className="text-[10px] text-muted hover:text-gold transition-colors"
+            >
+              ▶ Listen
+            </button>
+            {showFeedback && onFeedback && !message.feedback && (
+              <span className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onFeedback("helpful")}
+                  className="text-[10px] text-muted hover:text-gold px-1.5 py-0.5 rounded border border-transparent hover:border-border"
+                  aria-label="Helpful"
+                >
+                  👍
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onFeedback("not_helpful")}
+                  className="text-[10px] text-muted hover:text-danger px-1.5 py-0.5 rounded border border-transparent hover:border-border"
+                  aria-label="Not helpful"
+                >
+                  👎
+                </button>
+              </span>
+            )}
+            {message.feedback === "helpful" && (
+              <span className="text-[10px] text-muted">Thanks for the feedback</span>
+            )}
+            {message.feedback === "not_helpful" && (
+              <span className="text-[10px] text-muted">We&apos;ll learn from this</span>
+            )}
+          </div>
         )}
       </div>
     </motion.div>
