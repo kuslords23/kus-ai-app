@@ -11,6 +11,7 @@ import { useVoiceInput } from "@/lib/hooks/useVoice";
 import { loadSettings, saveSettings, applyTheme, type AppSettings } from "@/lib/settings";
 import { getAgent } from "@/lib/agents/registry";
 import type { ChatAttachment } from "@/lib/attachments/types";
+import { HubBridgeFab } from "@/components/hub/HubBridgeFab";
 import { useVisualViewport } from "@/lib/hooks/useVisualViewport";
 
 type View = "home" | "thread";
@@ -214,7 +215,10 @@ export function GrokShell() {
         settings={settings}
         onChange={patchSettings}
         onSignOut={signOut}
+        userId={user?.id}
       />
+
+      <HubBridgeFab />
     </div>
   );
 }

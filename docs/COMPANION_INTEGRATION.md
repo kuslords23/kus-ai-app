@@ -89,6 +89,33 @@ Extend `src/lib/companions/registry.ts` when new apps ship. Set env vars:
 3. **Silent mode** suppresses TTS unless response is a warning or user is stuck
 4. **Memory decay** user-controlled: `keep-all` | `balanced` | `minimal`
 
+## Hub return button
+
+When opening Hub from Royal, URLs include `?companion=kus-ai&returnTo=<ai-app-url>`.
+
+Add this script to Hub layout for the floating **← Royal** button:
+
+```html
+<script src="https://kus-ai-app.vercel.app/hub-return-badge.js" defer></script>
+```
+
+## Push notifications
+
+Requires Supabase table:
+
+```sql
+create table if not exists push_subscriptions (
+  user_id uuid references auth.users not null,
+  endpoint text not null,
+  p256dh text,
+  auth text,
+  updated_at timestamptz default now(),
+  primary key (user_id, endpoint)
+);
+```
+
+Set VAPID keys in env (`npx web-push generate-vapid-keys`).
+
 ## Future: server-side Royal memory
 
 For cross-device memory sync, add a Supabase table `royal_companion_memory` mirroring `RoyalMemory` and sync on login — same pattern as `ai_chat_messages`.

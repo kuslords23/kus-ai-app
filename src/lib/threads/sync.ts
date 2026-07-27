@@ -157,3 +157,17 @@ function dedupeMessages(messages: ThreadMessage[]): ThreadMessage[] {
   }
   return out;
 }
+
+export async function deleteCloudThread(
+  userId: string,
+  threadId: string
+): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("ai_chat_messages")
+    .delete()
+    .eq("user_id", userId)
+    .eq("session_id", threadId);
+
+  if (error) throw error;
+}

@@ -9,7 +9,8 @@ import {
   saveActiveThreadId,
   saveThreads,
 } from "@/lib/threads/storage";
-import { fetchCloudThreads, mergeThreads } from "@/lib/threads/sync";
+import { fetchCloudThreads, mergeThreads, deleteCloudThread } from "@/lib/threads/sync";
+import { notifyError, notifySuccess, notifyWarning } from "@/lib/errors/notify";
 
 function pickActiveThreadId(
   merged: ChatThread[],
@@ -50,6 +51,7 @@ export function useThreads(userId: string | null) {
           saveThreads(userId, merged);
         } catch {
           merged = local;
+          notifyWarning("Could not sync conversations from cloud");
         } finally {
           if (!cancelled) setSyncing(false);
         }
@@ -96,7 +98,18 @@ export function useThreads(userId: string | null) {
   }, [persist, setActive]);
 
   const deleteThread = useCallback(
-    (id: string) => {
+    async (id: string) => {
+      if (userId) {
+        try {
+          await deleteCloudThread(userId, id);
+        } catch {
+          notifyWarning(
+            "Deleted locally",
+            "Cloud copy may reappear on next sync"
+          );
+        }
+      }
+
       setThreads((prev) => {
         const next = prev.filter((t) => t.id !== id);
         saveThreads(userId, next);
@@ -108,6 +121,8 @@ export function useThreads(userId: string | null) {
         });
         return next;
       });
+
+      notifySuccess("Conversation deleted");
     },
     [userId]
   );
@@ -128,6 +143,8 @@ export function useThreads(userId: string | null) {
       const cloud = await fetchCloudThreads(userId);
       const merged = mergeThreads(loadThreads(userId), cloud);
       persist(merged);
+    } catch {
+      notifyError("Could not refresh conversations");
     } finally {
       setSyncing(false);
     }
