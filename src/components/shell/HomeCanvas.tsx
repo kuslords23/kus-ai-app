@@ -6,6 +6,7 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { SuggestionChips } from "@/components/chat/SuggestionChips";
 import { AttachmentMenu } from "@/components/attachments/AttachmentMenu";
 import { AgentPicker } from "@/components/agents/AgentPicker";
+import { ComposerDock } from "@/components/shell/ComposerDock";
 import { getSuggestionChips } from "@/lib/rag/chips";
 import { buildFullRagContext } from "@/lib/rag/userContext";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -83,7 +84,7 @@ export function HomeCanvas({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="flex-1 flex flex-col items-center justify-center px-4 gap-5 overflow-y-auto">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 gap-5 overflow-y-auto chat-scroll-pad">
         <motion.div
           initial={{ scale: 0.92, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -147,13 +148,13 @@ export function HomeCanvas({
         />
       </div>
 
-      <div className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-3">
+      <ComposerDock className="space-y-2">
         {voiceSupported && (
           <div className="flex justify-center">
             <motion.button
               whileTap={{ scale: 0.96 }}
               onClick={onSpeak}
-              className={`px-6 py-2.5 rounded-full text-sm font-medium border ${
+              className={`px-6 py-2 rounded-full text-sm font-medium border ${
                 listening
                   ? "bg-danger/20 border-danger/40 text-danger"
                   : "bg-foreground text-background border-foreground"
@@ -180,7 +181,7 @@ export function HomeCanvas({
           activeAgent={{ icon: agent.icon, name: agent.name }}
           onAgentClick={() => setAgentPickerOpen(true)}
         />
-      </div>
+      </ComposerDock>
 
       <AttachmentMenu
         open={attachMenuOpen}

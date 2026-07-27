@@ -64,7 +64,19 @@ export function ChatInput({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
+      {activeAgent && onAgentClick && (
+        <button
+          type="button"
+          onClick={onAgentClick}
+          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] border border-border bg-surface/60 hover:border-gold/40"
+        >
+          <span>{activeAgent.icon}</span>
+          <span>{activeAgent.name}</span>
+          <span className="text-muted">▾</span>
+        </button>
+      )}
+
       {attachments.length > 0 && (
         <div className="flex gap-2 overflow-x-auto px-1">
           {attachments.map((a) => (
@@ -178,18 +190,6 @@ export function ChatInput({
           </svg>
         </motion.button>
       </div>
-
-      {activeAgent && onAgentClick && (
-        <button
-          type="button"
-          onClick={onAgentClick}
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] border border-border bg-surface/60 hover:border-gold/40"
-        >
-          <span>{activeAgent.icon}</span>
-          <span>{activeAgent.name}</span>
-          <span className="text-muted">▾</span>
-        </button>
-      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { SuggestionChips } from "./SuggestionChips";
 import { AttachmentMenu } from "@/components/attachments/AttachmentMenu";
 import { AgentPicker } from "@/components/agents/AgentPicker";
 import { ActionConfirmModal } from "@/components/actions/ActionConfirmModal";
+import { ComposerDock } from "@/components/shell/ComposerDock";
 import { streamRag, type RagAction } from "@/lib/rag/client";
 import { getSuggestionChips, WELCOME_TEXT } from "@/lib/rag/chips";
 import {
@@ -422,7 +423,7 @@ export function ChatThreadView({
     <div className="flex flex-col h-full min-h-0">
       <div
         ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3"
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 chat-scroll-pad"
       >
         {messages.map((msg, i) => (
           <ChatMessage
@@ -439,7 +440,7 @@ export function ChatThreadView({
         ))}
       </div>
 
-      <div className="shrink-0 px-3 pt-1 space-y-2 pb-[max(0.7rem,env(safe-area-inset-bottom))]">
+      <ComposerDock className="space-y-1.5">
         {status && <p className="text-[10px] text-muted px-1">{status}</p>}
         <SuggestionChips chips={chips} onSelect={onChip} />
         <ChatInput
@@ -455,7 +456,7 @@ export function ChatThreadView({
           activeAgent={{ icon: agent.icon, name: agent.name }}
           onAgentClick={() => setAgentPickerOpen(true)}
         />
-      </div>
+      </ComposerDock>
 
       <AttachmentMenu
         open={attachMenuOpen}
