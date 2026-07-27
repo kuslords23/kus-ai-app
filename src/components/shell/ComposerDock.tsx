@@ -8,7 +8,7 @@ interface ComposerDockProps {
 }
 
 /**
- * ChatGPT-style bottom bar — flush to screen base, safe-area only under the pill.
+ * Bottom composer — flush to screen edge. No home-indicator / safe-area padding.
  */
 export function ComposerDock({ children, className = "" }: ComposerDockProps) {
   return (

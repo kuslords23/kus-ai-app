@@ -76,7 +76,7 @@ export function Sidebar({
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", damping: 28, stiffness: 280 }}
-            className="fixed left-0 top-0 bottom-0 z-50 w-[min(88vw,320px)] glass border-r border-border flex flex-col pt-[max(0.75rem,env(safe-area-inset-top))]"
+            className="fixed left-0 top-0 bottom-0 z-50 w-[min(88vw,320px)] glass border-r border-border flex flex-col pt-3"
           >
             <div className="px-4 py-3 border-b border-border">
               <div className="flex items-center gap-3">

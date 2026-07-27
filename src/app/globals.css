@@ -65,10 +65,8 @@
   --vv-top: 0px;
   --vv-left: 0px;
   --vv-width: 100%;
-  --vv-height: 100dvh;
+  --vv-height: 100%;
   --keyboard-open: 0;
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: 0px;
 }
 
 html {
@@ -141,17 +139,12 @@ body {
   border: 1px solid rgba(212, 168, 67, 0.22);
 }
 
-/* App shell — full small viewport height (stable on iOS PWA) */
+/* App shell — edge-to-edge, no home-indicator reserve */
 .app-shell {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   width: 100%;
   height: 100%;
-  height: 100svh;
-  max-height: 100svh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -165,18 +158,19 @@ html.keyboard-open .app-shell {
   right: auto;
   bottom: auto;
   width: var(--vv-width, 100%);
-  height: var(--vv-height, 100svh);
-  max-height: var(--vv-height, 100svh);
+  height: var(--vv-height, 100%);
+  max-height: var(--vv-height, 100%);
 }
 
 .app-header {
   flex-shrink: 0;
-  padding-top: max(0.5rem, var(--safe-top));
+  padding-top: 0.5rem;
 }
 
-/* Composer flush to screen bottom — no home-indicator padding */
+/* Composer — zero bottom padding, no safe-area */
 .composer-bar {
   flex-shrink: 0;
-  padding: 0.5rem 0.75rem;
+  padding: 0.375rem 0.75rem 0;
+  margin: 0;
   background: var(--background);
 }
