@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatMessage, type ChatMessageData } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { SuggestionChips } from "./SuggestionChips";
+import { AttachmentMenu } from "@/components/attachments/AttachmentMenu";
+import { AgentPicker } from "@/components/agents/AgentPicker";
+import { ActionConfirmModal } from "@/components/actions/ActionConfirmModal";
 import { streamRag, type RagAction } from "@/lib/rag/client";
 import { getSuggestionChips, WELCOME_TEXT } from "@/lib/rag/chips";
 import {
@@ -21,34 +24,20 @@ import type { ChatThread } from "@/lib/threads/types";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useVoiceOutput } from "@/lib/hooks/useVoice";
 import { loadSettings } from "@/lib/settings";
-
-function handleDeepLink(action?: RagAction) {
-  if (!action) return;
-  const hub =
-    process.env.NEXT_PUBLIC_HUB_URL || "https://sport-clan-nexus.vercel.app";
-  const sports =
-    process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL ||
-    "https://kus-sports.vercel.app";
-
-  if (action.url) {
-    window.open(String(action.url), "_blank");
-    return;
-  }
-  const tab = action.tab;
-  if (tab === "leagues" || tab === "sports" || action.sportsSubTab) {
-    const sub = action.sportsSubTab ? `?tab=${action.sportsSubTab}` : "";
-    window.open(`${sports}${sub}`, "_blank");
-    return;
-  }
-  if (
-    tab === "marketplace" ||
-    tab === "wallet" ||
-    tab === "messages" ||
-    tab === "feed"
-  ) {
-    window.open(hub, "_blank");
-  }
-}
+import {
+  buildAgentContext,
+  getAgent,
+  resolveAgentForRag,
+} from "@/lib/agents/registry";
+import type { ChatAttachment } from "@/lib/attachments/types";
+import { attachmentsForRag } from "@/lib/attachments/types";
+import {
+  buildPendingAction,
+  classifyAction,
+  executeAction,
+  logAction,
+  type PendingAction,
+} from "@/lib/actions/executor";
 
 interface ChatThreadProps {
   thread: ChatThread | null;
@@ -58,7 +47,10 @@ interface ChatThreadProps {
   autoFocus?: boolean;
   showWelcome?: boolean;
   bootstrapQuery?: string | null;
+  bootstrapAttachments?: ChatAttachment[] | null;
   onBootstrapConsumed?: () => void;
+  activeAgentId: string;
+  onAgentChange: (id: string) => void;
 }
 
 export function ChatThreadView({
@@ -69,15 +61,24 @@ export function ChatThreadView({
   autoFocus,
   showWelcome = true,
   bootstrapQuery,
+  bootstrapAttachments,
   onBootstrapConsumed,
+  activeAgentId,
+  onAgentChange,
 }: ChatThreadProps) {
   const { user } = useAuth();
   const userContext = useMemo(() => buildUserContext(user), [user]);
   const chips = useMemo(() => getSuggestionChips(userContext), [userContext]);
   const { speak } = useVoiceOutput();
+  const agent = getAgent(activeAgentId);
+  const ragAgent = resolveAgentForRag(activeAgentId);
 
   const [isStreaming, setIsStreaming] = useState(false);
   const [status, setStatus] = useState("");
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const messages: ChatMessageData[] = useMemo(() => {
@@ -94,6 +95,11 @@ export function ChatThreadView({
           content: `Hey **${name}** — good to see you. Same soul as hub AI, in your own home.`,
         });
       }
+      welcome.push({
+        id: "ai_welcome_agent",
+        role: "assistant",
+        content: `Active agent: **${agent.name}** ${agent.icon} — tap the chip below to switch skills, or use **+** for files, photos, camera, and companion connectors.`,
+      });
       return welcome;
     }
     return thread.messages.map((m) => ({
@@ -103,7 +109,7 @@ export function ChatThreadView({
       cards: m.cards,
       chips: m.chips,
     }));
-  }, [thread, showWelcome, userContext.user?.name]);
+  }, [thread, showWelcome, userContext.user?.name, agent.name, agent.icon]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -112,10 +118,26 @@ export function ChatThreadView({
     });
   }, [messages, isStreaming]);
 
+  const handleAction = useCallback(
+    (action?: RagAction, actionTaken?: boolean) => {
+      if (!action || !actionTaken) return;
+      const risk = classifyAction(action);
+      if (risk === "low") {
+        executeAction(action);
+        logAction(user?.id, `Opened ${action.tab || action.url || "companion"}`);
+        return;
+      }
+      setPendingAction(buildPendingAction(action));
+    },
+    [user?.id]
+  );
+
   const sendMessage = useCallback(
-    async (raw: string) => {
+    async (raw: string, overrideAttachments?: ChatAttachment[]) => {
       const query = raw.trim();
-      if (!query || isStreaming || !thread) return;
+      const outgoing = overrideAttachments ?? attachments;
+      const hasAttachments = outgoing.length > 0;
+      if ((!query && !hasAttachments) || isStreaming || !thread) return;
 
       if (query === "__open_sports__") {
         window.open(
@@ -136,10 +158,15 @@ export function ChatThreadView({
 
       if (thread.messages.length === 0) onFirstMessage?.();
 
+      const displayQuery =
+        query || `Shared ${outgoing.length} file${outgoing.length > 1 ? "s" : ""}`;
+      const sentAttachments = [...outgoing];
+      if (!overrideAttachments) setAttachments([]);
+
       const userMsg = {
         id: `ai_u_${Date.now()}`,
         role: "user" as const,
-        content: query,
+        content: displayQuery,
         at: Date.now(),
       };
       const replyId = `ai_r_${Date.now()}`;
@@ -155,11 +182,11 @@ export function ChatThreadView({
       });
 
       if (user?.id) {
-        void persistMessageToCloud(user.id, thread.id, "user", query);
+        void persistMessageToCloud(user.id, thread.id, "user", displayQuery);
       }
 
       setIsStreaming(true);
-      setStatus("Thinking…");
+      setStatus(`${agent.name} thinking…`);
 
       const history = thread.messages
         .filter((m) => m.content)
@@ -167,18 +194,25 @@ export function ChatThreadView({
         .map((m) => ({ role: m.role, content: m.content }));
 
       const memory = user?.id ? loadCompanionMemory(user.id) : null;
-      const ctx = { ...userContext, companionMemory: memory ?? undefined };
+      const ctx = {
+        ...userContext,
+        companionMemory: memory ?? undefined,
+        agent: buildAgentContext(ragAgent),
+      };
 
       try {
         let assembled = "";
         const result = await streamRag(
-          query,
+          displayQuery,
           {
             userContext: ctx,
-            history: [...history, { role: "user", content: query }],
+            history: [...history, { role: "user", content: displayQuery }],
+            attachments: attachmentsForRag(sentAttachments),
+            agentId: activeAgentId,
+            sourceType: ragAgent.sourceType,
           },
           {
-            onMeta: () => setStatus("Thinking…"),
+            onMeta: () => setStatus(`${agent.name} thinking…`),
             onToken: (text) => {
               assembled += text;
               onUpdate(thread.id, (t) =>
@@ -232,7 +266,7 @@ export function ChatThreadView({
         if (thread.title === "New chat") {
           onUpdate(thread.id, (t) => ({
             ...t,
-            title: titleFromMessage(query),
+            title: titleFromMessage(displayQuery),
           }));
         }
 
@@ -241,10 +275,10 @@ export function ChatThreadView({
             ? "News"
             : result.mode === "sports"
               ? "Sports"
-              : "Kus AI"
+              : agent.name
         );
 
-        handleDeepLink(result.action);
+        handleAction(result.action, result.actionTaken);
 
         if (user?.id) {
           void persistMessageToCloud(
@@ -252,7 +286,7 @@ export function ChatThreadView({
             thread.id,
             "assistant",
             finalText,
-            result.agentsUsed
+            result.agentsUsed ?? [agent.id]
           );
         }
 
@@ -270,7 +304,7 @@ export function ChatThreadView({
               memory?.toneNotes || "collaborative, concise, producer-aware",
             recentTopics: [
               ...(memory?.recentTopics ?? []),
-              query.slice(0, 48),
+              displayQuery.slice(0, 48),
             ].slice(0, 12),
             updatedAt: new Date().toISOString(),
           });
@@ -288,6 +322,7 @@ export function ChatThreadView({
       }
     },
     [
+      attachments,
       isStreaming,
       thread,
       onUpdate,
@@ -296,6 +331,10 @@ export function ChatThreadView({
       userContext,
       voiceReplies,
       speak,
+      agent,
+      ragAgent,
+      activeAgentId,
+      handleAction,
     ]
   );
 
@@ -314,10 +353,13 @@ export function ChatThreadView({
   useEffect(() => {
     if (bootstrapQuery && !bootstrapped.current && thread) {
       bootstrapped.current = true;
-      sendMessage(bootstrapQuery);
+      sendMessage(
+        bootstrapQuery,
+        bootstrapAttachments?.length ? bootstrapAttachments : undefined
+      );
       onBootstrapConsumed?.();
     }
-  }, [bootstrapQuery, thread, sendMessage, onBootstrapConsumed]);
+  }, [bootstrapQuery, bootstrapAttachments, thread, sendMessage, onBootstrapConsumed]);
 
   if (!thread) {
     return (
@@ -356,8 +398,44 @@ export function ChatThreadView({
           disabled={isStreaming}
           autoFocus={autoFocus}
           placeholder="Ask anything about sports, wallet, music, leagues…"
+          attachments={attachments}
+          onRemoveAttachment={(id) =>
+            setAttachments((prev) => prev.filter((a) => a.id !== id))
+          }
+          onOpenAttachMenu={() => setAttachMenuOpen(true)}
+          activeAgent={{ icon: agent.icon, name: agent.name }}
+          onAgentClick={() => setAgentPickerOpen(true)}
         />
       </div>
+
+      <AttachmentMenu
+        open={attachMenuOpen}
+        onClose={() => setAttachMenuOpen(false)}
+        onAttachments={(files) =>
+          setAttachments((prev) => [...prev, ...files].slice(0, 4))
+        }
+        onSelectAgent={(id) => onAgentChange(id)}
+        onSelectCompanion={(url) => window.open(url, "_blank")}
+      />
+
+      <AgentPicker
+        open={agentPickerOpen}
+        onClose={() => setAgentPickerOpen(false)}
+        activeId={activeAgentId}
+        onSelect={onAgentChange}
+      />
+
+      <ActionConfirmModal
+        pending={pendingAction}
+        onConfirm={() => {
+          if (pendingAction) {
+            executeAction(pendingAction.action);
+            logAction(user?.id, pendingAction.summary);
+          }
+          setPendingAction(null);
+        }}
+        onCancel={() => setPendingAction(null)}
+      />
     </div>
   );
 }

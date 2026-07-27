@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ChatThread } from "@/lib/threads/types";
 import type { User } from "@supabase/supabase-js";
+import { COMPANIONS } from "@/lib/companions/registry";
 
 function formatWhen(ts: number) {
   const d = new Date(ts);
@@ -159,28 +160,20 @@ export function Sidebar({
               <p className="text-[10px] uppercase tracking-wider text-muted px-1 mb-1">
                 Companions
               </p>
-              <a
-                href={
-                  process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL ||
-                  "https://kus-sports.vercel.app"
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block px-3 py-2 rounded-lg text-sm text-muted hover:text-gold hover:bg-gold/5"
-              >
-                Sports
-              </a>
-              <a
-                href={
-                  process.env.NEXT_PUBLIC_HUB_URL ||
-                  "https://sport-clan-nexus.vercel.app"
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block px-3 py-2 rounded-lg text-sm text-muted hover:text-gold hover:bg-gold/5"
-              >
-                Hub
-              </a>
+              {COMPANIONS.map((c) => (
+                <a
+                  key={c.id}
+                  href={c.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between px-3 py-2 rounded-lg text-sm text-muted hover:text-gold hover:bg-gold/5"
+                >
+                  <span>{c.shortName}</span>
+                  {c.status === "planned" && (
+                    <span className="text-[9px] uppercase text-muted/70">Soon</span>
+                  )}
+                </a>
+              ))}
               <button
                 onClick={() => {
                   onOpenSettings();

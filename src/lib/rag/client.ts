@@ -20,10 +20,26 @@ export type RagAttachment = {
 
 export type RagRequestOptions = {
   sourceType?: string;
+  agentId?: string;
   userContext?: RagUserContext;
   history?: RagHistoryItem[];
   attachments?: RagAttachment[];
 };
+
+function buildRagBody(query: string, options?: RagRequestOptions, stream?: boolean) {
+  const userContext = { ...(options?.userContext ?? {}) } as Record<string, unknown>;
+  if (options?.agentId && options.agentId !== "auto") {
+    userContext.activeAgent = options.agentId;
+  }
+  return {
+    query,
+    ...(stream ? { stream: true } : {}),
+    sourceType: options?.sourceType,
+    userContext: Object.keys(userContext).length ? userContext : undefined,
+    history: options?.history ?? undefined,
+    attachments: options?.attachments ?? undefined,
+  };
+}
 
 export type RagAction = {
   tab?: string;
@@ -93,13 +109,7 @@ export async function askRag(
     const res = await fetch("/api/ai/rag", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query,
-        sourceType: options?.sourceType,
-        userContext: options?.userContext ?? undefined,
-        history: options?.history ?? undefined,
-        attachments: options?.attachments ?? undefined,
-      }),
+      body: JSON.stringify(buildRagBody(query, options)),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -165,14 +175,7 @@ export async function streamRag(
           "Content-Type": "application/json",
           Accept: "text/event-stream",
         },
-        body: JSON.stringify({
-          query,
-          stream: true,
-          sourceType: options?.sourceType,
-          userContext: options?.userContext ?? undefined,
-          history: options?.history ?? undefined,
-          attachments: options?.attachments ?? undefined,
-        }),
+        body: JSON.stringify(buildRagBody(query, options, true)),
         signal: controller.signal,
       });
     } finally {

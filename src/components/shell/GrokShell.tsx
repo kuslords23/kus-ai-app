@@ -9,6 +9,8 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { useThreads } from "@/lib/hooks/useThreads";
 import { useVoiceInput } from "@/lib/hooks/useVoice";
 import { loadSettings, saveSettings, applyTheme, type AppSettings } from "@/lib/settings";
+import { getAgent } from "@/lib/agents/registry";
+import type { ChatAttachment } from "@/lib/attachments/types";
 
 type View = "home" | "thread";
 
@@ -33,6 +35,7 @@ export function GrokShell() {
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [view, setView] = useState<View>("home");
   const [bootstrapQuery, setBootstrapQuery] = useState<string | null>(null);
+  const [bootstrapAttachments, setBootstrapAttachments] = useState<ChatAttachment[] | null>(null);
 
   const ensureThread = useCallback(() => {
     if (activeThread) return activeThread;
@@ -40,10 +43,11 @@ export function GrokShell() {
   }, [activeThread, newThread]);
 
   const handleSend = useCallback(
-    (text: string) => {
+    (text: string, attachments?: ChatAttachment[]) => {
       const t = ensureThread();
       setActive(t.id);
       setBootstrapQuery(text);
+      setBootstrapAttachments(attachments ?? null);
       setView("thread");
     },
     [ensureThread, setActive]
@@ -79,6 +83,15 @@ export function GrokShell() {
     }
   }, []);
 
+  const handleAgentChange = useCallback(
+    (id: string) => {
+      patchSettings({ activeAgentId: id });
+    },
+    [patchSettings]
+  );
+
+  const activeAgent = getAgent(settings.activeAgentId);
+
   const showHome =
     view === "home" && !bootstrapQuery && !activeThread?.messages.length;
 
@@ -100,7 +113,7 @@ export function GrokShell() {
           <p className="text-[10px] text-muted truncate">
             {activeThread?.title && view === "thread"
               ? activeThread.title
-              : "Royal Assistant"}
+              : `${activeAgent.icon} ${activeAgent.name}`}
           </p>
         </div>
 
@@ -108,6 +121,7 @@ export function GrokShell() {
           onClick={() => {
             newThread();
             setBootstrapQuery(null);
+            setBootstrapAttachments(null);
             setView("home");
           }}
           className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted hover:text-gold"
@@ -127,6 +141,8 @@ export function GrokShell() {
             listening={voice.listening}
             voiceSupported={voice.supported}
             settings={settings}
+            activeAgentId={settings.activeAgentId}
+            onAgentChange={handleAgentChange}
           />
         ) : (
           <ChatThreadView
@@ -136,7 +152,13 @@ export function GrokShell() {
             voiceReplies={settings.voiceReplies}
             showWelcome={!activeThread?.messages.length && !bootstrapQuery}
             bootstrapQuery={bootstrapQuery}
-            onBootstrapConsumed={() => setBootstrapQuery(null)}
+            bootstrapAttachments={bootstrapAttachments}
+            onBootstrapConsumed={() => {
+              setBootstrapQuery(null);
+              setBootstrapAttachments(null);
+            }}
+            activeAgentId={settings.activeAgentId}
+            onAgentChange={handleAgentChange}
           />
         )}
       </main>
@@ -151,11 +173,13 @@ export function GrokShell() {
           setActive(id);
           const t = threads.find((x) => x.id === id);
           setBootstrapQuery(null);
+          setBootstrapAttachments(null);
           setView(t && t.messages.length > 0 ? "thread" : "home");
         }}
         onNew={() => {
           newThread();
           setBootstrapQuery(null);
+          setBootstrapAttachments(null);
           setView("home");
         }}
         onDelete={deleteThread}

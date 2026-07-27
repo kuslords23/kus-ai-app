@@ -5,6 +5,7 @@ export type AppSettings = {
   voiceReplies: boolean;
   mode: "royal" | "fast";
   theme: ThemeMode;
+  activeAgentId: string;
 };
 
 const KEY = "kus_ai_settings";
@@ -14,6 +15,7 @@ const DEFAULTS: AppSettings = {
   voiceReplies: false,
   mode: "royal",
   theme: "dark",
+  activeAgentId: "auto",
 };
 
 export function loadSettings(): AppSettings {
