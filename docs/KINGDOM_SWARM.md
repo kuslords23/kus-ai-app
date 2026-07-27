@@ -59,8 +59,11 @@ KINGDOM_SCOUT_ENABLED=true   # optional — when Hub /api/ai/scout is live
 
 | Path | Schedule | Role |
 |------|----------|------|
-| `/api/cron/training-tick` | every 30m | learning events + ingestion + swarm |
-| `/api/cron/swarm-tick` | every 15m | dispatch + process scrape tasks |
+| `/api/cron/training-tick` | daily 02:00 UTC | learning events + ingestion + swarm |
+| `/api/cron/swarm-tick` | daily 03:00 UTC | dispatch + process scrape tasks |
+
+> Vercel Hobby only allows **once-per-day** crons. More frequent schedules block deploy.
+> You can still open the seed / cron URLs manually anytime from your phone.
 
 ## API
 
