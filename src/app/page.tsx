@@ -1,8 +1,7 @@
 "use client";
 
 import { useAuth } from "@/lib/hooks/useAuth";
-import { Header } from "@/components/layout/Header";
-import { ChatPanel } from "@/components/chat/ChatPanel";
+import { GrokShell } from "@/components/shell/GrokShell";
 import { LoginForm } from "@/components/auth/LoginForm";
 
 export default function Home() {
@@ -24,12 +23,5 @@ export default function Home() {
     );
   }
 
-  return (
-    <div className="flex flex-col h-dvh max-h-dvh overflow-hidden bg-background">
-      <Header />
-      <main className="flex-1 min-h-0 overflow-hidden">
-        <ChatPanel />
-      </main>
-    </div>
-  );
+  return <GrokShell />;
 }

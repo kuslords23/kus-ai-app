@@ -31,6 +31,7 @@ interface ChatMessageProps {
     action?: string;
     prompt?: string;
   }) => void;
+  onSpeak?: (text: string) => void;
 }
 
 /** Lightweight **bold** rendering for hub-style answers. */
@@ -48,7 +49,7 @@ function renderContent(text: string) {
   });
 }
 
-export function ChatMessage({ message, isStreaming, onChipClick }: ChatMessageProps) {
+export function ChatMessage({ message, isStreaming, onChipClick, onSpeak }: ChatMessageProps) {
   const isUser = message.role === "user";
 
   return (
@@ -97,6 +98,15 @@ export function ChatMessage({ message, isStreaming, onChipClick }: ChatMessagePr
               </button>
             ))}
           </div>
+        )}
+
+        {!isUser && !isStreaming && message.content && onSpeak && (
+          <button
+            onClick={() => onSpeak(message.content)}
+            className="mt-2 text-[10px] text-muted hover:text-gold transition-colors"
+          >
+            ▶ Listen
+          </button>
         )}
       </div>
     </motion.div>

@@ -1,17 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0c0a14;
-  --foreground: #e8e4ef;
+  --background: #0b0814;
+  --foreground: #efeaf8;
   --gold: #d4a843;
   --gold-light: #f0d078;
   --gold-dim: #9a7a2e;
-  --surface: #16131f;
-  --surface-hover: #1e1a2a;
-  --border: #2a2538;
-  --muted: #8b8598;
+  --purple: #8b6fc0;
+  --purple-soft: #c4b0e8;
+  --surface: #161025;
+  --surface-hover: #221833;
+  --border: #2e2542;
+  --muted: #9a91ad;
   --danger: #e85454;
   --success: #4ade80;
+  --glass: rgba(18, 12, 32, 0.72);
 }
 
 @theme inline {
@@ -20,6 +23,8 @@
   --color-gold: var(--gold);
   --color-gold-light: var(--gold-light);
   --color-gold-dim: var(--gold-dim);
+  --color-purple: var(--purple);
+  --color-purple-soft: var(--purple-soft);
   --color-surface: var(--surface);
   --color-surface-hover: var(--surface-hover);
   --color-border: var(--border);
@@ -37,39 +42,32 @@ body {
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(139, 111, 192, 0.22), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 100% 100%, rgba(212, 168, 67, 0.08), transparent 45%),
+    var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   overscroll-behavior: none;
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 4px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
+  width: 3px;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--gold-dim);
   border-radius: 4px;
 }
 
-/* Gold shimmer animation */
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-.gold-shimmer {
-  background: linear-gradient(90deg, var(--gold-dim), var(--gold-light), var(--gold-dim));
-  background-size: 200% 100%;
-  animation: shimmer 2s infinite;
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 @keyframes pulse-gold {
-  0%, 100% { box-shadow: 0 0 8px rgba(212, 168, 67, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(212, 168, 67, 0.6); }
+  0%, 100% { box-shadow: 0 0 8px rgba(212, 168, 67, 0.25); }
+  50% { box-shadow: 0 0 18px rgba(212, 168, 67, 0.55); }
 }
 
 .pulse-gold {
