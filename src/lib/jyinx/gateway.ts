@@ -1,9 +1,7 @@
-import { Database } from 'better-sqlite3';
-import path from 'path';
-import { PlatformInfo, HybridStorageContext } from './hybrid-storage';
+import { HybridStorageContext } from './hybrid-storage';
+import { HybridStorageAdapter } from './hybrid-storage-adapter';
 
-// Mock database setup - in production this would connect to the actual SQLite file
-type TokenUsageRecord = {
+export type TokenUsageRecord = {
   modelName: string;
   inputTokens: number;
   outputTokens: number;
@@ -14,7 +12,6 @@ type TokenUsageRecord = {
 };
 
 export class ModelGateway {
-  private db: Database;
   private storageAdapter: HybridStorageContext;
   private readonly MODEL_CONFIGURATIONS: Record<string, any> = {
     'llama3-ddof': {
@@ -95,7 +92,9 @@ export class ModelGateway {
     } catch (error) {
       // Log error but don't fail the request
       console.error(`Gateway error for model ${modelName}:`, error);
-      throw new Error(`Failed to process model request: ${error.message}`);
+      throw new Error(
+        `Failed to process model request: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -194,20 +193,18 @@ export class ModelGateway {
 }
 
 export class TokenUsageResponse {
-  success: boolean;
-  modelName: string;
-  response: any;
-  usage: TokenUsageRecord;
-  timestamp: string;
+  success: boolean = false;
+  modelName: string = '';
+  response: any = null;
+  usage: TokenUsageRecord = {
+    modelName: '',
+    inputTokens: 0,
+    outputTokens: 0,
+    costAmount: 0,
+    timestamp: '',
+    totalTokens: 0,
+    status: '',
+  };
+  timestamp: string = '';
   error?: string;
-}
-
-export interface TokenUsageRecord {
-  modelName: string;
-  inputTokens: number;
-  outputTokens: number;
-  costAmount: number;
-  timestamp: string;
-  totalTokens: number;
-  status: string;
 }

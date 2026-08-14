@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { hybridStorage } from '../lib/jyinx/hybrid-storage-adapter';
+import { hybridStorage } from '@/lib/jyinx/hybrid-storage-adapter';
 import { ViewportToggler } from './ViewportToggler';
 import { TokenMeter } from './TokenMeter';
 import { ModelSelector } from './ModelSelector';
+import { InputWorkspace } from './InputWorkspace';
 
 interface JyinxTabProps {
   onModelSelect: (modelName: string) => void;
@@ -47,8 +48,8 @@ export const JyinxTab: React.FC<JyinxTabProps> = ({
             {models.map(model => (
               <button
                 key={model.id}
-                className={`jyinx-model-button ${selected === model.id ? 'jyinx-active' : ''}`}
-                onClick={() => onChange(model.id)}
+                className={`jyinx-model-button ${selectedModel === model.id ? 'jyinx-active' : ''}`}
+                onClick={() => setSelectedModel(model.id)}
               >
                 {model.icon} {model.name}
               </button>
@@ -78,8 +79,3 @@ export const JyinxTab: React.FC<JyinxTabProps> = ({
     </div>
   );
 };
-
-// Helper to extract onChange from props - this should be properly typed
-function onChange(modelId: string) {
-  // This placeholder should receive the callback from parent component
-}

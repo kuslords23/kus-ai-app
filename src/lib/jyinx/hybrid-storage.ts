@@ -1,6 +1,3 @@
-import { Database } from 'better-sqlite3';
-import { createClient } from '@supabase/supabase-js';
-
 export type PlatformType = 'native' | 'pwa' | 'web';
 
 export interface HybridStorageContext {

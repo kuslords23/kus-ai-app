@@ -1,8 +1,6 @@
-import { OpenRouterClient } from './openrouter';
-
 export class OpenRouterClient {
   private readonly API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-  private readonly MODEL_MAP = {
+  public static readonly MODEL_MAP: Record<string, { name: string; category: string }> = {
     // Free Tier (10 models)
     'gemma-4-31b-it:free': { name: 'Gemma 4B', category: 'free' },
     // Cheap Tier (5 models)
@@ -19,7 +17,7 @@ export class OpenRouterClient {
   };
 
   async generate(prompt: string, modelName: string) {
-    const model = this.MODEL_MAP[modelName];
+    const model = OpenRouterClient.MODEL_MAP[modelName];
     if (!model) {
       throw new Error(`Model "${modelName}" not found in model map`);
     }
@@ -54,7 +52,7 @@ export class OpenRouterClient {
 
 export const openRouter = new OpenRouterClient();
 
-export const modelRegistry = new Map(OpenRouterClient.MODEL_MAP);
+export const modelRegistry = new Map(Object.entries(OpenRouterClient.MODEL_MAP));
 
 export const getModel = (modelId: string) => {
   return modelRegistry.get(modelId);

@@ -65,19 +65,21 @@ export const DualPane: React.FC<DualPaneProps> = ({
         <div className="editor-pane">
           <div className="editor-header">
             <div className="model-selector">
-              <select 
+              <select
                 value={activeModel}
-                onChange={e => setActiveModel(e.target.value)}
+                onChange={(e) => setActiveModel(e.target.value)}
               >
                 {[
-                  {id: 'llama-3-8x', name: 'Llama 3-8x', icon: '🤖'},
-                  {id: 'gemma-4-31b-it', name: 'Gemma 4B', icon: '🤖'},
-                  {id: 'mistral-large', name: 'Mixtral Large', icon: '🤖'},
-                  {id: 'nvidia-nemotron-3-ultra-550b-a55b', name: 'Nemotron Ultra', icon: '🤖'},
-                  {id: 'qwen3-coder', name: 'Qwen 3-Coder', icon: '🤖'}
-                ].map(model => (
-                  <option key={model.id} value={model.id}>{model.name}</option>
-                )))}
+                  { id: 'llama-3-8x', name: 'Llama 3-8x', icon: '🤖' },
+                  { id: 'gemma-4-31b-it', name: 'Gemma 4B', icon: '🤖' },
+                  { id: 'mistral-large', name: 'Mixtral Large', icon: '🤖' },
+                  { id: 'nvidia-nemotron-3-ultra-550b-a55b', name: 'Nemotron Ultra', icon: '🤖' },
+                  { id: 'qwen3-coder', name: 'Qwen 3-Coder', icon: '🤖' },
+                ].map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="status-bar">

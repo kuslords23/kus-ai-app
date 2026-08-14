@@ -1,5 +1,3 @@
-import { PlatformInfo } from './hybrid-storage';
-
 export type NetworkStatus = 'online' | 'offline' | 'connecting';
 
 export interface NetworkMonitorEvent {
@@ -23,13 +21,17 @@ export class NetworkMonitor {
   }
 
   private initialize(): void {
-    // Listen for browser online/offline events
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', this.handleOnline);
-      window.addEventListener('offline', this.handleOffline);
+    // Only monitor DOM/navigator in the browser.
+    // On serverless (Vercel) runtime there is no window; status stays 'online'.
+    if (typeof window === 'undefined') {
+      this.isMonitoring = false;
+      return;
     }
+
+    window.addEventListener('online', this.handleOnline);
+    window.addEventListener('offline', this.handleOffline);
+
     this.isMonitoring = true;
-    // Fallback polling for navigator.onLine reliability
     this.startPolling();
   }
 
@@ -55,13 +57,12 @@ export class NetworkMonitor {
 
   private startPolling(): void {
     this.pollTimer = setInterval(() => {
-      if (typeof navigator !== 'undefined') {
-        const isCurrentlyOnline = navigator.onLine;
-        if (isCurrentlyOnline && this.status !== 'online') {
-          this.handleOnline();
-        } else if (!isCurrentlyOnline && this.status === 'online') {
-          this.handleOffline();
-        }
+      if (typeof navigator === 'undefined') return;
+      const isCurrentlyOnline = navigator.onLine;
+      if (isCurrentlyOnline && this.status !== 'online') {
+        this.handleOnline();
+      } else if (!isCurrentlyOnline && this.status === 'online') {
+        this.handleOffline();
       }
     }, this.pollInterval);
   }
