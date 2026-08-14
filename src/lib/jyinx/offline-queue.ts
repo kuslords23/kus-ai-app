@@ -1,6 +1,3 @@
-import { Database } from 'better-sqlite3';
-import path from 'path';
-
 export type NetworkStatus = 'online' | 'offline' | 'connecting';
 
 export interface QueueItem {
@@ -18,47 +15,74 @@ export interface QueueItem {
 }
 
 export class OfflineQueue {
-  private db: Database;
-  private queueKey = 'jyinx_offline_queue';
+  private dbName = 'JyinxQueue';
+  private storeName = 'offline_queue';
+  private db: IDBDatabase | null = null;
+  private isInitialized = false;
   public status: NetworkStatus = 'online';
-  public pendingItems: number = 0;
   public lastSync: string | null = null;
-  private total: number = 0;
 
   constructor() {
-    this.db = this.initializeDB();
-    this.initializeSchema();
+    if (typeof window !== 'undefined') {
+      this.initDB();
+    }
   }
 
-  private initializeDB(): Database {
-    const dbPath = path.join(process.cwd(), 'jyinx-store.sqlite');
-    return new Database(dbPath, { readonly: false });
-  }
-
-  private initializeSchema(): void {
-    const stmt = this.db.prepare(`
-      CREATE TABLE IF NOT EXISTS offline_queue (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        status TEXT DEFAULT 'pending',
-        createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
-        retryCount INTEGER DEFAULT 0,
-        maxRetries INTEGER DEFAULT 3,
-        priority TEXT DEFAULT 'normal',
-        networkCondition TEXT DEFAULT 'offline',
-        callbackUrl TEXT,
-        correlationId TEXT
-      )
-    `);
-    stmt.run();
+  private initDB(): void {
+    if (this.isInitialized) return;
+    
+    const request = indexedDB.open(this.dbName, 1);
+    
+    request.onerror = () => {
+      console.error('Failed to open IndexedDB:', request.error);
+    };
+    
+    request.onsuccess = () => {
+      this.db = request.result;
+      this.isInitialized = true;
+    };
+    
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(this.storeName)) {
+        const store = db.createObjectStore(this.storeName, { keyPath: 'id' });
+        store.createIndex('status', 'status', { unique: false });
+        store.createIndex('createdAt', 'createdAt', { unique: false });
+        store.createIndex('priority', 'priority', { unique: false });
+      }
+    };
   }
 
   setNetworkStatus(status: NetworkStatus): void {
     this.status = status;
   }
 
+  private async waitForDB(): Promise<IDBDatabase> {
+    if (this.db) return this.db;
+    
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, 1);
+      request.onsuccess = () => {
+        this.db = request.result;
+        this.isInitialized = true;
+        resolve(this.db);
+      };
+      request.onerror = () => reject(request.error);
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        if (!db.objectStoreNames.contains(this.storeName)) {
+          const store = db.createObjectStore(this.storeName, { keyPath: 'id' });
+          store.createIndex('status', 'status', { unique: false });
+          store.createIndex('createdAt', 'createdAt', { unique: false });
+          store.createIndex('priority', 'priority', { unique: false });
+        }
+      };
+    });
+  }
+
   async enqueue(item: Omit<QueueItem, 'id' | 'createdAt' | 'retryCount' | 'maxRetries' | 'networkCondition' | 'status'>): Promise<string> {
+    const db = await this.waitForDB();
+    
     const queueItem: QueueItem = {
       id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       createdAt: new Date().toISOString(),
@@ -69,73 +93,85 @@ export class OfflineQueue {
       ...item
     };
 
-    const stmt = this.db.prepare(`
-      INSERT INTO offline_queue (id, type, payload, status, createdAt, retryCount, maxRetries, priority, networkCondition, callbackUrl, correlationId)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    stmt.run(
-      queueItem.id,
-      queueItem.type,
-      JSON.stringify(queueItem.payload),
-      queueItem.status,
-      queueItem.createdAt,
-      queueItem.retryCount,
-      queueItem.maxRetries,
-      queueItem.priority,
-      queueItem.networkCondition,
-      queueItem.callbackUrl,
-      queueItem.correlationId
-    );
-
-    this.total = this.db.prepare('SELECT COUNT(*) as count FROM offline_queue').get().count as number;
-    
-    return queueItem.id;
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([this.storeName], 'readwrite');
+      const store = transaction.objectStore(this.storeName);
+      const request = store.add(queueItem);
+      
+      request.onsuccess = () => resolve(queueItem.id);
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async retry(itemId: string): Promise<void> {
-    const stmt = this.db.prepare(`
-      UPDATE offline_queue 
-      SET status = 'processing', retryCount = retryCount + 1
-      WHERE id = ?
-    `);
-    stmt.run(itemId);
+    const db = await this.waitForDB();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([this.storeName], 'readwrite');
+      const store = transaction.objectStore(this.storeName);
+      const getRequest = store.get(itemId);
+      
+      getRequest.onsuccess = () => {
+        const item = getRequest.result;
+        if (!item) {
+          reject(new Error(`Item not found: ${itemId}`));
+          return;
+        }
+        
+        item.status = 'processing';
+        item.retryCount = (item.retryCount || 0) + 1;
+        
+        const putRequest = store.put(item);
+        putRequest.onsuccess = () => resolve();
+        putRequest.onerror = () => reject(putRequest.error);
+      };
+      getRequest.onerror = () => reject(getRequest.error);
+    });
   }
 
   async remove(itemId: string): Promise<void> {
-    const stmt = this.db.prepare('DELETE FROM offline_queue WHERE id = ?');
-    stmt.run(itemId);
-    this.total = this.db.prepare('SELECT COUNT(*) as count FROM offline_queue').get().count as number;
+    const db = await this.waitForDB();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([this.storeName], 'readwrite');
+      const store = transaction.objectStore(this.storeName);
+      const request = store.delete(itemId);
+      
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async getById(itemId: string): Promise<QueueItem | null> {
-    const stmt = this.db.prepare('SELECT * FROM offline_queue WHERE id = ?');
-    const result = stmt.get(itemId);
+    const db = await this.waitForDB();
     
-    if (!result) return null;
-    
-    return {
-      id: result.id,
-      type: result.type,
-      payload: JSON.parse(result.payload),
-      status: result.status,
-      createdAt: result.createdAt,
-      retryCount: result.retryCount,
-      maxRetries: result.maxRetries,
-      priority: result.priority,
-      networkCondition: result.networkCondition,
-      callbackUrl: result.callbackUrl,
-      correlationId: result.correlationId
-    };
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([this.storeName], 'readonly');
+      const store = transaction.objectStore(this.storeName);
+      const request = store.get(itemId);
+      
+      request.onsuccess = () => {
+        if (request.result) {
+          resolve(request.result as QueueItem);
+        } else {
+          resolve(null);
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
   }
 
   markProcessing(itemId: string): void {
-    const stmt = this.db.prepare(`
-      UPDATE offline_queue 
-      SET status = 'processing'
-      WHERE id = ?
-    `);
-    stmt.run(itemId);
+    this.getById(itemId).then(item => {
+      if (item) {
+        item.status = 'processing';
+        this.waitForDB().then(db => {
+          const transaction = db.transaction([this.storeName], 'readwrite');
+          const store = transaction.objectStore(this.storeName);
+          store.put(item);
+        });
+      }
+    });
   }
 
   async getQueueStats(): Promise<{
@@ -147,31 +183,48 @@ export class OfflineQueue {
     highPriorityPending: number;
     lastSync: string | null;
   }> {
-    const total = this.db.prepare('SELECT COUNT(*) as count FROM offline_queue').get().count as number;
-    const pending = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'pending'").get().count as number;
-    const processing = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'processing'").get().count as number;
-    const completed = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'completed'").get().count as number;
-    const failed = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'failed'").get().count as number;
-    const highPriorityPending = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE priority = 'high' AND status = 'pending'").get().count as number;
-
-    return {
-      total,
-      pending,
-      processing,
-      completed,
-      failed,
-      highPriorityPending,
-      lastSync: this.lastSync
-    };
+    const db = await this.waitForDB();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([this.storeName], 'readonly');
+      const store = transaction.objectStore(this.storeName);
+      const request = store.getAll();
+      
+      request.onsuccess = () => {
+        const items = request.result as QueueItem[];
+        const stats = {
+          total: items.length,
+          pending: items.filter(i => i.status === 'pending').length,
+          processing: items.filter(i => i.status === 'processing').length,
+          completed: items.filter(i => i.status === 'completed').length,
+          failed: items.filter(i => i.status === 'failed').length,
+          highPriorityPending: items.filter(i => i.priority === 'high' && i.status === 'pending').length,
+          lastSync: this.lastSync
+        };
+        resolve(stats);
+      };
+      request.onerror = () => reject(request.error);
+    });
   }
 
   async flush(): Promise<void> {
-    const stmt = this.db.prepare('DELETE FROM offline_queue');
-    stmt.run();
-    this.total = 0;
+    const db = await this.waitForDB();
+    
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction([this.storeName], 'readwrite');
+      const store = transaction.objectStore(this.storeName);
+      const request = store.clear();
+      
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
   }
 
   cleanup(): void {
-    this.db.close();
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+      this.isInitialized = false;
+    }
   }
 }
