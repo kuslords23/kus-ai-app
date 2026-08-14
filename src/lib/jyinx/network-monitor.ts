@@ -15,8 +15,10 @@ export class NetworkMonitor {
   private readonly pollInterval: number = 5000; // 5 seconds
   private pollTimer: NodeJS.Timeout | null = null;
   private isMonitoring: boolean = false;
+  private offlineQueue: any = null;
 
-  constructor() {
+  constructor(offlineQueue?: any) {
+    this.offlineQueue = offlineQueue;
     this.initialize();
   }
 
@@ -38,7 +40,7 @@ export class NetworkMonitor {
 
     // Verify connection with quick check
     setTimeout(() => {
-      if (navigator.onLine) {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
         this.status = 'online';
         this.notifyListeners();
       }
@@ -109,7 +111,7 @@ export class NetworkMonitor {
       type: 'sync_status_change',
       status: this.status,
       timestamp: new Date().toISOString(),
-      pendingItems: 0 // Will be updated by sync manager
+      pendingItems: this.offlineQueue?.getQueueStats?.().pending ?? 0
     };
     this.listeners.forEach(listener => listener(event));
   }
@@ -134,5 +136,7 @@ export class NetworkMonitor {
   }
 }
 
-// Singleton instance
-export const networkMonitor = new NetworkMonitor();
+// Factory function to create monitor with queue reference
+export function createNetworkMonitor(offlineQueue: any): NetworkMonitor {
+  return new NetworkMonitor(offlineQueue);
+}

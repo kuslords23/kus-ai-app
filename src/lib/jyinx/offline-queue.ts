@@ -1,7 +1,7 @@
 import { Database } from 'better-sqlite3';
 import path from 'path';
-import { HybridStorageContext } from './hybrid-storage';
-import { NetworkStatus, NetworkMonitorEvent } from './network-monitor';
+
+export type NetworkStatus = 'online' | 'offline' | 'connecting';
 
 export interface QueueItem {
   id: string;
@@ -20,25 +20,18 @@ export interface QueueItem {
 export class OfflineQueue {
   private db: Database;
   private queueKey = 'jyinx_offline_queue';
-  private isNative: boolean;
-  
+  public status: NetworkStatus = 'online';
+  public pendingItems: number = 0;
+  public lastSync: string | null = null;
+  private total: number = 0;
+
   constructor() {
-    this.isNative = typeof process !== 'undefined' && process.platform;
     this.db = this.initializeDB();
     this.initializeSchema();
   }
 
   private initializeDB(): Database {
-    let dbPath: string;
-    
-    if (this.isNative) {
-      // Native platform - use SQLite
-      dbPath = path.join(process.cwd(), 'jyinx-native.db');
-    } else {
-      // Web/PWA - use IndexedDB with SQLite fallback option
-      dbPath = path.join(process.cwd(), 'jyinx-web.db');
-    }
-    
+    const dbPath = path.join(process.cwd(), 'jyinx-store.sqlite');
     return new Database(dbPath, { readonly: false });
   }
 
@@ -61,13 +54,18 @@ export class OfflineQueue {
     stmt.run();
   }
 
-  async enqueue(item: Omit<QueueItem, 'id' | 'createdAt' | 'retryCount' | 'maxRetries' | 'networkCondition'>): Promise<string> {
+  setNetworkStatus(status: NetworkStatus): void {
+    this.status = status;
+  }
+
+  async enqueue(item: Omit<QueueItem, 'id' | 'createdAt' | 'retryCount' | 'maxRetries' | 'networkCondition' | 'status'>): Promise<string> {
     const queueItem: QueueItem = {
       id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       createdAt: new Date().toISOString(),
       retryCount: 0,
       maxRetries: 3,
-      networkCondition: networkMonitor.getStatus() === 'offline' ? 'offline' : 'online',
+      status: 'pending',
+      networkCondition: this.status === 'offline' ? 'offline' : 'online',
       ...item
     };
 
@@ -90,62 +88,54 @@ export class OfflineQueue {
       queueItem.correlationId
     );
 
+    this.total = this.db.prepare('SELECT COUNT(*) as count FROM offline_queue').get().count as number;
+    
     return queueItem.id;
   }
 
-  async dequeue(itemId: string): Promise<QueueItem | null> {
-    const stmt = this.db.prepare('SELECT * FROM offline_queue WHERE id = ?');
-    const result = stmt.get(itemId) as QueueItem | null;
-
-    if (result) {
-      const updateStmt = this.db.prepare(`
-        UPDATE offline_queue 
-        SET status = 'processing', retryCount = retryCount + 1
-        WHERE id = ?
-      `);
-      updateStmt.run(itemId);
-    }
-
-    return result;
-  }
-
-  async markCompleted(itemId: string): Promise<void> {
+  async retry(itemId: string): Promise<void> {
     const stmt = this.db.prepare(`
       UPDATE offline_queue 
-      SET status = 'completed', retryCount = 0
+      SET status = 'processing', retryCount = retryCount + 1
       WHERE id = ?
     `);
     stmt.run(itemId);
   }
 
-  async markFailed(itemId: string, error?: Error): Promise<void> {
-    const retryCount = (this.db.prepare('SELECT retryCount FROM offline_queue WHERE id = ?').get(itemId) as any).retryCount + 1;
+  async remove(itemId: string): Promise<void> {
+    const stmt = this.db.prepare('DELETE FROM offline_queue WHERE id = ?');
+    stmt.run(itemId);
+    this.total = this.db.prepare('SELECT COUNT(*) as count FROM offline_queue').get().count as number;
+  }
+
+  async getById(itemId: string): Promise<QueueItem | null> {
+    const stmt = this.db.prepare('SELECT * FROM offline_queue WHERE id = ?');
+    const result = stmt.get(itemId);
     
+    if (!result) return null;
+    
+    return {
+      id: result.id,
+      type: result.type,
+      payload: JSON.parse(result.payload),
+      status: result.status,
+      createdAt: result.createdAt,
+      retryCount: result.retryCount,
+      maxRetries: result.maxRetries,
+      priority: result.priority,
+      networkCondition: result.networkCondition,
+      callbackUrl: result.callbackUrl,
+      correlationId: result.correlationId
+    };
+  }
+
+  markProcessing(itemId: string): void {
     const stmt = this.db.prepare(`
       UPDATE offline_queue 
-      SET status = 'failed', retryCount = ?
+      SET status = 'processing'
       WHERE id = ?
     `);
-    stmt.run(retryCount, itemId);
-  }
-
-  async getPendingItems(): Promise<QueueItem[]> {
-    const stmt = this.db.prepare('SELECT * FROM offline_queue WHERE status = ?');
-    const results = stmt.all('pending') as QueueItem[];
-    return results;
-  }
-
-  async getHighPriorityItems(): Promise<QueueItem[]> {
-    const stmt = this.db.prepare('SELECT * FROM offline_queue WHERE priority = ? AND status = ?');
-    const results = stmt.all('high', 'pending') as QueueItem[];
-    return results;
-  }
-
-  async cleanupExpiredItems(maxAgeMs: number = 24 * 60 * 60 * 1000): Promise<number> {
-    const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
-    const stmt = this.db.prepare('DELETE FROM offline_queue WHERE createdAt < ?');
-    const result = stmt.run(cutoff);
-    return result.changes;
+    stmt.run(itemId);
   }
 
   async getQueueStats(): Promise<{
@@ -155,13 +145,14 @@ export class OfflineQueue {
     completed: number;
     failed: number;
     highPriorityPending: number;
+    lastSync: string | null;
   }> {
-    const total = this.db.prepare('SELECT COUNT(*) as count FROM offline_queue').get().count;
-    const pending = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'pending'").get().count;
-    const processing = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'processing'").get().count;
-    const completed = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'completed'").get().count;
-    const failed = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'failed'").get().count;
-    const highPriorityPending = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE priority = 'high' AND status = 'pending'").get().count;
+    const total = this.db.prepare('SELECT COUNT(*) as count FROM offline_queue').get().count as number;
+    const pending = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'pending'").get().count as number;
+    const processing = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'processing'").get().count as number;
+    const completed = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'completed'").get().count as number;
+    const failed = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE status = 'failed'").get().count as number;
+    const highPriorityPending = this.db.prepare("SELECT COUNT(*) as count FROM offline_queue WHERE priority = 'high' AND status = 'pending'").get().count as number;
 
     return {
       total,
@@ -169,14 +160,18 @@ export class OfflineQueue {
       processing,
       completed,
       failed,
-      highPriorityPending
+      highPriorityPending,
+      lastSync: this.lastSync
     };
   }
 
-  destroy(): void {
+  async flush(): Promise<void> {
+    const stmt = this.db.prepare('DELETE FROM offline_queue');
+    stmt.run();
+    this.total = 0;
+  }
+
+  cleanup(): void {
     this.db.close();
   }
 }
-
-// Singleton instance
-export const offlineQueue = new OfflineQueue();
