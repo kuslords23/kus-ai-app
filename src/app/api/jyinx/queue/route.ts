@@ -1,14 +1,25 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-
 import { OfflineQueue } from '../../lib/jyinx/offline-queue';
 import { networkMonitor } from '../../lib/jyinx/network-monitor';
 
-// Instance for API access
-const offlineQueue = new OfflineQueue();
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Initialize offlineQueue instance
+  const offlineQueue = new OfflineQueue();
 
-// API Route Handlers
+  // Middleware to read body for POST requests
+  if (req.method === 'POST') {
+    const buffer = [];
+    req.on('data', (chunk) => {
+      buffer.push(chunk);
+    });
+    req.on('end', () => {
+      if (buffer.length > 0) {
+        const body = JSON.parse(Buffer.concat(buffer).toString());
+        req.body = body;
+      }
+    });
+  }
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const { method } = req;
 
   switch (method) {
@@ -50,7 +61,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       res.status(405).end('Method Not Allowed');
       break;
   }
-};
+}
 
 // Utility Handlers
 
