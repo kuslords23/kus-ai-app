@@ -6,44 +6,103 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Initialize services
+  const offlineQueue = new OfflineQueue();
+  const networkMonitor = new NetworkMonitor();
+
+  // Middleware to parse JSON body for POST requests
+  if (req.method === 'POST') {
+    const buffer: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => {
+      buffer.push(chunk);
+    });
+    req.on('end', () => {
+      if (buffer.length > 0) {
+        try {
+          req.body = JSON.parse(Buffer.concat(buffer).toString());
+        } catch (e) {
+          console.error('Failed to parse request body:', e);
+        }
+      }
+    });
+  }
+
   const { method } = req;
 
   switch (method) {
-    case 'GET':
-      // Return queue status
+    case 'GET': {
       const status = networkMonitor.getStatus();
+      const stats = offlineQueue.getQueueStats();
+      
       res.status(200).json({
         status: status.toUpperCase(),
-        pendingItems: offlineQueue.getQueueStats().pending,
-        lastSync: offlineQueue.getQueueStats().lastSync
+        pendingItems: stats.pending,
+        lastSync: stats.lastSync,
+        total: stats.total
       });
       break;
+    }
 
-    case 'POST':
-      // Handle queue operations
-      if (req.body?.action === 'retry') {
-        const item = offlineQueue.getById(req.body.id);
-        if (item) {
-          // Simple retry logic
-          offlineQueue.markProcessing(item.id);
-          res.status(200).json({ success: true, id: item.id });
-        } else {
-          res.status(400).json({ error: 'Invalid action' });
+    case 'POST': {
+      if (!req.body?.action) {
+        res.status(400).json({ error: 'Action parameter required' });
+        return;
+      }
+
+      switch (req.body.action) {
+        case 'retry': {
+          if (!req.body.id) {
+            res.status(400).json({ error: 'Item ID required' });
+            return;
+          }
+          try {
+            await offlineQueue.retry(req.body.id);
+            res.status(200).json({ success: true });
+          } catch (error) {
+            res.status(500).json({ error: 'Retry failed' });
+          }
+          break;
         }
-      } else {
-        res.status(400).json({ error: 'Action ID required' });
+        case 'delete':
+        case 'remove': {
+          if (!req.body?.id) {
+            res.status(400).json({ error: 'Item ID required' });
+            return;
+          }
+          offlineQueue.remove(req.body.id);
+          res.status(200).json({ success: true });
+          break;
+        }
+        default:
+          res.status(400).json({ error: 'Invalid action' });
       }
       break;
+    }
 
-    case 'DELETE':
-      // Remove item from queue
-      offlineQueue.cleanup();
+    case 'DELETE': {
+      if (!req.body?.id) {
+        res.status(400).json({ error: 'Item ID required' });
+        return;
+      }
+      offlineQueue.remove(req.body.id);
       res.status(200).json({ success: true });
       break;
+    }
 
-    default:
+    default: {
       res.setHeader('Allow', ['GET', 'POST', 'DELETE']);
-      res.status(405).end('Method Not Allowed');
-      break;
+      res.status(405).json({ error: 'Method Not Allowed' });
+    }
   }
+}
+
+// Utility handlers
+export async function getQueueStats() {
+  const offlineQueue = new OfflineQueue();
+  return offlineQueue.getQueueStats();
+}
+
+export async function flushQueue() {
+  const offlineQueue = new OfflineQueue();
+  await offlineQueue.flush();
 }
