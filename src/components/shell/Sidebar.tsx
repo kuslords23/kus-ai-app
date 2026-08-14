@@ -6,6 +6,7 @@ import type { ChatThread } from "@/lib/threads/types";
 import type { User } from "@supabase/supabase-js";
 import { COMPANIONS } from "@/lib/companions/registry";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import Link from "next/link";
 
 function lastMessagePreview(thread: ChatThread) {
   const last = [...thread.messages].reverse().find((m) => m.content.trim());
@@ -178,6 +179,14 @@ export function Sidebar({
               <p className="text-[10px] uppercase tracking-wider text-muted px-1 mb-1">
                 Companions
               </p>
+              <Link
+                href="/jyinx"
+                onClick={onClose}
+                className="flex items-center justify-between rounded-lg border border-gold/25 bg-gold/10 px-3 py-2 text-sm text-gold hover:bg-gold/15"
+              >
+                <span>Jyinx Studio</span>
+                <span className="text-xs">↗</span>
+              </Link>
               {COMPANIONS.map((c) => (
                 <a
                   key={c.id}
