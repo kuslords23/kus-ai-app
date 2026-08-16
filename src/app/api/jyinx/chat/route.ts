@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getJyinxModel } from "@/lib/jyinx/model-registry";
+import { lookup as semanticLookup, store as semanticStore } from "@/services/semanticCache";
 
 export const runtime = "nodejs";
 
@@ -50,6 +51,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
+    // Semantic cache: serve matching queries instantly at $0 cost.
+    try {
+      const cached = await semanticLookup(prompt);
+      if (cached.hit && cached.value?.response?.length >= 4) {
+        return NextResponse.json({ content: cached.value.response, cache: true, cachedModel: cached.value.model, usage: null });
+      }
+    } catch {
+      // cache is best-effort
+    }
+
     const response = await fetch(agentEndpoint, {
       method: "POST",
       headers: {
@@ -93,6 +104,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!content) {
       return NextResponse.json({ error: "The selected model returned no response." }, { status: 502 });
     }
+
+    // Store the successful pair into the semantic cache + distillation log.
+    void semanticStore({ query: prompt, system: agentSystemPrompt, response: content, model: agentModelId });
 
     return NextResponse.json({ content, usage: data?.usage ?? null });
   } catch (error) {

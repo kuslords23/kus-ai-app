@@ -52,7 +52,13 @@ function deobfuscate(value: string): string {
 }
 
 export class UserKeyManager {
-  private keys: Record<BYOKProvider, BYOKKeyEntry | undefined> = {};
+  private keys: Record<BYOKProvider, BYOKKeyEntry | undefined> = {
+    openai: undefined,
+    anthropic: undefined,
+    deepseek: undefined,
+    openrouter: undefined,
+    gemini: undefined,
+  };
   private listeners = new Set<() => void>();
 
   constructor() {
@@ -71,8 +77,9 @@ export class UserKeyManager {
           this.keys[provider] = {
             provider,
             key: deobfuscate(entry.key),
+            label: (entry as { label?: string }).label || provider,
             addedAt: entry.addedAt ?? new Date().toISOString(),
-          } as BYOKKeyEntry;
+          };
         }
       }
     } catch {
@@ -104,10 +111,15 @@ export class UserKeyManager {
   }
 
   /** Store a provider key. Returns the stored entry. */
-  saveKey(provider: BYOKProvider, key: string): BYOKKeyEntry | null {
+  saveKey(provider: BYOKProvider, key: string, label?: string): BYOKKeyEntry | null {
     const trimmed = key.trim();
     if (!trimmed) return null;
-    this.keys[provider] = { provider, key: trimmed, addedAt: new Date().toISOString() };
+    this.keys[provider] = {
+      provider,
+      key: trimmed,
+      label: label?.trim() || provider,
+      addedAt: new Date().toISOString(),
+    };
     this.persist();
     this.notify();
     return this.keys[provider]!;

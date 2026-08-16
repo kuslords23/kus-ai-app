@@ -1,4 +1,4 @@
-import { generate, type GatewayRequest, type GatewayResponse, DEFAULT_FREE_MODEL } from "@/services/modelGateway";
+import { generate } from "@/services/modelGateway";
 import type { BYOKProvider } from "@/services/userKeyManager";
 
 /**
@@ -24,15 +24,14 @@ export type CostRouterRequest = {
 export type CostRoutingResult = {
   content: string;
   model: string;
-  source: "byok" | "openrouter" | "error";
+  provider: BYOKProvider | "openrouter";
   cost: number; // exact USD estimate when usage known
-  usage?: { inputTokens?: number; completionTokens?: number; totalTokens?: number };
+  usage?: { inputTokens: number; completionTokens: number; totalTokens: number };
   error?: string;
 };
 
-// Pricing manifest (USD per 1M tokens) used for the itemized cost estimate.
-// Values are ballpark list prices; BYOK passes through exactly what the
-// provider charges (uncertainty noted in UI).
+// Pricing manifest (USD per 1M tokens) for the itemized cost estimate.
+// Ballpark list prices; BYOK passes through exactly what the provider charges.
 const PRICING_PER_MILLION: Record<string, { input: number; output: number }> = {
   openrouter: { input: 0, output: 0 }, // free routing
   openai: { input: 2.5, output: 10 },
@@ -50,12 +49,8 @@ function estimateCost(provider: BYOKProvider | "openrouter", inputTokens: number
  * Executes a request through the cheapest available route:
  * 1. User BYOK key (if present) → provider at raw cost
  * 2. Platform OpenRouter free tier (zero cost)
- * 3. Fallback model (still zero-margin, platform-keyed)
  */
-export async function routeRequest(
-  apiKey: string,
-  req: CostRoutingRequest
-): Promise<CostRoutingResult> {
+export async function routeRequest(apiKey: string, req: CostRouterRequest): Promise<CostRoutingResult> {
   const result = await generate(apiKey, {
     prompt: req.prompt,
     system: req.system,
@@ -66,21 +61,23 @@ export async function routeRequest(
   });
 
   if (result.source === "error") {
-    return { content: "", provider: "openrouter", usage: undefined, cost: 0, error: result.error };
+    return {
+      content: "",
+      model: req.model ?? "openrouter/free",
+      provider: req.byok?.provider ?? "openrouter",
+      cost: 0,
+      error: result.error,
+    };
   }
 
   const provider: BYOKProvider | "openrouter" = result.source === "byok" ? (req.byok?.provider ?? "openrouter") : "openrouter";
-  const inputTokens = result.usage?.promptTokens || req.prompt.length >> 2;
-  const outputTokens = result.usage?.completionTokens || (result.content.length >> 2);
+  const inputTokens = result.usage?.promptTokens ?? Math.max(1, req.prompt.length >> 2);
+  const outputTokens = result.usage?.completionTokens ?? Math.max(1, result.content.length >> 2);
   return {
     content: result.content,
+    model: result.model,
     provider,
     usage: { inputTokens, completionTokens: outputTokens, totalTokens: inputTokens + outputTokens },
     cost: estimateCost(provider, inputTokens, outputTokens),
   };
 }
-
-export { DEFAULT_FREE_MODEL };
-
-// Invalid placeholder removed; the actual type is defined in the gateway.
-export type { GatewayTier } from "@/services/modelGateway";

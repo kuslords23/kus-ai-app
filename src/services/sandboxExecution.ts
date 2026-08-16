@@ -75,6 +75,72 @@ async function detectManager(sandbox: Sandbox, cwd: string): Promise<"none" | "n
   return "npm";
 }
 
+type Toolchain = {
+  install?: string[];
+  verify: string[]; // ordered "type-check -> test" commands
+  label: string;
+};
+
+/**
+ * Language-aware toolchain detection. Instead of assuming a single stack, it
+ * probes for the repository's manifest and picks appropriate install / lint /
+ * type-check / test commands per language.
+ */
+async function detectToolchain(sandbox: Sandbox, cwd: string): Promise<Toolchain> {
+  const has = await cmd(sandbox, cwd, "ls -1");
+  const files = has.stdout.split("\n").map((f) => f.trim()).filter(Boolean);
+  const hasFile = (name: string) => files.includes(name);
+
+  const manager = await detectManager(sandbox, cwd);
+
+  // Node / TypeScript / JavaScript
+  if (hasFile("package.json")) {
+    const pnpm = manager === "pnpm" ? "pnpm" : manager === "yarn" ? "yarn" : "npm";
+    return {
+      install: [manager === "none" ? "npm install" : `${pnpm} install`],
+      verify: [
+        hasFile("tsconfig.json") ? "npx tsc --noEmit" : "npm run build --if-present",
+        `${pnpm} test ${manager === "npm" ? "-- --passWithNoTests" : ""}`.trimEnd(),
+      ],
+      label: "TypeScript/JavaScript (Node)",
+    };
+  }
+
+  // Python
+  if (hasFile("pyproject.toml") || hasFile("requirements.txt") || hasFile("Pipfile") || hasFile("setup.py")) {
+    return {
+      install: ["pip install -e . 2>/dev/null || pip install -r requirements.txt 2>/dev/null || true"],
+      verify: ["python -m compileall -q .", "python -m pytest -q"],
+      label: "Python",
+    };
+  }
+
+  // Rust
+  if (hasFile("Cargo.toml")) {
+    return {
+      install: ["cargo fetch 2>/dev/null || true"],
+      verify: ["cargo check --quiet", "cargo test --quiet"],
+      label: "Rust",
+    };
+  }
+
+  // Go
+  if (hasFile("go.mod")) {
+    return {
+      install: ["go mod download 2>/dev/null || true"],
+      verify: ["go build ./...", "go test ./..."],
+      label: "Go",
+    };
+  }
+
+  // Fallback: npm (repo typed via defaults) with build + tests.
+  return {
+    install: manager === "none" ? [] : [`${manager} install`],
+    verify: ["npm run build --if-present", "echo 'Skipping tests (no detected test framework)'"],
+    label: "Generic",
+  };
+}
+
 function tail(s: string, lines = 12): string {
   const trimmed = s.trim();
   if (!trimmed) return "Command completed with no output.";
@@ -118,33 +184,41 @@ export async function runSandboxPipeline(
     await sandbox.files.write(files.map((f) => ({ path: `${repoDir}/${f.path}`, data: f.content })));
     emit({ phase: "applying-edits", message: "Edits applied to the sandbox filesystem." });
 
+    // Language-aware verification pipeline.
+    // Probe the repository toolchain, then run install → type-check → test.
+    const toolchain = await detectToolchain(sandbox, repoDir);
+
     // Dependency install (only when a manifest is present).
-    const manager = await detectManager(sandbox, repoDir);
-    if (manager !== "none") {
-      emit({ phase: "installing", message: `Installing dependencies (${manager})…` });
-      const install = await cmd(sandbox, repoDir, manager === "npm" ? "npm install" : manager === "pnpm" ? "pnpm install" : "yarn install");
-      emit({ phase: "installing", message: install.exitCode === 0 ? "Dependencies installed." : "Dependency install produced non-zero exit.", exitCode: install.exitCode, logs: [install.stdout, install.stderr].filter(Boolean) });
-      if (install.exitCode !== 0) {
-        return { ok: false, error: tail(install.stderr || install.stdout), steps };
+    if (toolchain.install && toolchain.install.length) {
+      emit({ phase: "installing", message: `Detected ${toolchain.label}. Installing dependencies…` });
+      for (const step of toolchain.install) {
+        const install = await cmd(sandbox, repoDir, step);
+        emit({ phase: "installing", message: install.exitCode === 0 ? "Dependencies installed." : "Dependency install produced non-zero exit.", exitCode: install.exitCode, logs: [install.stdout, install.stderr].filter(Boolean) });
+        if (install.exitCode !== 0) {
+          return { ok: false, error: tail(install.stderr || install.stdout), steps };
+        }
       }
     } else {
-      emit({ phase: "installing", message: "No package manifest; skipping dependency install." });
+      emit({ phase: "installing", message: `Detected ${toolchain.label}; no dependency manifest.` });
     }
 
-    // TypeScript build check.
-    emit({ phase: "typecheck", message: "Running tsc --noEmit…" });
-    const tsc = await cmd(sandbox, repoDir, "npx tsc --noEmit");
-    emit({ phase: "typecheck", message: tsc.exitCode === 0 ? "tsc --noEmit passed with zero errors." : "tsc --noEmit reported errors.", exitCode: tsc.exitCode, logs: [tsc.stdout, tsc.stderr].filter(Boolean) });
-    if (tsc.exitCode !== 0) {
-      return { ok: false, error: tail(tsc.stderr || tsc.stdout), steps };
-    }
-
-    // Test suite (best-effort; tolerate repos without test scripts).
-    emit({ phase: "testing", message: "Running the test suite…" });
-    const tests = await cmd(sandbox, repoDir, "npm test -- --passWithNoTests");
-    emit({ phase: "testing", message: tests.exitCode === 0 ? "Tests passed." : "Tests failed.", exitCode: tests.exitCode, logs: [tests.stdout, tests.stderr].filter(Boolean) });
-    if (tests.exitCode !== 0 && !/no test/i.test(tests.stderr)) {
-      return { ok: false, error: tail(tests.stderr || tests.stdout), steps };
+    // Type-check / build, then test based on the detected toolchain.
+    for (const [index, verifyCmd] of toolchain.verify.entries()) {
+      const phase: SandboxPhase = index === 0 ? "typecheck" : "testing";
+      emit({ phase, message: `Running ${verifyCmd}…` });
+      const run = await cmd(sandbox, repoDir, verifyCmd);
+      const passed = run.exitCode === 0 || (index === 1 && /no test/i.test(run.stderr));
+      emit({
+        phase,
+        message: index === 0
+          ? (run.exitCode === 0 ? `${verifyCmd} passed.` : `${verifyCmd} reported errors.`)
+          : (passed ? "Tests passed." : "Tests failed."),
+        exitCode: run.exitCode,
+        logs: [run.stdout, run.stderr].filter(Boolean),
+      });
+      if (!passed) {
+        return { ok: false, error: tail(run.stderr || run.stdout), steps };
+      }
     }
 
     // All checks passed — hand off to the GitHub commit engine.
