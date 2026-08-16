@@ -38,11 +38,12 @@ export function JyinxGitHubRepos({
     setError(null);
     try {
       const supabase = createClient();
+      const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL || "https://kus-ai-app.vercel.app";
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: "github",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`,
-          scopes: "read:user repo",
+          redirectTo: `${siteOrigin}/auth/callback?next=${encodeURIComponent(redirectPath)}`,
+          scopes: "repo",
         },
       });
       if (authError) throw authError;
@@ -50,7 +51,7 @@ export function JyinxGitHubRepos({
       setError(cause instanceof Error ? cause.message : "Could not start GitHub connection.");
       setConnecting(false);
     }
-  }, []);
+  }, [redirectPath]);
 
   const loadRepositories = useCallback(async (token: string) => {
     setLoading(true);
@@ -70,11 +71,11 @@ export function JyinxGitHubRepos({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onRepositoriesLoaded]);
 
   useEffect(() => {
     let live = true;
-    const initialize = async () => {
+    const applySession = async () => {
       try {
         const supabase = createClient();
         const { data } = await supabase.auth.getSession();
@@ -90,8 +91,16 @@ export function JyinxGitHubRepos({
         }
       }
     };
-    void initialize();
-    return () => { live = false; };
+    void applySession();
+    const supabase = createClient();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!live) return;
+      const token = session?.provider_token ?? null;
+      setProviderToken(token);
+      if (token) void loadRepositories(token);
+      else setLoading(false);
+    });
+    return () => { live = false; listener.subscription.unsubscribe(); };
   }, [loadRepositories]);
 
   return (

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { PwaUpdater } from "@/components/pwa/PwaUpdater";
+import { JyinxModelProvider } from "@/lib/jyinx/model-store";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -53,7 +54,7 @@ export default function RootLayout({
     >
       <body className="h-full overflow-hidden flex flex-col bg-background text-foreground">
         <PwaUpdater />
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider><JyinxModelProvider>{children}</JyinxModelProvider></ThemeProvider>
         <Toaster
           theme="system"
           toastOptions={{

@@ -11,6 +11,8 @@ type ChatRequest = {
   model?: unknown;
   code?: unknown;
   file?: unknown;
+  repository?: unknown;
+  agent?: { modelId?: unknown; endpoint?: unknown; systemPrompt?: unknown; tag?: unknown } | null;
 };
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -19,6 +21,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const modelId = typeof body?.model === "string" ? body.model : "";
   const code = typeof body?.code === "string" ? body.code : "";
   const file = typeof body?.file === "string" ? body.file : "untitled.ts";
+  const repository = typeof body?.repository === "string" ? body.repository : "local";
+  const agent = body?.agent && typeof body.agent === "object" ? body.agent : null;
+  const agentModelId = typeof agent?.modelId === "string" ? agent.modelId : modelId;
+  const agentEndpoint = typeof agent?.endpoint === "string" && agent.endpoint.startsWith("https://") ? agent.endpoint : OPENROUTER_URL;
+  const agentSystemPrompt = typeof agent?.systemPrompt === "string" && agent.systemPrompt.length <= 4_000 ? agent.systemPrompt : "You are Jyinx, a careful coding assistant. Return a concise implementation response. Do not claim to modify files directly; explain proposed edits and provide code where useful.";
 
   if (!prompt) {
     return NextResponse.json({ error: "A prompt is required." }, { status: 400 });
@@ -26,7 +33,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (prompt.length > MAX_PROMPT_LENGTH || code.length > MAX_PROMPT_LENGTH) {
     return NextResponse.json({ error: "Prompt or workspace context is too large." }, { status: 413 });
   }
-  if (!getJyinxModel(modelId)) {
+  if (!getJyinxModel(modelId) && !agent) {
     return NextResponse.json({ error: "The selected model is not available." }, { status: 400 });
   }
 
@@ -41,7 +48,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const response = await fetch(OPENROUTER_URL, {
+    const response = await fetch(agentEndpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -50,16 +57,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         "X-Title": "Kus AI Jyinx",
       },
       body: JSON.stringify({
-        model: modelId,
+        model: agentModelId,
         messages: [
           {
             role: "system",
             content:
-              "You are Jyinx, a careful coding assistant. Return a concise implementation response. Do not claim to modify files directly; explain proposed edits and provide code where useful.",
+              agentSystemPrompt,
           },
           {
             role: "user",
-            content: `File: ${file}\n\nWorkspace:\n\`\`\`\n${code}\n\`\`\`\n\nRequest: ${prompt}`,
+            content: `Repository: ${repository}\nFile: ${file}\n\nWorkspace:\n\`\`\`\n${code}\n\`\`\`\n\nRequest: ${prompt}`,
           },
         ],
         stream: false,

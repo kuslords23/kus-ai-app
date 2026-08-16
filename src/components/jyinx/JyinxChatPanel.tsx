@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import type { JyinxModel } from "@/lib/jyinx/model-registry";
 
 type Message = { id: string; role: "user" | "assistant"; content: string };
-type Props = { open: boolean; onClose?: () => void; model: JyinxModel; code: string; file: string; workspaceId?: string };
+type ChatAgent = { modelId: string; endpoint: string; systemPrompt: string; tag: string };
+type Props = { open: boolean; onClose?: () => void; model: JyinxModel; code: string; file: string; workspaceId?: string; repository?: string; agent?: ChatAgent | null };
 
-export function JyinxChatPanel({ open, onClose, model, code, file, workspaceId = "local" }: Props) {
+export function JyinxChatPanel({ open, onClose, model, code, file, workspaceId = "local", repository, agent }: Props) {
   const storageKey = `jyinx:chat:${workspaceId}`;
   const [prompt, setPrompt] = useState("");
   const [sending, setSending] = useState(false);
@@ -33,7 +34,7 @@ export function JyinxChatPanel({ open, onClose, model, code, file, workspaceId =
     setMessages((current) => [...current, { id: `user-${Date.now()}`, role: "user", content: text }]);
     setSending(true);
     try {
-      const response = await fetch("/api/jyinx/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: text, model: model.id, code, file }) });
+      const response = await fetch("/api/jyinx/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: text, model: model.id, code, file, repository, agent }) });
       const data = (await response.json().catch(() => ({}))) as { content?: string; error?: string };
       setMessages((current) => [...current, { id: `assistant-${Date.now()}`, role: "assistant", content: data.content || data.error || "Jyinx could not complete that request." }]);
     } catch { setMessages((current) => [...current, { id: `offline-${Date.now()}`, role: "assistant", content: "Network unavailable. Your workspace remains local; try again when you are connected." }]); }
