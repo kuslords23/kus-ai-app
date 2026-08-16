@@ -17,9 +17,16 @@ type Repository = {
 type JyinxGitHubReposProps = {
   onSelectRepository: (repository: Repository) => void;
   selectedRepositoryId?: number;
+  redirectPath?: string;
+  onRepositoriesLoaded?: (repositories: Repository[]) => void;
 };
 
-export function JyinxGitHubRepos({ onSelectRepository, selectedRepositoryId }: JyinxGitHubReposProps) {
+export function JyinxGitHubRepos({
+  onSelectRepository,
+  selectedRepositoryId,
+  redirectPath = "/jyinx",
+  onRepositoriesLoaded,
+}: JyinxGitHubReposProps) {
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +41,7 @@ export function JyinxGitHubRepos({ onSelectRepository, selectedRepositoryId }: J
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: "github",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=/jyinx`,
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`,
           scopes: "read:user repo",
         },
       });
@@ -55,7 +62,9 @@ export function JyinxGitHubRepos({ onSelectRepository, selectedRepositoryId }: J
       });
       const data = (await response.json().catch(() => ({}))) as { repositories?: Repository[]; error?: string };
       if (!response.ok) throw new Error(data.error || "Could not load GitHub repositories.");
-      setRepositories(data.repositories ?? []);
+      const nextRepositories = data.repositories ?? [];
+      setRepositories(nextRepositories);
+      onRepositoriesLoaded?.(nextRepositories);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load GitHub repositories.");
     } finally {

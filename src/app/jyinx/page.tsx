@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JyinxStudio } from "@/components/jyinx/JyinxStudio";
+import { JyinxMobileDashboard } from "@/components/jyinx/mobile/JyinxMobileDashboard";
 
 export const metadata: Metadata = {
   title: "Jyinx IDE | Kus-lords AI",
@@ -7,5 +8,14 @@ export const metadata: Metadata = {
 };
 
 export default function JyinxPage() {
-  return <JyinxStudio />;
+  return (
+    <>
+      <div className="lg:hidden">
+        <JyinxMobileDashboard />
+      </div>
+      <div className="hidden lg:block">
+        <JyinxStudio />
+      </div>
+    </>
+  );
 }
