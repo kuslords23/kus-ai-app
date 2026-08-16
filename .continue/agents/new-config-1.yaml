@@ -1,0 +1,7 @@
+models:
+  - name: OpenRouter Grok
+    provider: openrouter
+    model: x-ai/grok-2-1212
+    apiBase: https://openrouter.ai/api/v1
+    apiKey: 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
+    
