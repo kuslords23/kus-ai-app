@@ -1,4 +1,5 @@
 import { commitFiles } from "@/services/githubCommit";
+import { runSandboxPipeline, isSandboxConfigured } from "@/services/sandboxExecution";
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -248,7 +249,55 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
       return;
     }
 
-    // Commit via the GitHub engine.
+    // Cloud sandbox verification before committing (when E2B is configured).
+    if (isSandboxConfigured(process.env.E2B_API_KEY)) {
+      yield { type: "log", message: "Provisioning cloud sandbox to build, type-check, and test the change…" };
+      const sandboxLogs: Array<AgentExecutionEvent> = [];
+      const sandbox = await runSandboxPipeline(
+        {
+          repository: config.repository,
+          branch: config.branch,
+          providerToken: config.providerToken,
+          files: workingEdits,
+          commitMessage: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
+          apiKey: process.env.E2B_API_KEY,
+        },
+        (step) => {
+          if (step.logs?.length) {
+            sandboxLogs.push({ type: "log", message: `[${step.phase}] ${step.message}` });
+            sandboxLogs.push({ type: "reasoning", message: step.logs.join("\n") });
+          } else {
+            sandboxLogs.push({ type: "log", message: `[${step.phase}] ${step.message}` });
+          }
+        }
+      );
+
+      for (const log of sandboxLogs) yield log;
+
+      if (sandbox.ok) {
+        if (sandbox.commitUrl) {
+          yield { type: "done", summary: `Committed ${workingEdits.length} file(s) → ${sandbox.commitUrl}` };
+          return;
+        }
+        yield { type: "log", message: "Cloud build, type-check, and tests passed. Continuing to commit…" };
+      } else if (!sandbox.unavailable) {
+        lastError = sandbox.error || "Cloud sandbox verification failed.";
+        yield { type: "error", message: `Cloud verification failed: ${lastError}` };
+        yield { type: "log", message: `Sandbox logs:\n${sandbox.steps.map((s) => `- [${s.phase}] ${s.message}`).join("\n")}` };
+        if (attempt < maxRetries) {
+          yield { type: "log", message: "Feeding sandbox error logs back to the coder for self-correction…" };
+          continue;
+        }
+        yield { type: "done", summary: "Cloud verification could not pass after retries. No commit was made." };
+        return;
+      } else {
+        yield { type: "reasoning", message: "E2B sandbox unavailable; falling back to the lightweight reviewer before commit." };
+      }
+    } else {
+      yield { type: "reasoning", message: "Cloud sandbox not configured; skipping cloud verification (lightweight review only)." };
+    }
+
+    // Commit via the GitHub engine (unless the sandbox already committed).
     yield { type: "log", message: "All checks passed. Packaging change(s) into a single atomic commit…" };
     try {
       const commit = await commitFiles({

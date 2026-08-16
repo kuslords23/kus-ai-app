@@ -12,6 +12,11 @@ type Props = {
   model: string;
   /** Files to inject into the coder agent's context. */
   repositoryFiles?: Array<{ path: string; content: string }>;
+  /** When provided, the stream auto-starts with this prompt on mount. */
+  initialPrompt?: string;
+  /** Optional externally-controlled prompt value. */
+  prompt?: string;
+  onPromptChange?: (value: string) => void;
 };
 
 type StreamItem =
@@ -23,21 +28,18 @@ type StreamItem =
   | { kind: "error"; message: string }
   | { kind: "done"; summary: string };
 
-export function AgentExecutionStream({ open, onClose, repository, branch, model, repositoryFiles = [] }: Props) {
+export function AgentExecutionStream({ open, onClose, repository, branch, model, repositoryFiles = [], initialPrompt, onPromptChange }: Props) {
   const [prompt, setPrompt] = useState("");
   const [running, setRunning] = useState(false);
   const [items, setItems] = useState<StreamItem[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const runRef = useRef<(text?: string) => void | Promise<void>>(() => {});
+  const startedRef = useRef(false);
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [items, running]);
-
-  if (!open) return null;
-
-  const run = async () => {
-    const text = prompt.trim();
+  const run = async (override?: string) => {
+    const text = (override ?? prompt).trim();
     if (!text || running) return;
+    onPromptChange?.("");
     setPrompt("");
     setItems([]);
     setRunning(true);
@@ -107,6 +109,21 @@ export function AgentExecutionStream({ open, onClose, repository, branch, model,
       return next;
     });
   };
+
+  // Keep the ref pointing at the latest closure so the effect can call it safely.
+  runRef.current = run;
+
+  useEffect(() => {
+    if (!open || !initialPrompt || startedRef.current) return;
+    startedRef.current = true;
+    void runRef.current(initialPrompt);
+  }, [open, initialPrompt]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [items, running]);
+
+  if (!open) return null;
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-surface">
