@@ -39,7 +39,7 @@ export function JyinxGitHubRepos({
     setError(null);
     try {
       const supabase = createClient();
-      const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL || "https://kus-ai-app.vercel.app";
+      const siteOrigin = "https://kus-ai-app.vercel.app";
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: "github",
         options: {
@@ -75,6 +75,8 @@ export function JyinxGitHubRepos({
   }, [onRepositoriesLoaded]);
 
   useEffect(() => {
+    const githubError = new URLSearchParams(window.location.search).get("github_error");
+    if (githubError) setError(githubError);
     let live = true;
     const applySession = async () => {
       try {
