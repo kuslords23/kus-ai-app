@@ -32,6 +32,7 @@ export function JyinxGitHubRepos({
   const [error, setError] = useState<string | null>(null);
   const [providerToken, setProviderToken] = useState<string | null>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   const connectGitHub = useCallback(async () => {
     setConnecting(true);
@@ -82,6 +83,7 @@ export function JyinxGitHubRepos({
         const token = data.session?.provider_token ?? null;
         if (!live) return;
         setProviderToken(token);
+        setSessionChecked(true);
         if (token) await loadRepositories(token);
         else setLoading(false);
       } catch {
@@ -97,6 +99,7 @@ export function JyinxGitHubRepos({
       if (!live) return;
       const token = session?.provider_token ?? null;
       setProviderToken(token);
+      setSessionChecked(true);
       if (token) void loadRepositories(token);
       else setLoading(false);
     });
@@ -109,8 +112,9 @@ export function JyinxGitHubRepos({
         <div><p className="text-sm font-medium">GitHub repositories</p><p className="mt-0.5 text-[11px] text-muted">Choose a repository for Jyinx context.</p></div>
         {providerToken && <button type="button" onClick={() => void loadRepositories(providerToken)} className="text-[11px] text-gold hover:text-gold-light">Refresh</button>}
       </div>
-      {!providerToken && !loading && <button type="button" onClick={() => void connectGitHub()} disabled={connecting} className="mt-3 w-full rounded-xl border border-gold/35 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/20 disabled:opacity-60">{connecting ? "Opening GitHub…" : "Connect GitHub"}</button>}
+      {!providerToken && sessionChecked && !loading && <button type="button" onClick={() => void connectGitHub()} disabled={connecting} className="mt-3 w-full rounded-xl border border-gold/35 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/20 disabled:opacity-60">{connecting ? "Opening GitHub…" : "Connect GitHub"}</button>}
       {loading && <p className="mt-3 text-xs text-muted">Checking GitHub connection…</p>}
+      {!loading && !sessionChecked && <p className="mt-3 text-xs text-muted">Restoring GitHub session…</p>}
       {error && <p className="mt-3 text-xs leading-relaxed text-danger">{error}</p>}
       {providerToken && !loading && !error && <div className="mt-3 max-h-52 space-y-1 overflow-y-auto">{repositories.map((repository) => <button type="button" key={repository.id} onClick={() => onSelectRepository(repository)} className={`w-full rounded-xl border px-3 py-2 text-left transition ${selectedRepositoryId === repository.id ? "border-gold/45 bg-gold/10" : "border-border hover:border-gold/25 hover:bg-surface-hover"}`}><span className="flex items-center justify-between gap-2"><span className="truncate text-xs font-medium">{repository.fullName}</span><span className="shrink-0 text-[10px] text-muted">{repository.isPrivate ? "Private" : "Public"}</span></span><span className="mt-1 block text-[10px] text-muted">{repository.defaultBranch} · updated {new Date(repository.updatedAt).toLocaleDateString()}</span></button>)}{repositories.length === 0 && <p className="py-2 text-xs text-muted">No repositories available to this GitHub account.</p>}</div>}
     </section>
