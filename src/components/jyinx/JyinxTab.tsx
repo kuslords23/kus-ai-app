@@ -4,6 +4,7 @@ import { ViewportToggler } from './ViewportToggler';
 import { TokenMeter } from './TokenMeter';
 import { ModelSelector } from './ModelSelector';
 import { InputWorkspace } from './InputWorkspace';
+import { JYINX_MODELS } from '@/lib/jyinx/model-registry';
 
 interface JyinxTabProps {
   onModelSelect: (modelName: string) => void;
@@ -14,18 +15,9 @@ export const JyinxTab: React.FC<JyinxTabProps> = ({
   onModelSelect,
   onTokenUpdate
 }) => {
-  const [selectedModel, setSelectedModel] = useState('llama3-ddof');
-  const [tokenBalance, setTokenBalance] = useState(0);
-  const [models, setModels] = useState([
-    { id: 'llama3-ddof', name: 'Llama 3 DD-Off', icon: '🦙' },
-    { id: 'deepseek-v2', name: 'DeepSeek v2', icon: '🔍' },
-    { id: 'mistral-large', name: 'Mixtral Large', icon: '🦙' },
-  ]);
-
-  // Platform info for tracking
+  const [selectedModel, setSelectedModel] = useState('openrouter/auto');
   useEffect(() => {
-    const info = hybridStorage.getPlatformInfo();
-    console.log('Jyinx Platform Info:', info);
+    hybridStorage.getPlatformInfo();
   }, []);
 
   // Initialize token tracking when model changes
@@ -45,13 +37,13 @@ export const JyinxTab: React.FC<JyinxTabProps> = ({
         <div className="jyinx-model-selector">
           <h3>Model</h3>
           <div className="jyinx-model-options">
-            {models.map(model => (
+            {JYINX_MODELS.map(model => (
               <button
                 key={model.id}
                 className={`jyinx-model-button ${selectedModel === model.id ? 'jyinx-active' : ''}`}
                 onClick={() => setSelectedModel(model.id)}
               >
-                {model.icon} {model.name}
+                {model.label} · {model.tier}
               </button>
             ))}
           </div>

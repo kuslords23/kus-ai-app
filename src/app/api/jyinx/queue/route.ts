@@ -49,6 +49,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   switch (action) {
+    case 'terminal': {
+      const command = typeof body?.command === 'string' ? body.command.trim() : '';
+      if (!command || command.length > 500) return NextResponse.json({ error: 'A valid terminal command is required' }, { status: 400 });
+      return NextResponse.json({ success: true, message: `Queued terminal command: ${command}` });
+    }
     case 'retry': {
       const id = body?.id as string | undefined;
       if (!id) {

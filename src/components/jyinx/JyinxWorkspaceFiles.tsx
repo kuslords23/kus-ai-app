@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
 
-type Entry = { name: string; path: string; type: "file" | "dir"; size: number };
+export type JyinxWorkspaceEntry = { name: string; path: string; type: "file" | "dir"; size: number };
 
-type Props = { repository: JyinxRepository | null; onOpenFile: (path: string, content: string) => void };
+type Props = { repository: JyinxRepository | null; onOpenFile: (path: string, content: string) => void; onEntriesLoaded?: (entries: JyinxWorkspaceEntry[]) => void };
 
-export function JyinxWorkspaceFiles({ repository, onOpenFile }: Props) {
-  const [entries, setEntries] = useState<Entry[]>([]);
+export function JyinxWorkspaceFiles({ repository, onOpenFile, onEntriesLoaded }: Props) {
+  const [entries, setEntries] = useState<JyinxWorkspaceEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,16 +23,16 @@ export function JyinxWorkspaceFiles({ repository, onOpenFile }: Props) {
         const token = data.session?.provider_token;
         if (!token) throw new Error("Reconnect GitHub to browse files.");
         const response = await fetch(`/api/github/workspace?repository=${encodeURIComponent(repository.fullName)}&branch=${encodeURIComponent(repository.defaultBranch)}`, { headers: { Authorization: `Bearer ${token}` } });
-        const dataJson = (await response.json()) as { entries?: Entry[]; error?: string };
+        const dataJson = (await response.json()) as { entries?: JyinxWorkspaceEntry[]; error?: string };
         if (!response.ok) throw new Error(dataJson.error || "Unable to load repository files.");
-        if (live) setEntries(dataJson.entries ?? []);
+        if (live) { const nextEntries = dataJson.entries ?? []; setEntries(nextEntries); onEntriesLoaded?.(nextEntries); }
       } catch (cause) { if (live) setError(cause instanceof Error ? cause.message : "Unable to load files."); }
       finally { if (live) setLoading(false); }
     };
     void load(); return () => { live = false; };
-  }, [repository]);
+  }, [onEntriesLoaded, repository]);
 
-  const open = async (entry: Entry) => {
+  const open = async (entry: JyinxWorkspaceEntry) => {
     if (!repository || entry.type !== "file") return;
     try {
       const { data } = await createClient().auth.getSession();

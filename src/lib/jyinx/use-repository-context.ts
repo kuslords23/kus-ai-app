@@ -1,0 +1,45 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import type { JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
+
+type ContextFile = { path: string; content: string };
+
+type ContextState = {
+  files: ContextFile[];
+  context: string;
+  loading: boolean;
+  error: string | null;
+};
+
+export function useRepositoryContext(repository: JyinxRepository | null): ContextState {
+  const [state, setState] = useState<ContextState>({ files: [], context: "", loading: false, error: null });
+
+  useEffect(() => {
+    let live = true;
+    const load = async () => {
+      if (!repository) {
+        setState({ files: [], context: "", loading: false, error: null });
+        return;
+      }
+      setState((current) => ({ ...current, loading: true, error: null }));
+      try {
+        const { data } = await createClient().auth.getSession();
+        const token = data.session?.provider_token;
+        if (!token) throw new Error("Reconnect GitHub to load repository context.");
+        const response = await fetch(`/api/github/workspace?repository=${encodeURIComponent(repository.fullName)}&branch=${encodeURIComponent(repository.defaultBranch)}&context=1`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        const result = (await response.json()) as { files?: ContextFile[]; error?: string };
+        if (!response.ok) throw new Error(result.error || "Unable to load repository context.");
+        const files = result.files ?? [];
+        if (live) setState({ files, context: files.map((file) => `### ${file.path}\n${file.content}`).join("\n\n"), loading: false, error: null });
+      } catch (cause) {
+        if (live) setState({ files: [], context: "", loading: false, error: cause instanceof Error ? cause.message : "Unable to load repository context." });
+      }
+    };
+    void load();
+    return () => { live = false; };
+  }, [repository]);
+
+  return state;
+}

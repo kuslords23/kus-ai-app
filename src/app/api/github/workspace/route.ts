@@ -48,6 +48,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const repository = request.nextUrl.searchParams.get("repository");
   const branch = request.nextUrl.searchParams.get("branch") || "HEAD";
   const path = request.nextUrl.searchParams.get("path");
+  const wantsContext = request.nextUrl.searchParams.get("context") === "1";
   if (!validRepository(repository)) return NextResponse.json({ error: "Invalid repository." }, { status: 400 });
 
   const baseUrl = `https://api.github.com/repos/${repository}/contents`;
@@ -60,6 +61,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .filter((entry): entry is { name: string; path: string; type: "file" | "dir"; size?: number } => Boolean(entry && typeof entry === "object"))
       .map((entry) => ({ name: entry.name, path: entry.path, type: entry.type, size: entry.size ?? 0 }))
       .filter((entry) => entry.type === "file" || entry.type === "dir");
+    if (wantsContext) {
+      const candidates = entries.filter((entry) => entry.type === "file" && entry.size <= 120_000).slice(0, 12);
+      const files = [] as Array<{ path: string; content: string }>;
+      for (const entry of candidates) {
+        const fileResult = await githubJson<{ type?: string; path?: string; content?: string; encoding?: string; size?: number }>(`${baseUrl}/${entry.path}?ref=${encodeURIComponent(branch)}`, headers);
+        const file = fileResult.data;
+        if (fileResult.response.ok && file?.type === "file" && file.encoding === "base64" && file.content && (file.size ?? 0) <= 120_000) {
+          files.push({ path: file.path ?? entry.path, content: Buffer.from(file.content, "base64").toString("utf8") });
+        }
+      }
+      return NextResponse.json({ type: "context", entries, files });
+    }
     return NextResponse.json({ type: "directory", entries });
   }
 

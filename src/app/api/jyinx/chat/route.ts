@@ -10,6 +10,7 @@ type ChatRequest = {
   prompt?: unknown;
   model?: unknown;
   code?: unknown;
+  repositoryContext?: unknown;
   file?: unknown;
   repository?: unknown;
   agent?: { modelId?: unknown; endpoint?: unknown; systemPrompt?: unknown; tag?: unknown } | null;
@@ -20,6 +21,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
   const modelId = typeof body?.model === "string" ? body.model : "";
   const code = typeof body?.code === "string" ? body.code : "";
+  const repositoryContext = typeof body?.repositoryContext === "string" ? body.repositoryContext.slice(0, 240_000) : "";
   const file = typeof body?.file === "string" ? body.file : "untitled.ts";
   const repository = typeof body?.repository === "string" ? body.repository : "local";
   const agent = body?.agent && typeof body.agent === "object" ? body.agent : null;
@@ -30,7 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!prompt) {
     return NextResponse.json({ error: "A prompt is required." }, { status: 400 });
   }
-  if (prompt.length > MAX_PROMPT_LENGTH || code.length > MAX_PROMPT_LENGTH) {
+  if (prompt.length > MAX_PROMPT_LENGTH || code.length > MAX_PROMPT_LENGTH || repositoryContext.length > 240_000) {
     return NextResponse.json({ error: "Prompt or workspace context is too large." }, { status: 413 });
   }
   if (!getJyinxModel(modelId) && !agent) {
@@ -66,7 +68,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           },
           {
             role: "user",
-            content: `Repository: ${repository}\nFile: ${file}\n\nWorkspace:\n\`\`\`\n${code}\n\`\`\`\n\nRequest: ${prompt}`,
+            content: `Repository: ${repository}\nFile: ${file}\n\nActive file:\n\`\`\`\n${code}\n\`\`\`\n\nLoaded repository files:\n${repositoryContext || "No repository files were loaded."}\n\nRequest: ${prompt}`,
           },
         ],
         stream: false,

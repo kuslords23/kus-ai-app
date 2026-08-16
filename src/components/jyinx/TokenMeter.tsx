@@ -16,20 +16,26 @@ export const TokenMeter: React.FC<TokenMeterProps> = ({
   const [totalCost, setTotalCost] = useState(0);
 
   useEffect(() => {
-    // Simulate token consumption
-    const interval = setInterval(() => {
-      const newInput = Math.floor(Math.random() * 50) + inputTokens;
-      const newOutput = Math.floor(Math.random() * 50) + outputTokens;
-      const newCost = (newInput + newOutput) * 0.001;
-      
-      setInputTokens(newInput);
-      setOutputTokens(newOutput);
-      setTotalCost(newCost);
-      onTokenUpdate(model, newInput + newOutput);
-    }, 10000);
-    
-    return () => clearInterval(interval);
-  }, [inputTokens, outputTokens, ledgerService, model, onTokenUpdate]);
+    let cancelled = false;
+    const loadUsage = async () => {
+      try {
+        const response = await fetch(`/api/jyinx/metrics?model=${encodeURIComponent(model)}`, { cache: "no-store" });
+        const data = await response.json() as { inputTokens?: number; outputTokens?: number; cost?: number };
+        if (cancelled || !response.ok) return;
+        const nextInput = data.inputTokens ?? 0;
+        const nextOutput = data.outputTokens ?? 0;
+        setInputTokens(nextInput);
+        setOutputTokens(nextOutput);
+        setTotalCost(data.cost ?? 0);
+        onTokenUpdate(model, nextInput + nextOutput);
+      } catch {
+        if (!cancelled) onTokenUpdate(model, 0);
+      }
+    };
+    void loadUsage();
+    const interval = window.setInterval(() => void loadUsage(), 10_000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [ledgerService, model, onTokenUpdate]);
 
   return (
     <div className="jyinx-token-meter">
