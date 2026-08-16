@@ -1,0 +1,106 @@
+import { NextRequest } from "next/server";
+import { runAgentFlow, type AgentExecutionEvent } from "@/services/agentPipeline";
+
+export const runtime = "nodejs";
+
+const encoder = new TextEncoder();
+
+type AgentBody = {
+  prompt?: unknown;
+  model?: unknown;
+  endpoint?: unknown;
+  repository?: unknown;
+  branch?: unknown;
+  repositoryFiles?: unknown;
+};
+
+/**
+ * Streams the autonomous multi-agent pipeline as Server-Sent Events.
+ * Each `AgentExecutionEvent` is emitted as one `data:` line, terminated by a
+ * `done` line consumed by the client to close the stream.
+ */
+export async function POST(request: NextRequest): Promise<Response> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    return Response.json({ error: "OpenRouter is not configured. Add OPENROUTER_API_KEY to the Vercel environment." }, { status: 503 });
+  }
+
+  const token = (() => {
+    const auth = request.headers.get("authorization");
+    return auth?.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : null;
+  })();
+  if (!token) {
+    return Response.json({ error: "Connect GitHub first." }, { status: 401 });
+  }
+
+  const body = (await request.json().catch(() => null)) as AgentBody | null;
+  const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  const model = typeof body?.model === "string" && body.model ? body.model : "";
+  const endpoint = typeof body?.endpoint === "string" && body.endpoint.startsWith("https://") ? body.endpoint : undefined;
+  const repository = typeof body?.repository === "string" && /^[\w.-]+\/[\w.-]+$/.test(body.repository) ? body.repository : null;
+  const branch = typeof body?.branch === "string" && body.branch ? body.branch : "main";
+  const files =
+    Array.isArray(body?.repositoryFiles)
+      ? body.repositoryFiles.filter(
+          (f): f is { path: string; content: string } =>
+            Boolean(f) && typeof f === "object" && typeof (f as { path?: unknown }).path === "string" && typeof (f as { content?: unknown }).content === "string"
+        )
+      : [];
+
+  if (!prompt) return Response.json({ error: "A prompt is required." }, { status: 400 });
+  if (!model) return Response.json({ error: "A model is required." }, { status: 400 });
+  if (!repository) return Response.json({ error: "A repository is required to commit to GitHub." }, { status: 400 });
+  if (prompt.length > 24_000) return Response.json({ error: "Prompt is too large." }, { status: 413 });
+
+  let cancelled = false;
+  const controller = new AbortController();
+  request.signal.addEventListener("abort", () => { cancelled = true; controller.abort(); });
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(streamController) {
+      let generator: ReturnType<typeof runAgentFlow> | null = null;
+      const enqueueEvent = (event: AgentExecutionEvent) => {
+        if (cancelled) return;
+        try {
+          streamController.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } catch {
+          // Client disconnect.
+        }
+      };
+
+      try {
+        generator = runAgentFlow({
+          apiKey,
+          config: {
+            model,
+            endpoint,
+            repository,
+            branch,
+            providerToken: token,
+            request: prompt,
+            repositoryFiles: files,
+          },
+        });
+        for await (const event of generator) {
+          enqueueEvent(event);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Agent pipeline failed.";
+        enqueueEvent({ type: "error", message });
+      } finally {
+        enqueueEvent({ type: "done", summary: "Stream ended." });
+        try { streamController.close(); } catch { /* already closed */ }
+      }
+    },
+    cancel() { cancelled = true; },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
