@@ -70,6 +70,8 @@ import {
 } from "@/lib/kusai/royalGeminiTelemetry";
 import { ROYAL_SYSTEM_PROMPT } from "@/lib/persona/royal";
 import { getPreferredCustomKey, gatewayFetch } from "@/lib/kusai/apiKeys";
+import { HierarchicalModelSelector } from "@/components/models/HierarchicalModelSelector";
+import type { HierarchicalSelection } from "@/lib/models/catalog";
 
 type RoyalModel = "royal" | "gemini" | "kusai";
 
@@ -141,7 +143,6 @@ export function ChatThreadView({
   const [geminiModelId, setGeminiModelId] = useState<string>(
     ROYAL_GEMINI_MODELS[0].id
   );
-  const [geminiModelOpen, setGeminiModelOpen] = useState(false);
   const geminiHistoryRef = useRef<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [editingMsg, setEditingMsg] = useState<ChatMessageData | null>(null);
@@ -169,6 +170,41 @@ export function ChatThreadView({
   }, [model, geminiModelId]);
   const abortRef = useRef<AbortController | null>(null);
   const stoppedRef = useRef(false);
+
+  const selection: HierarchicalSelection = useMemo(() => {
+    if (model === "gemini") {
+      return {
+        provider: "google",
+        providerLabel: "Google Gemini",
+        model: geminiModelId,
+        modelLabel:
+          ROYAL_GEMINI_MODELS.find((m) => m.id === geminiModelId)?.label ?? geminiModelId,
+        agent: activeAgentId,
+        agentName: activeAgentId,
+      };
+    }
+    return {
+      provider: "kusai",
+      providerLabel: "Kus AI",
+      model: "kus-ai/royal",
+      modelLabel: model === "kusai" ? "Kus AI" : "Kus AI · Royal",
+      agent: activeAgentId,
+      agentName: activeAgentId,
+    };
+  }, [model, geminiModelId, activeAgentId]);
+
+  const handleHierarchicalChange = useCallback(
+    (sel: HierarchicalSelection) => {
+      if (sel.provider === "google") {
+        setGeminiModelId(sel.model);
+        setModel("gemini");
+      } else {
+        setModel("royal");
+      }
+      onAgentChange(sel.agent);
+    },
+    [onAgentChange]
+  );
 
   const messages: ChatMessageData[] = useMemo(() => {
     if (!thread) return [];
@@ -865,70 +901,28 @@ export function ChatThreadView({
         {status && <p className="text-[10px] text-muted px-0.5">{status}</p>}
 
         <div className="flex items-center gap-1.5 px-0.5 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setModel("royal")}
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
-              model === "royal"
-                ? "border-gold/50 bg-gold/15 text-gold"
-                : "border-border/80 text-muted hover:text-foreground"
-            }`}
-          >
-            {model === "royal" && <span className="text-gold">●</span>}
-            {agent.icon} {agent.name} · Royal
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setModel("kusai")}
-            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
-              model === "kusai"
-                ? "border-amber/50 bg-amber/15 text-amber-light"
-                : "border-border/80 text-muted hover:text-foreground"
-            }`}
-          >
-            {model === "kusai" && <span className="text-amber-light">●</span>}
-            🤖 Kus AI
-          </button>
-
-          <div className="relative inline-flex">
-            <button
-              type="button"
-              onClick={() => setGeminiModelOpen((o) => !o)}
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                model === "gemini"
-                  ? "border-purple/50 bg-purple/15 text-gold"
-                  : "border-border/80 text-muted hover:text-foreground"
-              }`}
-            >
-              {model === "gemini" && <span className="text-gold">●</span>}
-              ✦ Gemini {model === "gemini" ? `· ${ROYAL_GEMINI_MODELS.find((m) => m.id === geminiModelId)?.label ?? geminiModelId}` : ""}
-              <span className="text-muted">▾</span>
-            </button>
-            {geminiModelOpen && (
-              <div className="absolute z-30 top-full mt-1 left-0 w-52 rounded-xl border border-border bg-background shadow-xl p-1">
-                {ROYAL_GEMINI_MODELS.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => {
-                      setGeminiModelId(m.id);
-                      setModel("gemini");
-                      setGeminiModelOpen(false);
-                    }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-colors ${
-                      geminiModelId === m.id && model === "gemini"
-                        ? "bg-gold/15 text-gold"
-                        : "text-foreground hover:bg-surface"
-                    }`}
-                  >
-                    {m.label}
-                    <span className="block text-[9px] text-muted truncate">{m.id}</span>
-                  </button>
-                ))}
-              </div>
+          <HierarchicalModelSelector
+            value={selection}
+            onChange={handleHierarchicalChange}
+            trigger={({ open, selection: sel }) => (
+              <button
+                type="button"
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                  open
+                    ? "border-gold/50 bg-gold/15 text-gold"
+                    : sel?.provider === "google"
+                      ? "border-purple/50 bg-purple/15 text-gold"
+                      : "border-border/80 text-muted hover:text-foreground"
+                }`}
+              >
+                <span className="text-gold">●</span>
+                {sel?.provider === "google"
+                  ? `✦ ${sel.modelLabel}`
+                  : `${sel?.modelLabel ?? "Model"} · ${sel?.agentName ?? "Auto"}`}
+                <span className="text-muted">▾</span>
+              </button>
             )}
-          </div>
+          />
         </div>
 
         <SuggestionChips chips={chips} onSelect={onChip} />

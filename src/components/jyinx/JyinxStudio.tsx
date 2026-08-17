@@ -13,6 +13,8 @@ import { AgentExecutionStream } from "@/components/jyinx/AgentExecutionStream";
 import { useRepositoryContext } from "@/lib/jyinx/use-repository-context";
 import { DEFAULT_JYINX_MODEL, JYINX_MODELS } from "@/lib/jyinx/model-registry";
 import { useJyinxModelStore } from "@/lib/jyinx/model-store";
+import { HierarchicalModelSelector } from "@/components/models/HierarchicalModelSelector";
+import { providerFromModel, type HierarchicalSelection } from "@/lib/models/catalog";
 import { HeaderMenu, type HeaderMenuAction } from "@/components/jyinx/HeaderMenu";
 import { PreviewLayout } from "@/components/jyinx/PreviewLayout";
 import { CreateProjectModal } from "@/components/CreateProjectModal";
@@ -48,6 +50,18 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
   const [commitState, setCommitState] = useState<"idle" | "committing" | "done" | "error">("idle");
   const [commitMessage, setCommitMessage] = useState("Jyinx update");
   const activeModelInfo = sharedModel;
+  const hierSelection: HierarchicalSelection = (() => {
+    const p = providerFromModel(sharedModel.id);
+    const m = p.models.find((x) => x.id === sharedModel.id) ?? p.models[0];
+    return {
+      provider: p.id,
+      providerLabel: p.label,
+      model: m?.id ?? sharedModel.id,
+      modelLabel: m?.label ?? sharedModel.label,
+      agent: "auto",
+      agentName: "Auto",
+    };
+  })();
   const repositoryContext = useRepositoryContext(selectedRepository);
 
   useEffect(() => { let cancelled = false; const load = async () => { try { const response = await fetch("/api/jyinx/queue", { cache: "no-store" }); if (!response.ok) throw new Error(); const data = await response.json() as QueueState; if (!cancelled) setQueue(data); } catch { if (!cancelled) setQueue((current) => ({ ...current, status: "OFFLINE" })); } }; void load(); const timer = window.setInterval(() => void load(), 15_000); return () => { cancelled = true; window.clearInterval(timer); }; }, []);
@@ -76,7 +90,15 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
     } catch { setCommitState("error"); }
   };
 
-  const selector = <select value={activeModel} onChange={(event) => setActiveModel(event.target.value)} className="max-w-44 rounded-lg border border-border bg-surface px-2 py-2 text-xs outline-none focus:border-gold">{JYINX_MODELS.map((model) => <option key={model.id} value={model.id}>{model.label} · {model.tier}</option>)}</select>;
+  const selector = (
+    <div className="max-w-56">
+      <HierarchicalModelSelector
+        value={hierSelection}
+        onChange={(sel) => setActiveModel(sel.model)}
+        components={{ optionMeta: (entry) => `${entry.contextWindow.toLocaleString()} ctx` }}
+      />
+    </div>
+  );
   const files = <aside className="flex h-full min-h-0 flex-col border-r border-border bg-surface/60 p-3"><div className="mb-4 px-1"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Workspace</p><p className="mt-1 text-sm font-medium">{selectedRepository?.fullName ?? "No repository selected"}</p><p className="mt-0.5 text-[10px] text-muted">{selectedRepository?.defaultBranch ?? "Connect GitHub in Status"}</p></div><JyinxWorkspaceFiles repository={selectedRepository} onOpenFile={(path, content) => { setSelectedFile(path); setCode(content); }} /><div className="mt-auto rounded-xl border border-border bg-background/50 p-3 text-[11px] text-muted"><p className="font-medium text-foreground">Review-first publishing</p><p className="mt-1">Changes become a branch and pull request.</p></div></aside>;
   const inspector = <aside className="flex h-full min-h-0 flex-col overflow-y-auto border-l border-border bg-surface/60 p-4"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Inspector</p><p className="mt-1 text-sm font-medium">Workspace diagnostics</p></div><button className="text-xs text-muted lg:hidden" onClick={() => setDrawer(null)}>Close</button></div><section className="rounded-2xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Connection</p><p className="mt-2 text-xs text-muted"><span className={queue.status === "ONLINE" ? "text-success" : "text-gold"}>●</span> {queue.status === "ONLINE" ? "Synced" : "Local only"} · {queue.pendingItems} queued</p></section><section className="mt-4 rounded-2xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Model controller</p><div className="mt-3">{selector}</div><p className="mt-2 text-[11px] text-muted">{activeModelInfo.contextWindow.toLocaleString()} token context</p></section><JyinxGitHubRepos selectedRepositoryId={selectedRepository?.id} onSelectRepository={(repository) => setSelectedRepository(repository)} /><section className="mt-4 rounded-xl border border-gold/25 bg-gold/5 p-3 text-xs text-muted"><p className="font-medium text-gold">Deploy flow</p><p className="mt-1">Merge the Jyinx pull request and your GitHub-connected Vercel project deploys it automatically.</p></section></aside>;
 

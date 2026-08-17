@@ -118,6 +118,11 @@ export async function POST(request: NextRequest) {
       history: prior,
       images: resolvedImages,
       attachments,
+      usingUserKey: resolved.source === "user",
+      subject: {
+        scope: "ip",
+        id: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anon",
+      },
     });
 
     if (response.source === "error" || !response.content) {

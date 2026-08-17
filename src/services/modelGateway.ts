@@ -9,8 +9,23 @@
  *   4. Direct BYOK                 – user-supplied provider keys at raw cost
  */
 
+import {
+  cacheKey,
+  checkUsage,
+  lookupCache,
+  recordUsage,
+  storeCache,
+  type UsageSubject,
+} from "@/services/gatewayGuardrails";
+
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const OPENROUTER_CHAT_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
+
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  "https://kus-ai-app.vercel.app";
+const APP_TITLE = process.env.NEXT_PUBLIC_APP_NAME || "Kus-Lords / Kus AI";
 
 export type GenerationModality = "conversation" | "reasoning" | "image" | "video";
 
@@ -29,6 +44,10 @@ export type GatewayRequest = {
   attachments?: Array<{ name: string; text: string }>;
   /** Prior conversation turns prepended before the live prompt. Optional. */
   history?: Array<{ role: "user" | "assistant"; content: string }>;
+  /** Fair-use subject for rate limiting (scope + user/id/ip). */
+  subject?: { scope: "user" | "ip"; id: string };
+  /** True when served by the user's own BYOK key (skip fair-use cap). */
+  usingUserKey?: boolean;
 };
 
 export type GatewayResponse = {
@@ -78,8 +97,8 @@ function headersFor(apiKey: string): Record<string, string> {
     "Content-Type": "application/json",
     Accept: "application/json",
     Authorization: `Bearer ${apiKey}`,
-    "HTTP-Referer": "https://kus-ai-app.vercel.app",
-    "X-Title": "Kus AI Jyinx Gateway",
+    "HTTP-Referer": APP_URL,
+    "X-Title": APP_TITLE,
   };
 }
 
@@ -140,6 +159,12 @@ async function call(apiKey: string, endpoint: string, body: Record<string, unkno
  */
 export async function generate(apiKey: string, req: GatewayRequest): Promise<GatewayResponse> {
   const modality = req.modality ?? "conversation";
+  const isUsingUserKey = Boolean(req.byok?.apiKey) || Boolean(req.usingUserKey);
+
+  const subject: UsageSubject | null = req.subject?.id
+    ? { scope: req.subject.scope, subject: req.subject.id, usingUserKey: isUsingUserKey }
+    : null;
+
   const fromRaw = (source: "openrouter" | "byok", raw: NonNullable<RawResponse>, model: string, media?: string[]): GatewayResponse => ({
     content: raw.content ?? "",
     model,
@@ -148,6 +173,64 @@ export async function generate(apiKey: string, req: GatewayRequest): Promise<Gat
     source,
     media,
   });
+
+  const targetModel = req.model || (modality === "conversation" ? DEFAULT_FREE_MODEL : MODALITY_MODELS[modality][0]);
+  // Skip exact-match caching for image/video/multimodal payloads (binary-heavy).
+  const cacheable = modality === "conversation" || modality === "reasoning";
+  const key = cacheable ? cacheKey(JSON.stringify(buildMessages(req)), targetModel) : null;
+
+  // 1. Response cache — serve identical queries instantly at $0 cost.
+  if (key && !req.byok?.apiKey) {
+    try {
+      const hit = await lookupCache(key);
+      if (hit.hit && hit.response) {
+        return {
+          content: hit.response,
+          model: targetModel,
+          modality,
+          source: isUsingUserKey ? "byok" : "openrouter",
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        };
+      }
+    } catch {
+      // cache best-effort
+    }
+  }
+
+  // 2. Fair-use check (skip for BYOK / own-key requests).
+  if (subject && !isUsingUserKey) {
+    try {
+      const usage = await checkUsage(subject);
+      if (!usage.allowed) {
+        return {
+          content: "",
+          model: targetModel,
+          modality,
+          source: "error",
+          error: `Daily free-tier quota reached (${usage.maxDaily} requests). Add your own API key in Settings to keep going.`,
+        };
+      }
+    } catch {
+      // best-effort
+    }
+  }
+
+  const finish = (result: GatewayResponse) => {
+    if (!result.error && result.content && key) {
+      void storeCache({
+        key,
+        prompt: req.prompt,
+        system: req.system,
+        model: targetModel,
+        response: result.content,
+        usage: result.usage,
+      });
+    }
+    if (subject) {
+      void recordUsage(subject, result.usage?.totalTokens ?? 0);
+    }
+    return result;
+  };
 
   // BYOK path.
   if (req.byok?.apiKey) {
@@ -159,7 +242,7 @@ export async function generate(apiKey: string, req: GatewayRequest): Promise<Gat
         temperature: req.temperature,
       });
       if (raw.error) return { content: "", model: req.model ?? "", modality, source: "error", error: raw.error };
-      return fromRaw("byok", raw, req.model ?? "openrouter/auto");
+      return finish(fromRaw("byok", raw, req.model ?? "openrouter/auto"));
     } catch (cause) {
       const error = cause instanceof Error ? cause.message : "BYOK request failed.";
       return { content: "", model: req.model ?? "", modality, source: "error", error };
@@ -185,7 +268,7 @@ export async function generate(apiKey: string, req: GatewayRequest): Promise<Gat
         req.modality === "image" || req.modality === "video"
           ? ((raw.media ?? []) as Array<{ b64_json?: string; url?: string }>).map((item) => item?.b64_json ?? item?.url).filter(Boolean) as string[]
           : undefined;
-      return fromRaw("openrouter", raw, model, media);
+      return finish(fromRaw("openrouter", raw, model, media));
     } catch (cause) {
       lastError = cause instanceof Error ? cause.message : "Gateway call failed.";
     }
