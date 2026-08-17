@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { AgentExecutionEvent } from "@/services/agentPipeline";
-import { buildApiKeyHeaders } from "@/lib/kusai/apiKeys";
+import { gatewayFetch } from "@/lib/kusai/apiKeys";
 
 type Props = {
   open: boolean;
@@ -51,9 +51,9 @@ export function AgentExecutionStream({ open, onClose, repository, branch, model,
         setItems([{ kind: "error", message: "Connect GitHub to run the autonomous pipeline." }]);
         return;
       }
-      const response = await fetch("/api/jyinx/agent", {
+      const response = await gatewayFetch("/api/jyinx/agent", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...buildApiKeyHeaders() },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           prompt: text,
           model,

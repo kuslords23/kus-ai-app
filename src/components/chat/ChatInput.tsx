@@ -24,6 +24,11 @@ interface ChatInputProps {
   onFocus?: () => void;
   /** Hide agent chip row (e.g. agent shown in header) */
   hideAgentChip?: boolean;
+  /** Programmatically load a draft into the composer (e.g. edit a message). */
+  externalValue?: string;
+  /** Bump this to re-apply `externalValue` when it hasn't changed. */
+  externalValueBump?: number;
+  onExternalValueCleared?: () => void;
 }
 
 export function ChatInput({
@@ -45,6 +50,9 @@ export function ChatInput({
   onAgentClick,
   onFocus,
   hideAgentChip,
+  externalValue,
+  externalValueBump,
+  onExternalValueCleared,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -52,6 +60,20 @@ export function ChatInput({
   useEffect(() => {
     if (transcript) setValue(transcript);
   }, [transcript]);
+
+  // Load an external draft (edit flow) and focus, then let the caller clear it.
+  useEffect(() => {
+    if (externalValue === undefined) return;
+    setValue(externalValue);
+    textareaRef.current?.focus();
+    const raf = requestAnimationFrame(() =>
+      textareaRef.current?.setSelectionRange(
+        textareaRef.current.value.length,
+        textareaRef.current.value.length
+      )
+    );
+    return () => cancelAnimationFrame(raf);
+  }, [externalValue, externalValueBump]);
 
   useEffect(() => {
     if (autoFocus) textareaRef.current?.focus();
@@ -70,6 +92,7 @@ export function ChatInput({
     if ((!trimmed && attachments.length === 0) || disabled) return;
     onSend(trimmed || "See attached files");
     setValue("");
+    onExternalValueCleared?.();
   };
 
   return (

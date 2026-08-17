@@ -31,6 +31,8 @@ export type RagRequestOptions = {
 
 function authHeaders(token?: string | null, customKey?: string | null): Record<string, string> {
   const headers: Record<string, string> = {};
+  // Note: for the RAG route, `Authorization` is the Supabase/hub session token
+  // (NOT the LLM API key) — so we never overwrite it with a custom key here.
   if (token) headers.Authorization = `Bearer ${token}`;
   if (customKey) headers["x-custom-api-key"] = customKey;
   return headers;

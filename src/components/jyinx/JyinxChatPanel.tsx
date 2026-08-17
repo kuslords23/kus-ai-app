@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { JyinxModel } from "@/lib/jyinx/model-registry";
-import { buildApiKeyHeaders } from "@/lib/kusai/apiKeys";
+import { gatewayFetch } from "@/lib/kusai/apiKeys";
 
 type Message = { id: string; role: "user" | "assistant"; content: string };
 type ChatAgent = { modelId: string; endpoint: string; systemPrompt: string; tag: string };
@@ -35,7 +35,7 @@ export function JyinxChatPanel({ open, onClose, model, code, file, workspaceId =
     setMessages((current) => [...current, { id: `user-${Date.now()}`, role: "user", content: text }]);
     setSending(true);
     try {
-      const response = await fetch("/api/jyinx/chat", { method: "POST", headers: { "Content-Type": "application/json", ...buildApiKeyHeaders() }, body: JSON.stringify({ prompt: text, model: model.id, code, file, repository, repositoryContext, agent }) });
+      const response = await gatewayFetch("/api/jyinx/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: text, model: model.id, code, file, repository, repositoryContext, agent }) });
       const data = (await response.json().catch(() => ({}))) as { content?: string; error?: string };
       setMessages((current) => [...current, { id: `assistant-${Date.now()}`, role: "assistant", content: data.content || data.error || "Jyinx could not complete that request." }]);
     } catch { setMessages((current) => [...current, { id: `offline-${Date.now()}`, role: "assistant", content: "Network unavailable. Your workspace remains local; try again when you are connected." }]); }

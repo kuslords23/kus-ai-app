@@ -52,6 +52,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const apiKey = resolved.key as string;
   const endpoint = agentEndpoint === OPENROUTER_URL ? openRouterUrl() : agentEndpoint;
+  const isKusAi = modelId.startsWith("kus-ai/");
 
   try {
     // Semantic cache: serve matching queries instantly at $0 cost.
@@ -62,6 +63,43 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     } catch {
       // cache is best-effort
+    }
+
+    // Kus AI model → route through the internal RAG brain (same runner as Royal
+    // "Kus AI"), giving Jyinx a first-class Kus AI choice alongside OpenRouter.
+    if (isKusAi) {
+      const brainPrompt = `Repository: ${repository}\nFile: ${file}\n\nActive file:\n\`\`\`\n${code}\n\`\`\`\n\nLoaded repository files:\n${repositoryContext || "No repository files were loaded."}\n\nRequest: ${prompt}`;
+      const brainRes = await fetch(`${request.nextUrl.origin}/api/ai/rag`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(request.headers.get("authorization")
+            ? { Authorization: request.headers.get("authorization") as string }
+            : {}),
+          ...(request.headers.get("x-custom-api-key")
+            ? { "x-custom-api-key": request.headers.get("x-custom-api-key") as string }
+            : {}),
+        },
+        body: JSON.stringify({
+          query: brainPrompt,
+          stream: false,
+        }),
+        cache: "no-store",
+      });
+      const brainData = (await brainRes.json().catch(() => null)) as {
+        ok?: boolean;
+        answer?: string;
+        error?: string;
+      } | null;
+      const content = brainData?.answer?.trim();
+      if (!brainData?.ok || !content) {
+        return NextResponse.json(
+          { error: brainData?.error || "Kus AI could not complete the request." },
+          { status: brainRes.ok ? 502 : brainRes.status }
+        );
+      }
+      void semanticStore({ query: prompt, system: agentSystemPrompt, response: content, model: "kus-ai/royal" });
+      return NextResponse.json({ content, usage: null });
     }
 
     const response = await fetch(endpoint, {

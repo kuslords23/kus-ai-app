@@ -50,7 +50,7 @@ import {
   logAction,
   type PendingAction,
 } from "@/lib/actions/executor";
-import { notifyError } from "@/lib/errors/notify";
+import { notifyError, notifySuccess } from "@/lib/errors/notify";
 import { openCompanionUrl, openHub } from "@/lib/auth/hubBridge";
 import { MAX_TOTAL_ATTACHMENT_BYTES } from "@/lib/attachments/limits";
 import {
@@ -69,9 +69,9 @@ import {
   emitRoyalGeminiSampleToTrainingPlane,
 } from "@/lib/kusai/royalGeminiTelemetry";
 import { ROYAL_SYSTEM_PROMPT } from "@/lib/persona/royal";
-import { getPreferredCustomKey } from "@/lib/kusai/apiKeys";
+import { getPreferredCustomKey, gatewayFetch } from "@/lib/kusai/apiKeys";
 
-type RoyalModel = "royal" | "gemini";
+type RoyalModel = "royal" | "gemini" | "kusai";
 
 const ROYAL_GEMINI_MODELS = [
   { id: "openrouter/free", label: "OpenRouter Free" },
@@ -144,12 +144,15 @@ export function ChatThreadView({
   const [geminiModelOpen, setGeminiModelOpen] = useState(false);
   const geminiHistoryRef = useRef<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [editingMsg, setEditingMsg] = useState<ChatMessageData | null>(null);
+  const [editingBump, setEditingBump] = useState(0);
 
   // Persist the chosen Royal persona model + Gemini sub-model across reloads.
   useEffect(() => {
     try {
       const savedModel = localStorage.getItem(ROYAL_MODEL_KEY);
-      if (savedModel === "royal" || savedModel === "gemini") setModel(savedModel);
+      if (savedModel === "royal" || savedModel === "gemini" || savedModel === "kusai")
+        setModel(savedModel as RoyalModel);
       const savedId = localStorage.getItem(ROYAL_GEMINI_MODEL_KEY);
       if (savedId) {
         const known = ROYAL_GEMINI_MODELS.find((m) => m.id === savedId);
@@ -230,6 +233,8 @@ export function ChatThreadView({
       const outgoing = overrideAttachments ?? attachments;
       const hasAttachments = outgoing.length > 0;
       if ((!query && !hasAttachments) || isStreaming || !thread) return;
+
+      if (editingMsg) setEditingMsg(null);
 
       if (query === "__open_sports__") {
         openCompanionUrl(
@@ -345,7 +350,7 @@ export function ChatThreadView({
             ),
           }));
         try {
-          const geminiRes = await fetch("/api/kusai/royal-gemini", {
+          const geminiRes = await gatewayFetch("/api/kusai/royal-gemini", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -725,6 +730,69 @@ export function ChatThreadView({
     [settings.contributeToLearning, thread]
   );
 
+  const handleCopy = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      notifySuccess("Copied to clipboard");
+    } catch {
+      notifyError("Couldn't copy", "Clipboard unavailable in this browser.");
+    }
+  }, []);
+
+  const handleEdit = useCallback(
+    (msg: ChatMessageData) => {
+      if (!thread) return;
+      const idx = thread.messages.findIndex((m) => m.id === msg.id);
+      if (idx === -1) return;
+      // Remove this user message and the assistant replies that follow it.
+      const dropIds = new Set<string>([msg.id]);
+      for (let i = idx + 1; i < thread.messages.length; i++) {
+        const m = thread.messages[i];
+        if (m.role === "user") break;
+        dropIds.add(m.id);
+      }
+      onUpdate(thread.id, (t) => ({
+        ...t,
+        messages: t.messages.filter((m) => !dropIds.has(m.id)),
+      }));
+      setEditingMsg(msg);
+      setEditingBump((b) => b + 1);
+      scrollRef.current?.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    },
+    [thread, onUpdate]
+  );
+
+  const handleRetry = useCallback(
+    (msg: ChatMessageData) => {
+      if (!thread || isStreaming) return;
+      const idx = thread.messages.findIndex((m) => m.id === msg.id);
+      if (idx <= 0) return;
+      const userMsg = [...thread.messages]
+        .slice(0, idx)
+        .reverse()
+        .find((m) => m.role === "user");
+      if (!userMsg) return;
+      // Drop this assistant message and the triggering user message, then resend.
+      const dropIds = new Set<string>();
+      for (let i = idx; i >= 0; i--) {
+        const m = thread.messages[i];
+        dropIds.add(m.id);
+        if (m.role === "user") break;
+      }
+      onUpdate(thread.id, (t) => ({
+        ...t,
+        messages: t.messages.filter((m) => !dropIds.has(m.id)),
+      }));
+      void sendMessage(userMsg.content);
+    },
+    [thread, isStreaming, onUpdate, sendMessage]
+  );
+
+  const clearEditing = useCallback(() => setEditingMsg(null), []);
+
   const stopStreaming = useCallback(() => {
     stoppedRef.current = true;
     abortRef.current?.abort();
@@ -785,6 +853,10 @@ export function ChatThreadView({
             onSpeak={(text) => speak(text, true)}
             showFeedback={settings.contributeToLearning}
             onFeedback={(type) => handleFeedback(msg.id, type)}
+            onCopy={handleCopy}
+            onEdit={msg.role === "user" ? handleEdit : undefined}
+            onRetry={msg.role === "assistant" ? handleRetry : undefined}
+            editing={editingMsg?.id === msg.id}
           />
         ))}
       </div>
@@ -804,6 +876,19 @@ export function ChatThreadView({
           >
             {model === "royal" && <span className="text-gold">●</span>}
             {agent.icon} {agent.name} · Royal
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setModel("kusai")}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+              model === "kusai"
+                ? "border-amber/50 bg-amber/15 text-amber-light"
+                : "border-border/80 text-muted hover:text-foreground"
+            }`}
+          >
+            {model === "kusai" && <span className="text-amber-light">●</span>}
+            🤖 Kus AI
           </button>
 
           <div className="relative inline-flex">
@@ -862,6 +947,9 @@ export function ChatThreadView({
           activeAgent={{ icon: agent.icon, name: agent.name }}
           onAgentClick={() => setAgentPickerOpen(true)}
           hideAgentChip
+          externalValue={editingMsg?.content}
+          externalValueBump={editingBump}
+          onExternalValueCleared={clearEditing}
           onFocus={() => {
             scrollRef.current?.scrollTo({
               top: scrollRef.current.scrollHeight,

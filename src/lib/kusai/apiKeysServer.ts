@@ -14,9 +14,20 @@ export function resolveApiKey(
   headers: Headers,
   envVar = process.env.OPENROUTER_API_KEY
 ): { key: string | null; source: "user" | "env" | "none"; missing: boolean } {
-  const userKey = headers.get("x-custom-api-key")?.trim() || "";
-  if (userKey) return { key: userKey, source: "user", missing: false };
+  // 1. Custom-key header (could be OpenRouter, OpenAI, Gemini, etc.)
+  const custom = headers.get("x-custom-api-key")?.trim() || "";
+  if (custom) return { key: custom, source: "user", missing: false };
+
+  // 2. Standard `Authorization: Bearer <key>` header
+  const auth = headers.get("authorization");
+  if (auth?.trim().toLowerCase().startsWith("bearer ")) {
+    const bearer = auth.slice("bearer ".length).trim();
+    if (bearer) return { key: bearer, source: "user", missing: false };
+  }
+
+  // 3. Platform default env var
   if (envVar) return { key: envVar, source: "env", missing: false };
+
   return { key: null, source: "none", missing: true };
 }
 

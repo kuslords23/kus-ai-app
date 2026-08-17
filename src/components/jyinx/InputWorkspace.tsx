@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { buildApiKeyHeaders } from '@/lib/kusai/apiKeys';
+import { gatewayFetch } from '@/lib/kusai/apiKeys';
 
 export const InputWorkspace: React.FC = () => {
   const [inputText, setInputText] = useState('');
@@ -10,7 +10,7 @@ export const InputWorkspace: React.FC = () => {
     if (!inputText.trim()) return;
     setStatus('Analyzing…');
     try {
-      const response = await fetch('/api/jyinx/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', ...buildApiKeyHeaders() }, body: JSON.stringify({ prompt: 'Analyze this input and return actionable findings.', model: 'openrouter/auto', code: inputText, file: 'input-workspace' }) });
+      const response = await gatewayFetch('/api/jyinx/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: 'Analyze this input and return actionable findings.', model: 'openrouter/auto', code: inputText, file: 'input-workspace' }) });
       const result = await response.json() as { content?: string; error?: string };
       if (!response.ok) throw new Error(result.error || 'Analysis failed.');
       setAnalysisResult(result.content || 'No analysis returned.');

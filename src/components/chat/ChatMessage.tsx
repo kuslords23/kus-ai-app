@@ -46,6 +46,14 @@ interface ChatMessageProps {
   onSpeak?: (text: string) => void;
   onFeedback?: (type: "helpful" | "not_helpful") => void;
   showFeedback?: boolean;
+  /** Copy the raw message text to the clipboard. */
+  onCopy?: (text: string) => void;
+  /** Re-open a user message in the composer for editing. */
+  onEdit?: (message: ChatMessageData) => void;
+  /** Re-run the request that produced this message. */
+  onRetry?: (message: ChatMessageData) => void;
+  /** True when the user message is currently being edited (truncate content). */
+  editing?: boolean;
 }
 
 /** Lightweight **bold** rendering for hub-style answers. */
@@ -70,8 +78,19 @@ export function ChatMessage({
   onSpeak,
   onFeedback,
   showFeedback,
+  onCopy,
+  onEdit,
+  onRetry,
+  editing,
 }: ChatMessageProps) {
   const isUser = message.role === "user";
+
+  const handleCopy = () => {
+    if (message.content) onCopy?.(message.content);
+  };
+
+  const actionBtn =
+    "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-muted hover:text-gold hover:bg-gold/5 transition-colors";
 
   return (
     <motion.div
@@ -93,11 +112,34 @@ export function ChatMessage({
         }`}
       >
         <div className="whitespace-pre-wrap text-[13.5px] leading-relaxed">
-          {renderContent(message.content)}
+          {isUser && editing && message.content.length > 60
+            ? `${message.content.slice(0, 60)}…`
+            : renderContent(message.content)}
           {isStreaming && (
             <span className="inline-block w-1.5 h-3.5 bg-gold ml-0.5 align-middle animate-pulse rounded-sm" />
           )}
         </div>
+
+        {!isStreaming && message.content && (
+          <div className="mt-1.5 flex items-center gap-1 opacity-70 transition-opacity hover:opacity-100">
+            <button type="button" onClick={handleCopy} className={actionBtn} aria-label="Copy message">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy
+            </button>
+            {isUser && onEdit && (
+              <button type="button" onClick={() => onEdit(message)} className={actionBtn} aria-label="Edit message">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                Edit
+              </button>
+            )}
+            {!isUser && onRetry && (
+              <button type="button" onClick={() => onRetry(message)} className={actionBtn} aria-label="Regenerate response">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
+                Retry
+              </button>
+            )}
+          </div>
+        )}
 
         {message.attachments && message.attachments.length > 0 && (
           <div className="mt-2.5 grid gap-2">
