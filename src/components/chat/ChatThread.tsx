@@ -69,13 +69,20 @@ import {
   emitRoyalGeminiSampleToTrainingPlane,
 } from "@/lib/kusai/royalGeminiTelemetry";
 import { ROYAL_SYSTEM_PROMPT } from "@/lib/persona/royal";
+import { getPreferredCustomKey } from "@/lib/kusai/apiKeys";
 
 type RoyalModel = "royal" | "gemini";
 
 const ROYAL_GEMINI_MODELS = [
+  { id: "openrouter/free", label: "OpenRouter Free" },
   { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { id: "google/gemini-2.5-flash:free", label: "Gemini Flash (free)" },
   { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+  { id: "meta-llama/llama-3-8b-instruct:free", label: "Llama 3 8B (free)" },
 ];
+
+const ROYAL_MODEL_KEY = "royal:model-choice";
+const ROYAL_GEMINI_MODEL_KEY = "royal:gemini-model-id";
 
 interface ChatThreadProps {
   thread: ChatThread | null;
@@ -137,6 +144,26 @@ export function ChatThreadView({
   const [geminiModelOpen, setGeminiModelOpen] = useState(false);
   const geminiHistoryRef = useRef<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Persist the chosen Royal persona model + Gemini sub-model across reloads.
+  useEffect(() => {
+    try {
+      const savedModel = localStorage.getItem(ROYAL_MODEL_KEY);
+      if (savedModel === "royal" || savedModel === "gemini") setModel(savedModel);
+      const savedId = localStorage.getItem(ROYAL_GEMINI_MODEL_KEY);
+      if (savedId) {
+        const known = ROYAL_GEMINI_MODELS.find((m) => m.id === savedId);
+        if (known) setGeminiModelId(known.id);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ROYAL_MODEL_KEY, model);
+      localStorage.setItem(ROYAL_GEMINI_MODEL_KEY, geminiModelId);
+    } catch { /* ignore */ }
+  }, [model, geminiModelId]);
   const abortRef = useRef<AbortController | null>(null);
   const stoppedRef = useRef(false);
 
@@ -159,6 +186,7 @@ export function ChatThreadView({
       id: m.id,
       role: m.role,
       content: m.content,
+      attachments: m.attachments,
       cards: m.cards,
       chips: m.chips,
       sourceLabel: m.sourceLabel,
@@ -233,6 +261,15 @@ export function ChatThreadView({
         id: `ai_u_${Date.now()}`,
         role: "user" as const,
         content: displayQuery,
+        attachments: sentAttachments.map((a) => ({
+          id: a.id,
+          kind: a.kind,
+          name: a.name,
+          mimeType: a.mimeType,
+          previewUrl: a.previewUrl,
+          dataUrl: a.dataUrl,
+          size: a.size,
+        })),
         at: Date.now(),
       };
       const replyId = `ai_r_${Date.now()}`;
@@ -256,17 +293,71 @@ export function ChatThreadView({
       stoppedRef.current = false;
       abortRef.current = new AbortController();
 
+      // Server-side ingest: store bytes and get fetchable references so the
+      // hub / Jyinx can retrieve the raw file (esp. images) by URL.
+      const fileRefs: Array<{ name: string; mimeType: string; kind: string; url: string; token?: string }> = [];
+      for (const a of sentAttachments) {
+        if (!a.dataUrl) continue;
+        const comma = a.dataUrl.indexOf(",");
+        const base64 = comma >= 0 ? a.dataUrl.slice(comma + 1) : a.dataUrl;
+        try {
+          const up = await fetch("/api/kusai/files", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: a.name,
+              mimeType: a.mimeType,
+              kind: a.kind,
+              data: base64,
+            }),
+          });
+          const upData = (await up.json().catch(() => null)) as {
+            url?: string;
+            token?: string;
+          } | null;
+          if (up.ok && upData?.url) {
+            fileRefs.push({
+              name: a.name,
+              url: upData.url,
+              token: upData.token ?? "",
+              mimeType: a.mimeType,
+              kind: a.kind,
+            });
+          }
+        } catch {
+          // upload is best-effort; fall back to inline data payloads below
+        }
+      }
+
       if (model === "gemini") {
         const geminiAbort = abortRef.current;
+        const customKey = getPreferredCustomKey().apiKey;
+        // Prefer uploaded references for images; fall back to inline data URLs.
+        const images = sentAttachments
+          .filter((a) => a.kind === "image" && a.dataUrl)
+          .map((a) => fileRefs.find((r) => r.mimeType === a.mimeType && r.kind === "image")?.url ?? (a.dataUrl as string));
+        const docAttachments = sentAttachments
+          .filter((a) => a.kind === "file" && a.dataUrl)
+          .map((a) => ({
+            name: a.name,
+            data: (a.dataUrl as string).slice(
+              (a.dataUrl as string).indexOf(",") + 1
+            ),
+          }));
         try {
           const geminiRes = await fetch("/api/kusai/royal-gemini", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(customKey ? { "x-custom-api-key": customKey } : {}),
+            },
             body: JSON.stringify({
               prompt: displayQuery,
               model: geminiModelId,
               system: ROYAL_SYSTEM_PROMPT,
               history: geminiHistoryRef.current.slice(-8),
+              images,
+              attachments: docAttachments,
             }),
             signal: geminiAbort.signal,
           });
@@ -396,10 +487,14 @@ export function ChatThreadView({
           {
             userContext: ctx,
             history: [...history, { role: "user", content: displayQuery }],
-            attachments: attachmentsForRag(sentAttachments),
+            attachments: attachmentsForRag(sentAttachments).map((att, idx) => {
+              const ref = fileRefs[idx];
+              return ref && ref.url ? { ...att, url: ref.url } : att;
+            }),
             agentId: activeAgentId,
             sourceType: ragAgent.sourceType || attachmentSourceType,
             accessToken: session?.access_token,
+            customApiKey: getPreferredCustomKey().apiKey,
           },
           {
             onMeta: () => setStatus(`${agent.name} thinking…`),

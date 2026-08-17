@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { AgentExecutionEvent } from "@/services/agentPipeline";
+import { buildApiKeyHeaders } from "@/lib/kusai/apiKeys";
 
 type Props = {
   open: boolean;
@@ -52,7 +53,7 @@ export function AgentExecutionStream({ open, onClose, repository, branch, model,
       }
       const response = await fetch("/api/jyinx/agent", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...buildApiKeyHeaders() },
         body: JSON.stringify({
           prompt: text,
           model,

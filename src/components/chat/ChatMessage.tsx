@@ -7,6 +7,15 @@ export interface ChatMessageData {
   id: string;
   role: "user" | "assistant";
   content: string;
+  attachments?: Array<{
+    id?: string;
+    kind: "image" | "file" | "video";
+    name: string;
+    mimeType?: string;
+    previewUrl?: string;
+    dataUrl?: string;
+    size?: number;
+  }>;
   cards?: Array<{
     type: string;
     title: string;
@@ -89,6 +98,44 @@ export function ChatMessage({
             <span className="inline-block w-1.5 h-3.5 bg-gold ml-0.5 align-middle animate-pulse rounded-sm" />
           )}
         </div>
+
+        {message.attachments && message.attachments.length > 0 && (
+          <div className="mt-2.5 grid gap-2">
+            {message.attachments.map((a, i) => (
+              <div
+                key={a.id ?? `${a.name}-${i}`}
+                className="overflow-hidden rounded-xl border border-border bg-surface/60"
+              >
+                {a.kind === "image" && (a.previewUrl || a.dataUrl) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={a.previewUrl || a.dataUrl}
+                    alt={a.name}
+                    className="w-full max-h-56 object-cover"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <span className="w-8 h-8 rounded-lg bg-surface border border-border flex items-center justify-center text-sm shrink-0">
+                      {a.kind === "video" ? "🎬" : "📄"}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium text-foreground truncate">
+                        {a.name}
+                      </p>
+                      <p className="text-[9px] text-muted uppercase tracking-wide">
+                        {a.kind === "image"
+                          ? "Image"
+                          : a.kind === "video"
+                            ? "Video"
+                            : a.mimeType?.split("/")[1]?.toUpperCase() || "File"}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {message.cards && message.cards.length > 0 && (
           <div className="mt-2.5 space-y-2">

@@ -7,6 +7,8 @@ export type JyinxModel = {
 
 export const JYINX_MODELS: JyinxModel[] = [
   { id: "openrouter/auto", label: "OpenRouter Auto", tier: "Auto", contextWindow: 128_000 },
+  { id: "openrouter/free", label: "OpenRouter Free", tier: "Free", contextWindow: 128_000 },
+  { id: "meta-llama/llama-3-8b-instruct:free", label: "Llama 3 8B (free)", tier: "Free", contextWindow: 8_192 },
   { id: "qwen/qwen3-coder:free", label: "Qwen 3 Coder", tier: "Free", contextWindow: 32_768 },
   { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B", tier: "Free", contextWindow: 32_768 },
   { id: "openai/gpt-oss-20b:free", label: "GPT-OSS 20B", tier: "Free", contextWindow: 131_072 },

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { runAgentFlow, type AgentExecutionEvent } from "@/services/agentPipeline";
+import { resolveApiKey } from "@/lib/kusai/apiKeysServer";
 
 export const runtime = "nodejs";
 
@@ -20,10 +21,11 @@ type AgentBody = {
  * `done` line consumed by the client to close the stream.
  */
 export async function POST(request: NextRequest): Promise<Response> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    return Response.json({ error: "OpenRouter is not configured. Add OPENROUTER_API_KEY to the Vercel environment." }, { status: 503 });
+  const resolved = resolveApiKey(request.headers);
+  if (resolved.missing) {
+    return Response.json({ error: "OpenRouter is not configured. Add OPENROUTER_API_KEY to the Vercel environment, or supply your own key in Settings." }, { status: 503 });
   }
+  const apiKey = resolved.key as string;
 
   const token = (() => {
     const auth = request.headers.get("authorization");

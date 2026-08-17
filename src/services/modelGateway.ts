@@ -25,6 +25,8 @@ export type GatewayRequest = {
   maxTokens?: number;
   temperature?: number;
   images?: string[];
+  /** Decoded text of attached documents/code, injected into the prompt. */
+  attachments?: Array<{ name: string; text: string }>;
   /** Prior conversation turns prepended before the live prompt. Optional. */
   history?: Array<{ role: "user" | "assistant"; content: string }>;
 };
@@ -88,14 +90,26 @@ function buildMessages(req: GatewayRequest): { role: "system" | "user" | "assist
     if (messages[messages.length - 1]?.role === turn.role) continue;
     messages.push({ role: turn.role, content: turn.content });
   }
+
+  // Append decoded text of attached documents/code into the user prompt.
+  let prompt = req.prompt;
+  if (req.attachments?.length) {
+    prompt = [
+      prompt,
+      ...req.attachments.map(
+        (a) => `\n\nAttached File (${a.name}):\n\`\`\`\n${a.text.slice(0, 40_000)}\n\`\`\``
+      ),
+    ].join("\n");
+  }
+
   if (req.images?.length) {
-    const parts: unknown[] = [{ type: "text", text: req.prompt }];
+    const parts: unknown[] = [{ type: "text", text: prompt }];
     for (const img of req.images) {
       parts.push({ type: "image_url", image_url: { url: img } });
     }
     messages.push({ role: "user", content: parts });
   } else {
-    messages.push({ role: "user", content: req.prompt });
+    messages.push({ role: "user", content: prompt });
   }
   return messages;
 }

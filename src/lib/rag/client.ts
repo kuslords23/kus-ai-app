@@ -25,10 +25,15 @@ export type RagRequestOptions = {
   history?: RagHistoryItem[];
   attachments?: RagAttachment[];
   accessToken?: string | null;
+  /** User-supplied (BYOK) key sent as x-custom-api-key for the gateway. */
+  customApiKey?: string | null;
 };
 
-function authHeaders(token?: string | null): Record<string, string> {
-  return token ? { Authorization: `Bearer ${token}` } : {};
+function authHeaders(token?: string | null, customKey?: string | null): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (customKey) headers["x-custom-api-key"] = customKey;
+  return headers;
 }
 
 function buildRagBody(query: string, options?: RagRequestOptions, stream?: boolean) {
@@ -122,7 +127,7 @@ export async function askRag(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...authHeaders(options?.accessToken),
+        ...authHeaders(options?.accessToken, options?.customApiKey),
       },
       body: JSON.stringify(buildRagBody(query, options)),
     });
@@ -200,7 +205,7 @@ export async function streamRag(
         headers: {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
-          ...authHeaders(options?.accessToken),
+          ...authHeaders(options?.accessToken, options?.customApiKey),
         },
         body: JSON.stringify(buildRagBody(query, options, true)),
         signal: controller.signal,

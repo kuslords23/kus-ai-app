@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getJyinxModel } from "@/lib/jyinx/model-registry";
 import { lookup as semanticLookup, store as semanticStore } from "@/services/semanticCache";
+import { resolveApiKey, openRouterUrl } from "@/lib/kusai/apiKeysServer";
 
 export const runtime = "nodejs";
 
@@ -40,15 +41,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "The selected model is not available." }, { status: 400 });
   }
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
+  const resolved = resolveApiKey(request.headers);
+  if (resolved.missing) {
     return NextResponse.json(
       {
-        error: "OpenRouter is not configured. Add OPENROUTER_API_KEY to the Vercel project environment variables.",
+        error: "OpenRouter is not configured. Add OPENROUTER_API_KEY to the Vercel project environment variables, or supply your own key in Settings.",
       },
       { status: 503 }
     );
   }
+  const apiKey = resolved.key as string;
+  const endpoint = agentEndpoint === OPENROUTER_URL ? openRouterUrl() : agentEndpoint;
 
   try {
     // Semantic cache: serve matching queries instantly at $0 cost.
@@ -61,7 +64,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // cache is best-effort
     }
 
-    const response = await fetch(agentEndpoint, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,

@@ -3,6 +3,15 @@ export type ThreadMessage = {
   role: "user" | "assistant";
   content: string;
   at: number;
+  attachments?: Array<{
+    id?: string;
+    kind: "image" | "file" | "video";
+    name: string;
+    mimeType?: string;
+    previewUrl?: string;
+    dataUrl?: string;
+    size?: number;
+  }>;
   cards?: Array<{
     type: string;
     title: string;

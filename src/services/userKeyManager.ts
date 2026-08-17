@@ -132,9 +132,69 @@ export class UserKeyManager {
     this.notify();
   }
 
-  /** Retrieve a provider key if stored. */
+  /** Retrieve a provider key if stored. Re-reads localStorage each call so a
+   *  key saved in another tab/component is picked up dynamically. */
   getKey(provider: BYOKProvider): string | null {
+    // Re-sync from storage on every read so the active value is never stale.
+    this.reloadFromStorage();
     return this.keys[provider]?.key ?? null;
+  }
+
+  /** Get the preferred upstream key for a given provider, or null. */
+  getPreferredKey(providers: BYOKProvider[] = ["openrouter", "openai", "gemini"]): {
+    provider: BYOKProvider | null;
+    apiKey: string | null;
+  } {
+    for (const provider of providers) {
+      const key = this.getKey(provider);
+      if (key) return { provider, apiKey: key };
+    }
+    return { provider: null, apiKey: null };
+  }
+
+  /** Current keys fresh from storage (for building request payloads). */
+  keysForRequest(): Record<BYOKProvider, string | null> {
+    this.reloadFromStorage();
+    return {
+      openai: this.keys.openai?.key ?? null,
+      anthropic: this.keys.anthropic?.key ?? null,
+      deepseek: this.keys.deepseek?.key ?? null,
+      openrouter: this.keys.openrouter?.key ?? null,
+      gemini: this.keys.gemini?.key ?? null,
+    };
+  }
+
+  private reloadFromStorage(): void {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        this.keys = { openai: undefined, anthropic: undefined, deepseek: undefined, openrouter: undefined, gemini: undefined };
+        return;
+      }
+      const parsed = JSON.parse(raw) as Partial<Record<BYOKProvider, { provider: BYOKProvider; key: string; addedAt: string }>>;
+      const next: Record<BYOKProvider, BYOKKeyEntry | undefined> = {
+        openai: undefined,
+        anthropic: undefined,
+        deepseek: undefined,
+        openrouter: undefined,
+        gemini: undefined,
+      };
+      for (const provider of Object.keys(parsed) as BYOKProvider[]) {
+        const entry = parsed[provider];
+        if (entry?.key) {
+          next[provider] = {
+            provider,
+            key: deobfuscate(entry.key),
+            label: (entry as { label?: string }).label || provider,
+            addedAt: entry.addedAt ?? new Date().toISOString(),
+          };
+        }
+      }
+      this.keys = next;
+    } catch {
+      // Ignore malformed storage.
+    }
   }
 
   /** All stored entries (masked for display). */
