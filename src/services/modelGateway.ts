@@ -25,6 +25,8 @@ export type GatewayRequest = {
   maxTokens?: number;
   temperature?: number;
   images?: string[];
+  /** Prior conversation turns prepended before the live prompt. Optional. */
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
 };
 
 export type GatewayResponse = {
@@ -79,9 +81,13 @@ function headersFor(apiKey: string): Record<string, string> {
   };
 }
 
-function buildMessages(req: GatewayRequest): { role: "system" | "user"; content: unknown }[] {
-  const messages: { role: "system" | "user"; content: unknown }[] = [];
+function buildMessages(req: GatewayRequest): { role: "system" | "user" | "assistant"; content: unknown }[] {
+  const messages: { role: "system" | "user" | "assistant"; content: unknown }[] = [];
   if (req.system) messages.push({ role: "system", content: req.system });
+  for (const turn of req.history ?? []) {
+    if (messages[messages.length - 1]?.role === turn.role) continue;
+    messages.push({ role: turn.role, content: turn.content });
+  }
   if (req.images?.length) {
     const parts: unknown[] = [{ type: "text", text: req.prompt }];
     for (const img of req.images) {
