@@ -1,4 +1,4 @@
-import { commitFiles } from "@/services/githubCommit";
+import { commitFiles, GitHubCommitError } from "@/services/githubCommit";
 import { runSandboxPipeline, isSandboxConfigured } from "@/services/sandboxExecution";
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -9,7 +9,7 @@ export type AgentExecutionEvent =
   | { type: "reasoning"; message: string }
   | { type: "rejected"; file: string; reason: string }
   | { type: "whitespace"; message: string }
-  | { type: "error"; message: string }
+  | { type: "error"; message: string; connect?: boolean }
   | { type: "done"; summary: string };
 
 export type AgentEdit = { path: string; content: string };
@@ -282,7 +282,11 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
         yield { type: "log", message: "Cloud build, type-check, and tests passed. Continuing to commit…" };
       } else if (!sandbox.unavailable) {
         lastError = sandbox.error || "Cloud sandbox verification failed.";
-        yield { type: "error", message: `Cloud verification failed: ${lastError}` };
+        yield { type: "error", message: `Cloud verification failed: ${lastError}`, connect: sandbox.authorization === true };
+        if (sandbox.authorization) {
+          yield { type: "done", summary: "Blocked by GitHub permissions. Reconnect GitHub with the repo scope, then retry." };
+          return;
+        }
         yield { type: "log", message: `Sandbox logs:\n${sandbox.steps.map((s) => `- [${s.phase}] ${s.message}`).join("\n")}` };
         if (attempt < maxRetries) {
           yield { type: "log", message: "Feeding sandbox error logs back to the coder for self-correction…" };
@@ -310,8 +314,15 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
       yield { type: "done", summary: `Committed ${workingEdits.length} file(s) → ${commit.commitUrl}` };
       return;
     } catch (cause) {
+      const isAuth = cause instanceof GitHubCommitError && cause.authorization;
       lastError = cause instanceof Error ? cause.message : "Commit failed.";
-      yield { type: "error", message: lastError };
+      yield { type: "error", message: lastError, connect: isAuth };
+      if (isAuth) {
+        // Missing/expired repo-scope token: don't burn retries, hand the user
+        // to the "reconnect GitHub" flow instead.
+        yield { type: "done", summary: "Blocked by GitHub permissions. Reconnect GitHub with the repo scope, then retry the change." };
+        return;
+      }
       if (attempt < maxRetries) {
         yield { type: "log", message: "Commit failed — regenerating edits with the returned error fed back…" };
         continue;

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { AgentExecutionEvent } from "@/services/agentPipeline";
 import { gatewayFetch } from "@/lib/kusai/apiKeys";
+import { connectGitHub } from "@/lib/jyinx/github-connect";
 
 type Props = {
   open: boolean;
@@ -26,13 +27,15 @@ type StreamItem =
   | { kind: "reasoning"; message: string }
   | { kind: "rejected"; reason: string }
   | { kind: "whitespace"; message: string }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; connect?: boolean }
   | { kind: "done"; summary: string };
 
 export function AgentExecutionStream({ open, onClose, repository, branch, model, repositoryFiles = [], initialPrompt, onPromptChange }: Props) {
   const [prompt, setPrompt] = useState("");
   const [running, setRunning] = useState(false);
   const [items, setItems] = useState<StreamItem[]>([]);
+  const [needConnect, setNeedConnect] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const runRef = useRef<(text?: string) => void | Promise<void>>(() => {});
   const startedRef = useRef(false);
@@ -43,12 +46,14 @@ export function AgentExecutionStream({ open, onClose, repository, branch, model,
     onPromptChange?.("");
     setPrompt("");
     setItems([]);
+    setNeedConnect(false);
     setRunning(true);
     try {
       const { data } = await createClient().auth.getSession();
       const token = data.session?.provider_token;
       if (!token) {
-        setItems([{ kind: "error", message: "Connect GitHub to run the autonomous pipeline." }]);
+        setItems([{ kind: "error", message: "Connect GitHub to commit changes to the repository." }]);
+        setNeedConnect(true);
         return;
       }
       const response = await gatewayFetch("/api/jyinx/agent", {
@@ -104,7 +109,7 @@ export function AgentExecutionStream({ open, onClose, repository, branch, model,
         case "reasoning": next.push({ kind: "reasoning", message: event.message }); break;
         case "rejected": next.push({ kind: "rejected", reason: event.reason }); break;
         case "whitespace": next.push({ kind: "whitespace", message: event.message }); break;
-        case "error": next.push({ kind: "error", message: event.message }); break;
+        case "error": next.push({ kind: "error", message: event.message, connect: event.connect === true }); if (event.connect === true) setNeedConnect(true); break;
         case "done": next.push({ kind: "done", summary: event.summary }); break;
       }
       return next;
@@ -142,6 +147,7 @@ export function AgentExecutionStream({ open, onClose, repository, branch, model,
           <StreamRow key={i} item={item} />
         ))}
         {running && items.filter((i) => i.kind === "done").length === 0 && <SpinnerRow />}
+        {needConnect && <button type="button" onClick={() => { setConnecting(true); void connectGitHub("/jyinx").finally(() => setConnecting(false)); }} disabled={connecting} className="rounded-xl border border-gold/35 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/20 disabled:opacity-60">{connecting ? "Opening GitHub…" : "Connect GitHub →"}</button>}
       </div>
 
       <form className="border-t border-border p-3" onSubmit={(e) => { e.preventDefault(); void run(); }}>

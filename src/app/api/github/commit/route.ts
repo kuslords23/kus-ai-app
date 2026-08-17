@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { commitFiles, writeFile, editFile, GitHubCommitError, type CommitChange } from "@/services/githubCommit";
+import { commitFiles, writeFile, editFile, checkGitHubScope, GitHubCommitError, type CommitChange } from "@/services/githubCommit";
 
 export const runtime = "nodejs";
 
@@ -46,6 +46,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const action = typeof body.action === "string" ? body.action : "commit-files";
 
   try {
+    if (action === "scope") {
+      const status = await checkGitHubScope(token);
+      if (!status.ok) {
+        return NextResponse.json({ ok: false, error: status.error }, { status: status.status });
+      }
+      return NextResponse.json({ ok: true, scopes: status.scopes, login: status.login });
+    }
+
     switch (action) {
       case "create": {
         const path = body.path;
@@ -103,7 +111,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (cause) {
     if (cause instanceof GitHubCommitError) {
       const status = cause.status >= 400 && cause.status < 600 ? cause.status : 500;
-      return NextResponse.json({ error: cause.message }, { status });
+      return NextResponse.json({ error: cause.message, authorization: cause.authorization }, { status });
     }
     return NextResponse.json({ error: "GitHub commit failed." }, { status: 500 });
   }

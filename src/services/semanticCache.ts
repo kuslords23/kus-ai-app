@@ -37,6 +37,21 @@ import { createHash } from "node:crypto";
 export const DISTILL_TABLE = "jyinx_distill_logs";
 export const CACHE_TABLE = "jyinx_semantic_cache";
 
+/**
+ * Markers that identify stale refusal responses (the old prompt told the model
+ * it "cannot modify files or commit"). These rows must never be served again.
+ */
+const REFUSAL_MARKERS = [
+  "do not claim to modify files directly",
+  "cannot modify files",
+  "cannot modify code",
+  "cannot commit",
+  "can't modify files",
+  "unable to modify",
+  "no write access",
+  "read-only",
+];
+
 type CacheRow = {
   query: string;
   system?: string | null;
@@ -189,6 +204,80 @@ async function logDistill(row: DistillRow): Promise<void> {
   } catch {
     // best-effort
   }
+}
+
+/**
+ * Deletes cached rows that still contain stale refusal language (the old
+ * "cannot modify / cannot commit" responses), so they are never served to
+ * users again after the capability restoration. Returns the number of rows
+ * removed. Best-effort: failures never break the caller.
+ */
+export async function purgeRefusals(): Promise<number> {
+  try {
+    const client = await createSupabaseClient();
+    const { data, error } = await client.from(CACHE_TABLE).select("query").limit(500);
+    if (error || !data) return 0;
+    const queries = data as unknown as Array<{ query?: string; response?: string }>;
+    const stale = queries.filter((row) => row && (REFUSAL_MARKERS.some((marker) => (row.query ?? "").toLowerCase().includes(marker))));
+    if (stale.length === 0) return 0;
+    for (const row of stale) {
+      await client.from(CACHE_TABLE).delete().eq("query", row.query);
+    }
+    return stale.length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Because `lookup` only stores the prompt's query text, the cached *response*
+ * on the row we stored may hold a refusal. Fetch candidate rows and delete the
+ * ones whose stored response looks like a refusal (this catches rows the exact
+ * query-marker scan would miss).
+ */
+export async function purgeRefusalResponses(): Promise<number> {
+  try {
+    const client = await createSupabaseClient();
+    const { data, error } = await client.from(CACHE_TABLE).select("query, response");
+    if (error || !data) return 0;
+    const rows = data as unknown as Array<{ query: string; response: string }>;
+    const stale = rows.filter((row) =>
+      (row.response || "").toLowerCase().includes("cannot modify") ||
+      (row.response || "").toLowerCase().includes("cannot commit") ||
+      (row.response || "").toLowerCase().includes("do not claim to modify") ||
+      (row.response || "").toLowerCase().includes("unable to modify")
+    );
+    if (!stale.length) return 0;
+    for (const row of stale) {
+      await client.from(CACHE_TABLE).delete().eq("query", row.query);
+    }
+    return stale.length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Wipes the entire `jyinx_semantic_cache` table (returns rows removed).
+ * Useful for a manual "clear cache" control in settings.
+ */
+export async function clearAllCache(): Promise<number> {
+  try {
+    const client = await createSupabaseClient();
+    const { error, count } = await client.from(CACHE_TABLE).delete().neq("query_hash", "0000000000000000000000000000000000000000000000000000000000000000");
+    if (error) return 0;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Whether a prompt should bypass the semantic cache (write/action intent).
+ * Commit-style prompts must always execute fresh — never serve a cached reply.
+ */
+export function isActionPrompt(prompt: string): boolean {
+  return /(^|\s)(commit|save|push|write|update|apply|edit|change|create|upload|delete)\b/i.test(prompt.trim());
 }
 
 /**

@@ -30,6 +30,33 @@ function AuthCallback() {
           setError(exchangeError.message);
           return;
         }
+        // Verify the token actually carries the `repo` scope. If the OAuth
+        // handshake granted a token without write access, send the user back to
+        // Jyinx's reconnect flow instead of letting commits fail later.
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.provider_token;
+        if (token) {
+          try {
+            const check = await fetch("/api/github/commit", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ action: "scope" }),
+              cache: "no-store",
+            });
+            const result = (await check.json().catch(() => ({}))) as { ok?: boolean; scopes?: string[]; error?: string };
+            if (!result.ok) {
+              const message = encodeURIComponent(result.error || "GitHub connection is missing write access. Reconnect with the request permissions.");
+              window.location.replace(`/jyinx?github_error=${message}`);
+              return;
+            }
+            if (result.scopes && !result.scopes.includes("repo")) {
+              window.location.replace(`/jyinx?github_error=${encodeURIComponent("Your GitHub connection is missing the repo write scope. Please connect GitHub again to allow Jyinx to modify and commit files.")}`);
+              return;
+            }
+          } catch {
+            // Post-exhange scope check is best-effort; proceed.
+          }
+        }
         const params = new URLSearchParams(searchParams.toString());
         params.delete("code");
         params.delete("next");

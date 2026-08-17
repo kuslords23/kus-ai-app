@@ -1,5 +1,5 @@
 import { Sandbox } from "@e2b/code-interpreter";
-import { commitFiles } from "@/services/githubCommit";
+import { commitFiles, GitHubCommitError } from "@/services/githubCommit";
 
 /**
  * Cloud sandbox execution engine for Jyinx.
@@ -29,7 +29,7 @@ export type SandboxStep = { phase: SandboxPhase; message: string; exitCode?: num
 
 export type SandboxOutcome =
   | { ok: true; commitUrl?: string; steps: SandboxStep[] }
-  | { ok: false; error: string; steps: SandboxStep[] };
+  | { ok: false; error: string; steps: SandboxStep[]; authorization?: boolean };
 
 type SandboxOptions = {
   repository: string;
@@ -230,7 +230,8 @@ export async function runSandboxPipeline(
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Sandbox execution failed.";
     emit({ phase: "error", message });
-    return { ok: false, error: message, steps };
+    const authorization = cause instanceof GitHubCommitError && cause.authorization;
+    return { ok: false, error: message, steps, authorization };
   } finally {
     if (sandbox) {
       sandbox.kill().catch(() => undefined);

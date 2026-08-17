@@ -20,19 +20,50 @@ export type CommitResult = {
 
 export class GitHubCommitError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  /** true when the failure is a missing/expired/invalid token or missing `repo` scope. */
+  readonly authorization: boolean;
+  constructor(status: number, message: string, authorization = false) {
     super(message);
     this.status = status;
+    this.authorization = authorization;
   }
+}
+
+const SCOPE_UNAUTHORIZED_MARKERS = [
+  "must have push access",
+  "not authorized",
+  "not allowed",
+  "missing the `repo` scope",
+  "scope",
+  "read-only",
+  "archived so is read-only",
+  "required authentication",
+  "bad credentials",
+];
+
+function classifyCommitError(status: number, message: string): GitHubCommitError {
+  const lowered = message.toLowerCase();
+  const authorization =
+    status === 401 ||
+    status === 403 ||
+    SCOPE_UNAUTHORIZED_MARKERS.some((marker) => lowered.includes(marker));
+  return new GitHubCommitError(status, message, authorization);
+}
+
+/** Throws GitHubCommitError marked `.authorization` when token/scope is the issue. */
+function assertScopeAllowed(response: Response, data: unknown): void {
+  if (response.ok) return;
+  const message = extractMessage(data, "GitHub could not complete the request.");
+  throw classifyCommitError(response.status, message);
 }
 
 /** Retrieves the active session's `provider_token` from Supabase. */
 async function getProviderToken(): Promise<string> {
   const { data, error } = await createClient().auth.getSession();
-  if (error) throw new GitHubCommitError(401, error.message);
+  if (error) throw new GitHubCommitError(401, error.message, true);
   const token = data.session?.provider_token;
   if (!token) {
-    throw new GitHubCommitError(401, "Connect GitHub first.");
+    throw new GitHubCommitError(401, "Connect GitHub first.", true);
   }
   return token;
 }
@@ -98,6 +129,39 @@ async function json<T>(url: string, headers: HeadersInit, init?: RequestInit): P
   return { response, data };
 }
 
+export type GitHubScopeStatus =
+  | { ok: true; scopes: string[]; login: string }
+  | { ok: false; error: string; status: number };
+
+/**
+ * Validates a GitHub token and confirms it carries the `repo` scope required to
+ * write and commit. Uses the `/user` endpoint's `X-OAuth-Scopes` response
+ * header (works for fine-grained PATs too — those respond with a verified
+ * `X-OAuth-Scopes` header when created with repo access).
+ */
+export async function checkGitHubScope(token: string): Promise<GitHubScopeStatus> {
+  if (!token) return { ok: false, error: "Connect GitHub first.", status: 401 };
+  try {
+    const response = await fetch("https://api.github.com/user", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": API_VERSION,
+      },
+      cache: "no-store",
+    });
+    const scopesHeader = response.headers.get("x-oauth-scopes") ?? "";
+    const scopes = scopesHeader.split(",").map((scope) => scope.trim()).filter(Boolean);
+    const login = ((await response.json().catch(() => null)) as { login?: string } | null)?.login ?? "";
+    if (!response.ok) {
+      return { ok: false, error: response.status === 401 ? "GitHub connection expired. Reconnect GitHub." : `GitHub rejected this token (${response.status}).`, status: response.status };
+    }
+    return { ok: true, scopes, login };
+  } catch {
+    return { ok: false, error: "Could not reach GitHub to verify this token.", status: 502 };
+  }
+}
+
 /**
  * Creates or updates a single file via the GitHub Contents API.
  * When `sha` is provided the existing file is edited; otherwise a new file is created.
@@ -127,7 +191,7 @@ export async function writeFile(opts: {
 
   const { response, data } = await json<{ content?: { sha?: string; path?: string }; commit?: { html_url?: string } }>(url, headers, { method: "PUT", body: JSON.stringify(body) });
   if (!response.ok) {
-    throw new GitHubCommitError(response.status, extractMessage(data, "GitHub could not save this file."));
+    throw classifyCommitError(response.status, extractMessage(data, "GitHub could not save this file."));
   }
   return {
     commitSha: data?.content?.sha ?? "",
@@ -151,7 +215,7 @@ export async function readFile(opts: {
     headersFor(token)
   );
   if (!response.ok) {
-    throw new GitHubCommitError(response.status, extractMessage(data, "GitHub could not read this file."));
+    throw classifyCommitError(response.status, extractMessage(data, "GitHub could not read this file."));
   }
   if (!data?.content || data.encoding !== "base64" || !data.sha) {
     throw new GitHubCommitError(415, "This file cannot be read as text.");
@@ -225,7 +289,7 @@ export async function commitFiles(opts: {
     const ref = (await refResponse.json()) as { object?: { sha?: string } };
     baseSha = ref.object?.sha;
   } else if (refResponse.status !== 404) {
-    throw new GitHubCommitError(refResponse.status, "Could not resolve the target branch.");
+    throw classifyCommitError(refResponse.status, "Could not resolve the target branch.");
   }
 
   if (baseSha) {
@@ -243,7 +307,7 @@ export async function commitFiles(opts: {
       body: JSON.stringify({ content: file.content, encoding: "utf-8" }),
     });
     if (!blobResponse.ok || !blob?.sha) {
-      throw new GitHubCommitError(blobResponse.status, `Could not stage ${file.path}.`);
+      throw classifyCommitError(blobResponse.status, `Could not stage ${file.path}.`);
     }
     entries.push({ path: file.path, mode: "100644", type: "blob", sha: blob.sha });
   }
@@ -256,7 +320,7 @@ export async function commitFiles(opts: {
     body: JSON.stringify(treeBody),
   });
   if (!treeResponse.ok || !tree?.sha) {
-    throw new GitHubCommitError(treeResponse.status, "Could not build the commit tree.");
+    throw classifyCommitError(treeResponse.status, "Could not build the commit tree.");
   }
 
   const commitBody: { message: string; tree: string; parents?: string[] } = { message: opts.message.trim().slice(0, 200), tree: tree.sha };
@@ -267,7 +331,7 @@ export async function commitFiles(opts: {
     body: JSON.stringify(commitBody),
   });
   if (!commitResponse.ok || !commit?.sha) {
-    throw new GitHubCommitError(commitResponse.status, "Could not create the commit.");
+    throw classifyCommitError(commitResponse.status, "Could not create the commit.");
   }
   const commitSha = commit.sha;
 
@@ -285,7 +349,7 @@ export async function commitFiles(opts: {
   }
   if (!updateResponse.response.ok) {
     const message = extractMessage(updateResponse.data, "The commit was created but the branch could not be updated.");
-    throw new GitHubCommitError(updateResponse.response.status, message);
+    throw classifyCommitError(updateResponse.response.status, message);
   }
 
   return {
