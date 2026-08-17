@@ -16,9 +16,9 @@ type CustomAgent = {
 };
 
 type Props = {
-  repositories: JyinxRepository[];
+  repositories?: JyinxRepository[];
   selectedRepositoryId?: number;
-  onRepositoryChange: (repository: JyinxRepository | null) => void;
+  onRepositoryChange?: (repository: JyinxRepository | null) => void;
   activeModel: JyinxModel;
   onModelChange: (model: JyinxModel) => void;
   onAgentChange?: (agent: CustomAgent | null) => void;
@@ -27,7 +27,7 @@ type Props = {
 
 const STORAGE_KEY = "jyinx:custom-agents";
 
-export function JyinxComposerControls({ repositories, selectedRepositoryId, onRepositoryChange, activeModel, onModelChange, onAgentChange, compact = false }: Props) {
+export function JyinxComposerControls({ activeModel, onModelChange, onAgentChange, compact = false }: Props) {
   const [agents, setAgents] = useState<CustomAgent[]>([]);
   const [agentId, setAgentId] = useState("");
   const [managerOpen, setManagerOpen] = useState(false);
@@ -87,7 +87,7 @@ export function JyinxComposerControls({ repositories, selectedRepositoryId, onRe
     setManagerOpen(false);
   };
 
-  return <div className={`relative z-20 rounded-xl border border-border bg-background/50 ${compact ? "p-2" : "p-3"}`}><div className="grid gap-2 sm:grid-cols-3"><label className="min-w-0"><span className="mb-1 block text-[10px] uppercase tracking-wider text-muted">Repository</span><select value={selectedRepositoryId ?? ""} onChange={(event) => onRepositoryChange(repositories.find((repository) => repository.id === Number(event.target.value)) ?? null)} className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-xs outline-none focus:border-gold"><option value="">Select repository</option>{repositories.map((repository) => <option key={repository.id} value={repository.id}>{repository.fullName}</option>)}</select></label><label className="min-w-0"><span className="mb-1 block text-[10px] uppercase tracking-wider text-muted">Model</span>
+  return <div className={`relative z-20 rounded-xl border border-border bg-background/50 ${compact ? "p-2" : "p-3"}`}><div className="grid gap-2 sm:grid-cols-2"><label className="min-w-0"><span className="mb-1 block text-[10px] uppercase tracking-wider text-muted">Model</span>
         <div className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs focus-within:border-gold">
           <HierarchicalModelSelector
             value={selection}

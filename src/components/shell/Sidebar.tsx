@@ -1,12 +1,75 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ChatThread } from "@/lib/threads/types";
 import type { User } from "@supabase/supabase-js";
 import { COMPANIONS } from "@/lib/companions/registry";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { HierarchicalModelSelector } from "@/components/models/HierarchicalModelSelector";
+import { findModel, type HierarchicalSelection } from "@/lib/models/catalog";
 import Link from "next/link";
+
+/** Shared Royal model storage — same keys used by ChatThread so both stay in sync. */
+const ROYAL_MODEL_KEY = "royal:model-choice";
+const ROYAL_GEMINI_MODEL_KEY = "royal:gemini-model-id";
+const ROYAL_MODEL_CHANGE_EVENT = "royal:model-change";
+type RoyalModel = "royal" | "gemini" | "kusai";
+
+function readRoyalModel(): { model: RoyalModel; geminiId: string } {
+  if (typeof window === "undefined") return { model: "royal", geminiId: "google/gemini-2.5-flash" };
+  try {
+    const saved = localStorage.getItem(ROYAL_MODEL_KEY) as RoyalModel | null;
+    const geminiId = localStorage.getItem(ROYAL_GEMINI_MODEL_KEY) || "google/gemini-2.5-flash";
+    if (saved === "gemini" || saved === "kusai" || saved === "royal") return { model: saved, geminiId };
+    return { model: "royal", geminiId };
+  } catch {
+    return { model: "royal", geminiId: "google/gemini-2.5-flash" };
+  }
+}
+
+function writeRoyalModel(model: RoyalModel, geminiId: string) {
+  try {
+    localStorage.setItem(ROYAL_MODEL_KEY, model);
+    localStorage.setItem(ROYAL_GEMINI_MODEL_KEY, geminiId);
+  } catch {
+    // ignore quota errors
+  }
+  /* Notify the active chat so its model selection stays in sync. */
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(ROYAL_MODEL_CHANGE_EVENT, { detail: { model, geminiId } }));
+  }
+}
+
+/** Map stored Royal model state to a HierarchicalSelection (Kus AI provider). */
+function royalStateToSelection(state: { model: RoyalModel; geminiId: string }): HierarchicalSelection {
+  if (state.model === "gemini") {
+    const found = findModel(state.geminiId);
+    return {
+      provider: "google",
+      providerLabel: "Google Gemini",
+      model: state.geminiId,
+      modelLabel: found?.model.label ?? state.geminiId,
+      agent: "auto",
+      agentName: "Auto",
+    };
+  }
+  return {
+    provider: "kusai",
+    providerLabel: "Kus AI (Custom)",
+    model: "kus-ai/royal",
+    modelLabel: state.model === "kusai" ? "Kus AI" : "Kus AI · Royal",
+    agent: "auto",
+    agentName: "Auto",
+  };
+}
+
+function selectionToRoyalModel(sel: HierarchicalSelection): { model: RoyalModel; geminiId: string } {
+  if (sel.provider === "google") {
+    return { model: "gemini", geminiId: sel.model };
+  }
+  return { model: sel.model === "kus-ai/royal" ? "kusai" : "royal", geminiId: sel.model };
+}
 
 function lastMessagePreview(thread: ChatThread) {
   const last = [...thread.messages].reverse().find((m) => m.content.trim());
@@ -61,6 +124,31 @@ export function Sidebar({
 }: SidebarProps) {
   const [query, setQuery] = useState("");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [companionsOpen, setCompanionsOpen] = useState(true);
+  const [royalState, setRoyalState] = useState<{ model: RoyalModel; geminiId: string }>(() =>
+    readRoyalModel()
+  );
+  const selection: HierarchicalSelection = useMemo(
+    () => royalStateToSelection(royalState),
+    [royalState]
+  );
+
+  // Keep sidebar model in sync if the user changes it elsewhere.
+  useEffect(() => {
+    const onChange = () => setRoyalState(readRoyalModel());
+    window.addEventListener("storage", onChange);
+    window.addEventListener(ROYAL_MODEL_CHANGE_EVENT as keyof WindowEventMap, onChange);
+    return () => {
+      window.removeEventListener("storage", onChange);
+      window.removeEventListener(ROYAL_MODEL_CHANGE_EVENT as keyof WindowEventMap, onChange);
+    };
+  }, []);
+
+  const handleSelectionChange = (sel: HierarchicalSelection) => {
+    const next = selectionToRoyalModel(sel);
+    setRoyalState(next);
+    writeRoyalModel(next.model, next.geminiId);
+  };
   const filtered = useMemo(
     () => (query.trim() ? searchFn(query) : threads),
     [query, searchFn, threads]
@@ -175,32 +263,59 @@ export function Sidebar({
               )}
             </div>
 
-            <div className="p-3 border-t border-border space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted px-1 mb-1">
-                Companions
-              </p>
-              <Link
-                href="/jyinx"
-                onClick={onClose}
-                className="flex items-center justify-between rounded-lg border border-gold/25 bg-gold/10 px-3 py-2 text-sm text-gold hover:bg-gold/15"
+            <div className="p-3 border-t border-border space-y-1 overflow-y-auto">
+              <button
+                type="button"
+                onClick={() => setCompanionsOpen((v) => !v)}
+                className="flex w-full items-center justify-between px-1 py-1"
               >
-                <span>Jyinx Studio</span>
-                <span className="text-xs">↗</span>
-              </Link>
-              {COMPANIONS.map((c) => (
-                <a
-                  key={c.id}
-                  href={c.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between px-3 py-2 rounded-lg text-sm text-muted hover:text-gold hover:bg-gold/5"
-                >
-                  <span>{c.shortName}</span>
-                  {c.status === "planned" && (
-                    <span className="text-[9px] uppercase text-muted/70">Soon</span>
-                  )}
-                </a>
-              ))}
+                <p className="text-[10px] uppercase tracking-wider text-muted">
+                  Companions
+                </p>
+                <span className={`text-xs text-muted transition-transform ${companionsOpen ? "rotate-90" : ""}`}>
+                  ›
+                </span>
+              </button>
+
+              {companionsOpen && (
+                <div className="space-y-1">
+                  <Link
+                    href="/jyinx"
+                    onClick={onClose}
+                    className="flex items-center justify-between rounded-lg border border-gold/25 bg-gold/10 px-3 py-2 text-sm text-gold hover:bg-gold/15"
+                  >
+                    <span>Jyinx Studio</span>
+                    <span className="text-xs">↗</span>
+                  </Link>
+                  {COMPANIONS.map((c) => (
+                    <a
+                      key={c.id}
+                      href={c.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between px-3 py-2 rounded-lg text-sm text-muted hover:text-gold hover:bg-gold/5"
+                    >
+                      <span>{c.shortName}</span>
+                      {c.status === "planned" && (
+                        <span className="text-[9px] uppercase text-muted/70">Soon</span>
+                      )}
+                    </a>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-2 pt-2 border-t border-border space-y-1.5">
+                <p className="text-[10px] uppercase tracking-wider text-muted px-1">
+                  Royal model
+                </p>
+                <div className="px-1">
+                  <HierarchicalModelSelector
+                    value={selection}
+                    onChange={handleSelectionChange}
+                  />
+                </div>
+              </div>
+
               <button
                 onClick={() => {
                   onOpenSettings();

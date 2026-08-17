@@ -70,8 +70,6 @@ import {
 } from "@/lib/kusai/royalGeminiTelemetry";
 import { ROYAL_SYSTEM_PROMPT } from "@/lib/persona/royal";
 import { getPreferredCustomKey, gatewayFetch } from "@/lib/kusai/apiKeys";
-import { HierarchicalModelSelector } from "@/components/models/HierarchicalModelSelector";
-import type { HierarchicalSelection } from "@/lib/models/catalog";
 
 type RoyalModel = "royal" | "gemini" | "kusai";
 
@@ -99,6 +97,8 @@ interface ChatThreadProps {
   activeAgentId: string;
   onAgentChange: (id: string) => void;
   settings: import("@/lib/settings").AppSettings;
+  /** Open the app menu / sidebar where the model picker now lives. */
+  onOpenMenu?: () => void;
 }
 
 export function ChatThreadView({
@@ -114,6 +114,7 @@ export function ChatThreadView({
   activeAgentId,
   onAgentChange,
   settings,
+  onOpenMenu,
 }: ChatThreadProps) {
   const { user, session } = useAuth();
   const userContext = useMemo(
@@ -171,40 +172,26 @@ export function ChatThreadView({
   const abortRef = useRef<AbortController | null>(null);
   const stoppedRef = useRef(false);
 
-  const selection: HierarchicalSelection = useMemo(() => {
-    if (model === "gemini") {
-      return {
-        provider: "google",
-        providerLabel: "Google Gemini",
-        model: geminiModelId,
-        modelLabel:
-          ROYAL_GEMINI_MODELS.find((m) => m.id === geminiModelId)?.label ?? geminiModelId,
-        agent: activeAgentId,
-        agentName: activeAgentId,
-      };
-    }
-    return {
-      provider: "kusai",
-      providerLabel: "Kus AI",
-      model: "kus-ai/royal",
-      modelLabel: model === "kusai" ? "Kus AI" : "Kus AI · Royal",
-      agent: activeAgentId,
-      agentName: activeAgentId,
+  // Keep the model selection in sync with the sidebar / settings picker.
+  useEffect(() => {
+    const onModelChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ model: string; geminiId?: string }>).detail;
+      if (!detail) return;
+      try {
+        const nextModel = detail.model;
+        if (nextModel === "gemini") {
+          setModel("gemini");
+          if (detail.geminiId) setGeminiModelId(detail.geminiId);
+        } else if (nextModel === "kusai") {
+          setModel("kusai");
+        } else {
+          setModel("royal");
+        }
+      } catch { /* ignore */ }
     };
-  }, [model, geminiModelId, activeAgentId]);
-
-  const handleHierarchicalChange = useCallback(
-    (sel: HierarchicalSelection) => {
-      if (sel.provider === "google") {
-        setGeminiModelId(sel.model);
-        setModel("gemini");
-      } else {
-        setModel("royal");
-      }
-      onAgentChange(sel.agent);
-    },
-    [onAgentChange]
-  );
+    window.addEventListener("royal:model-change", onModelChange);
+    return () => window.removeEventListener("royal:model-change", onModelChange);
+  }, []);
 
   const messages: ChatMessageData[] = useMemo(() => {
     if (!thread) return [];
@@ -901,28 +888,23 @@ export function ChatThreadView({
         {status && <p className="text-[10px] text-muted px-0.5">{status}</p>}
 
         <div className="flex items-center gap-1.5 px-0.5 flex-wrap">
-          <HierarchicalModelSelector
-            value={selection}
-            onChange={handleHierarchicalChange}
-            trigger={({ open, selection: sel }) => (
-              <button
-                type="button"
-                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                  open
-                    ? "border-gold/50 bg-gold/15 text-gold"
-                    : sel?.provider === "google"
-                      ? "border-purple/50 bg-purple/15 text-gold"
-                      : "border-border/80 text-muted hover:text-foreground"
-                }`}
-              >
-                <span className="text-gold">●</span>
-                {sel?.provider === "google"
-                  ? `✦ ${sel.modelLabel}`
-                  : `${sel?.modelLabel ?? "Model"} · ${sel?.agentName ?? "Auto"}`}
-                <span className="text-muted">▾</span>
-              </button>
-            )}
-          />
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/40 px-2 py-0.5 text-[10px] font-medium text-muted hover:border-gold/40 hover:text-foreground"
+            title="Change Royal model in the menu"
+          >
+            <span className="text-gold">●</span>
+            {model === "gemini"
+              ? `✦ ${
+                  ROYAL_GEMINI_MODELS.find((m) => m.id === geminiModelId)?.label ??
+                  geminiModelId
+                }`
+              : model === "kusai"
+                ? "Kus AI"
+                : "Kus AI · Royal"}
+            <span className="text-muted">☰</span>
+          </button>
         </div>
 
         <SuggestionChips chips={chips} onSelect={onChip} />

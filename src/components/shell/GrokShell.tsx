@@ -11,9 +11,7 @@ import { useVoiceInput } from "@/lib/hooks/useVoice";
 import { loadSettings, saveSettings, applyTheme, type AppSettings } from "@/lib/settings";
 import { getAgent } from "@/lib/agents/registry";
 import type { ChatAttachment } from "@/lib/attachments/types";
-import { HubBridgeFab } from "@/components/hub/HubBridgeFab";
 import { useVisualViewport } from "@/lib/hooks/useVisualViewport";
-import Link from "next/link";
 
 type View = "home" | "thread";
 
@@ -135,13 +133,6 @@ export function GrokShell() {
           </p>
         </div>
 
-        <Link
-          href="/jyinx"
-          className="hidden sm:inline-flex items-center rounded-lg border border-gold/30 bg-gold/10 px-2.5 py-1.5 text-xs font-medium text-gold hover:bg-gold/20"
-        >
-          Jyinx Studio
-        </Link>
-
         <button
           onClick={() => {
             newThread();
@@ -187,37 +178,10 @@ export function GrokShell() {
             activeAgentId={settings.activeAgentId}
             onAgentChange={handleAgentChange}
             settings={settings}
+            onOpenMenu={() => setSidebarOpen(true)}
           />
         )}
       </main>
-
-      <nav className="sm:hidden flex shrink-0 items-center gap-2 overflow-x-auto border-t border-border bg-background/95 px-3 py-2">
-        <button
-          type="button"
-          onClick={() => setView("home")}
-          className="shrink-0 rounded-full border border-gold/30 bg-gold/10 px-3 py-1.5 text-[11px] text-gold"
-        >
-          For You
-        </button>
-        <a
-          href={process.env.NEXT_PUBLIC_LIVE_COMPANION_URL || "https://sport-clan-nexus.vercel.app"}
-          className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] text-muted"
-        >
-          What&apos;s live
-        </a>
-        <a
-          href={process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL || "https://kus-sports.vercel.app"}
-          className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] text-muted"
-        >
-          Sports analytics
-        </a>
-        <Link
-          href="/jyinx"
-          className="shrink-0 rounded-full border border-gold/35 bg-gold/15 px-3 py-1.5 text-[11px] font-medium text-gold"
-        >
-          Jyinx
-        </Link>
-      </nav>
 
       <Sidebar
         open={sidebarOpen}
@@ -253,8 +217,6 @@ export function GrokShell() {
         onSignOut={signOut}
         userId={user?.id}
       />
-
-      <HubBridgeFab />
     </div>
   );
 }
