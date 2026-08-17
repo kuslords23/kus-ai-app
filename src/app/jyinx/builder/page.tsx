@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { JyinxIde } from "@/components/jyinx/JyinxIde";
+import { WebBuilderEngine } from "@/components/jyinx/WebBuilderEngine";
 
 export const metadata: Metadata = {
-  title: "Jyinx Web Builder",
-  description: "Scaffold, edit, and live-preview full-stack web apps in a dual-pane IDE with instant desktop and mobile viewports.",
+  title: "Jyinx Web Builder Engine",
+  description: "Agentic scaffold, design, and live DOM injection feedback loop for full-stack web apps and blogs.",
 };
 
 export default function JyinxBuilderPage() {
-  return <JyinxIde />;
+  return <WebBuilderEngine />;
 }
