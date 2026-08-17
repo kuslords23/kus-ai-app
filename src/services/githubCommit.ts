@@ -337,13 +337,41 @@ export async function commitFiles(opts: {
 
   const branchRef = `heads/${targetBranch}`;
   const refPayload = { sha: commitSha } as const;
-  const applyRef =
-    refResponse.ok || baseSha
-      ? () => json<{ object?: { sha?: string } }>(`${repoUrl}/git/ref/${branchRef}`, headers, { method: "PATCH", body: JSON.stringify({ ...refPayload, force: false }) })
-      : () => json<{ object?: { sha?: string } }>(`${repoUrl}/git/refs`, headers, { method: "POST", body: JSON.stringify({ ref: `refs/heads/${targetBranch}`, sha: commitSha }) });
-  let updateResponse: Awaited<ReturnType<typeof applyRef>>;
+  const patchRef = (force: boolean) =>
+    json<{ object?: { sha?: string } }>(`${repoUrl}/git/ref/${branchRef}`, headers, {
+      method: "PATCH",
+      body: JSON.stringify({ ...refPayload, force }),
+    });
+  const createRef = () =>
+    json<{ object?: { sha?: string } }>(`${repoUrl}/git/refs`, headers, {
+      method: "POST",
+      body: JSON.stringify({ ref: `refs/heads/${targetBranch}`, sha: commitSha }),
+    });
+
+  // Resolve the target reference idempotently:
+  //  - branch exists  → fast-forward PATCH; if the existing ref is not a
+  //    direct ancestor, retry the same PATCH with `force: true` so Jyinx
+  //    switches the existing review branch to the new commit instead of
+  //    failing with "Reference already exists" / non-fast-forward.
+  //  - branch missing  → POST to create it; if a concurrent process created
+  //    the ref first (422), fall back to the PATCH path above.
+  let updateResponse: Awaited<ReturnType<typeof patchRef>>;
   try {
-    updateResponse = await applyRef();
+    if ((refResponse.ok || baseSha) && refResponse.status !== 404) {
+      updateResponse = await patchRef(false);
+      if (!updateResponse.response.ok && (updateResponse.response.status === 422 || updateResponse.response.status === 409)) {
+        updateResponse = await patchRef(true);
+      }
+    } else {
+      updateResponse = await createRef();
+      if (!updateResponse.response.ok && updateResponse.response.status === 422) {
+        // The branch appeared between our check and the create — update it.
+        updateResponse = await patchRef(false);
+        if (!updateResponse.response.ok && (updateResponse.response.status === 422 || updateResponse.response.status === 409)) {
+          updateResponse = await patchRef(true);
+        }
+      }
+    }
   } catch {
     throw new GitHubCommitError(500, "The commit was created but the branch could not be updated.");
   }

@@ -13,7 +13,7 @@ type ContextState = {
   error: string | null;
 };
 
-export function useRepositoryContext(repository: JyinxRepository | null): ContextState {
+export function useRepositoryContext(repository: JyinxRepository | null, query?: string | null): ContextState {
   const [state, setState] = useState<ContextState>({ files: [], context: "", loading: false, error: null });
 
   useEffect(() => {
@@ -28,7 +28,9 @@ export function useRepositoryContext(repository: JyinxRepository | null): Contex
         const { data } = await createClient().auth.getSession();
         const token = data.session?.provider_token;
         if (!token) throw new Error("Reconnect GitHub to load repository context.");
-        const response = await fetch(`/api/github/workspace?repository=${encodeURIComponent(repository.fullName)}&branch=${encodeURIComponent(repository.defaultBranch)}&context=1`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        const params = new URLSearchParams({ repository: repository.fullName, branch: repository.defaultBranch, context: "1" });
+        if (query) params.set("q", query);
+        const response = await fetch(`/api/github/workspace?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
         const result = (await response.json()) as { files?: ContextFile[]; error?: string };
         if (!response.ok) throw new Error(result.error || "Unable to load repository context.");
         const files = result.files ?? [];
@@ -39,7 +41,7 @@ export function useRepositoryContext(repository: JyinxRepository | null): Contex
     };
     void load();
     return () => { live = false; };
-  }, [repository]);
+  }, [repository, query]);
 
   return state;
 }

@@ -34,7 +34,7 @@ export function JyinxComposerControls({ activeModel, onModelChange, onAgentChang
   const [name, setName] = useState("");
   const [modelId, setModelId] = useState(JYINX_MODELS[0]?.id ?? "openrouter/auto");
   const [endpoint, setEndpoint] = useState("https://openrouter.ai/api/v1/chat/completions");
-  const [systemPrompt, setSystemPrompt] = useState("You are a careful coding assistant.");
+  const [systemPrompt, setSystemPrompt] = useState("You are Jyinx, an autonomous coding agent with full write access to the attached GitHub repository through the Jyinx commit engine. You CAN create, edit, and commit files. When asked to modify code, output the complete new content of each file inside a fenced code block preceded by a `PATH:` header, and a `COMMIT: <message>` line when it should be committed. Placeholder text like \"Plan, Build, / for skills, @ for context\" is chat-input UI hint text, not a user request. Execute clear instructions directly without asking clarifying questions or reverting unrelated files.");
   const [tag, setTag] = useState("coding");
 
   useEffect(() => {

@@ -173,10 +173,46 @@ export async function runSandboxPipeline(
     const { repository, branch, providerToken, files, commitMessage } = opts;
     const repoDir = `/${repository.split("/")[1] ?? "repo"}`;
 
-    // Clone the repository into the sandbox using the token-embedded URL.
+    // Clone the repository into the sandbox so private repos authenticate.
+    // Preferred path: pass the OAuth token through the SDK's clone credentials
+    // (keeps the secret out of the remote URL / argv). GitHub accepts an
+    // OAuth/PAT token as the HTTPS password with any non-empty username.
     emit({ phase: "cloning", message: `Cloning ${repository}…` });
-    const cloneUrl = `https://x-access-token:${providerToken}@github.com/${repository}.git`;
-    await sandbox.git.clone(cloneUrl, { path: repoDir, branch });
+    const cloneUrl = `https://github.com/${repository}.git`;
+
+    let clone: RunResult;
+    const sdkClone = await sandbox.git.clone(cloneUrl, {
+      path: repoDir,
+      branch,
+      username: "x-access-token",
+      password: providerToken,
+    });
+    clone = {
+      stdout: String(sdkClone?.stdout ?? ""),
+      stderr: String(sdkClone?.stderr ?? ""),
+      exitCode: typeof sdkClone?.exitCode === "number" ? sdkClone.exitCode : 1,
+    };
+
+    if (clone.exitCode !== 0) {
+      // Fallback: configure a git credential helper so the CLI can authenticate
+      // without baking the token into the remote URL, then retry the clone.
+      emit({ phase: "cloning", message: "Retrying clone with a git credential helper…" });
+      const homeProbe = await cmd(sandbox, "/", "echo ${HOME:-/root}");
+      const home = homeProbe.stdout.trim() || "/root";
+      await sandbox.files.write([{ path: `${home}/.git-credentials`, data: `https://x-access-token:${providerToken}@github.com\n` }]);
+      await cmd(sandbox, "/", "git config --global credential.helper store");
+      await cmd(sandbox, "/", `chmod 600 ${home}/.git-credentials`);
+      const retry = await sandbox.commands.run(`git clone --branch "${branch}" --single-branch ${cloneUrl} ${repoDir}`);
+      clone = {
+        stdout: String(retry?.stdout ?? ""),
+        stderr: String(retry?.stderr ?? ""),
+        exitCode: typeof retry?.exitCode === "number" ? retry.exitCode : 1,
+      };
+      if (clone.exitCode !== 0) {
+        emit({ phase: "error", message: `Git clone failed: ${tail((clone.stderr || clone.stdout), 4)}`, exitCode: clone.exitCode });
+        return { ok: false, error: "Git clone requires credentials for private repositories. The GitHub access token could not be injected into the sandbox clone.", steps };
+      }
+    }
     emit({ phase: "cloning", message: "Repository cloned into the sandbox." });
 
     // Write the edited files into the sandbox filesystem (creates parent dirs).

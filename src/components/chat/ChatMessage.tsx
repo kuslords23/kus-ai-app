@@ -52,6 +52,8 @@ interface ChatMessageProps {
   onEdit?: (message: ChatMessageData) => void;
   /** Re-run the request that produced this message. */
   onRetry?: (message: ChatMessageData) => void;
+  /** Save the assistant message into a Notebook. */
+  onSave?: (message: ChatMessageData) => void;
   /** True when the user message is currently being edited (truncate content). */
   editing?: boolean;
 }
@@ -81,6 +83,7 @@ export function ChatMessage({
   onCopy,
   onEdit,
   onRetry,
+  onSave,
   editing,
 }: ChatMessageProps) {
   const isUser = message.role === "user";
@@ -130,6 +133,12 @@ export function ChatMessage({
               <button type="button" onClick={() => onEdit(message)} className={actionBtn} aria-label="Edit message">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                 Edit
+              </button>
+            )}
+            {!isUser && onSave && (
+              <button type="button" onClick={() => onSave(message)} className={actionBtn} aria-label="Save to notebook">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 7V4h16v3M9 20h6M12 4v10"/><path d="M18 10v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-8"/></svg>
+                Save
               </button>
             )}
             {!isUser && onRetry && (

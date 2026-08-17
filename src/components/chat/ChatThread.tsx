@@ -43,6 +43,12 @@ import {
 } from "@/lib/memory/royalMemory";
 import { shouldSpeakInSilentMode } from "@/lib/briefings/daily";
 import {
+  getNotebooks,
+  createNotebook,
+  upsertNotebook,
+  saveChatExchangeToNotebook,
+} from "@/lib/jyinx/notebooks";
+import {
   buildPendingAction,
   classifyAction,
   describeAction,
@@ -762,6 +768,25 @@ export function ChatThreadView({
     }
   }, []);
 
+  const handleSave = useCallback(
+    (msg: ChatMessageData) => {
+      const notebooks = getNotebooks();
+      let notebook = notebooks[0];
+      if (!notebook) {
+        notebook = createNotebook("Royal saved chats");
+        upsertNotebook(notebook);
+      }
+      saveChatExchangeToNotebook(notebook.id, {
+        role: "assistant",
+        title: `Royal chat · ${new Date().toLocaleString()}`,
+        content: msg.content,
+      });
+      notifySuccess("Saved to notebook");
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
   const handleEdit = useCallback(
     (msg: ChatMessageData) => {
       if (!thread) return;
@@ -879,6 +904,7 @@ export function ChatThreadView({
             onCopy={handleCopy}
             onEdit={msg.role === "user" ? handleEdit : undefined}
             onRetry={msg.role === "assistant" ? handleRetry : undefined}
+            onSave={msg.role === "assistant" ? handleSave : undefined}
             editing={editingMsg?.id === msg.id}
           />
         ))}

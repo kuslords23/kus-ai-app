@@ -41,6 +41,109 @@ async function githubJson<T>(url: string, headers: HeadersInit, init?: RequestIn
   return { response, data };
 }
 
+// File extensions considered source/code that Jyinx should index into context.
+const CODE_EXTENSIONS = new Set([
+  "ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "css", "scss", "sass", "less",
+  "html", "htm", "md", "mdx", "py", "rs", "go", "rb", "php", "java", "kt", "swift",
+  "vue", "svelte", "graphql", "sql", "yml", "yaml", "sh", "prisma",
+]);
+// Directories whose files are highly relevant for UI/component edits.
+const PRIORITY_DIRS = [
+  "components/", "app/", "views/", "pages/", "src/", "screens/", "ui/",
+  "features/", "widgets/", "layouts/", "containers/",
+];
+const MAX_CONTEXT_FILES = 18;
+const MAX_CONTEXT_BYTES = 600_000;
+
+function contextPriority(path: string): number {
+  const lower = path.toLowerCase();
+  let score = 0;
+  if (PRIORITY_DIRS.some((d) => lower.startsWith(d))) score += 20;
+  const segments = lower.split("/");
+  for (const seg of segments) {
+    if (seg === "components" || seg === "views" || seg === "pages" || seg === "screens") score += 5;
+  }
+  if (segments.length <= 2) score += 2; // shallow files are cheap & relevant
+  const base = lower.split("/").pop() ?? "";
+  if (base === "app" || base === "app.") score += 3;
+  return score;
+}
+
+function isCodePath(path: string): boolean {
+  const name = (path.split("/").pop() ?? "").toLowerCase();
+  if (!name.includes(".")) return false;
+  const ext = name.split(".").pop() ?? "";
+  return CODE_EXTENSIONS.has(ext);
+}
+
+async function fetchRawFile(
+  repository: string,
+  path: string,
+  branch: string,
+  headers: HeadersInit
+): Promise<{ path: string; content: string } | null> {
+  const url = `https://api.github.com/repos/${repository}/contents/${path}?ref=${encodeURIComponent(branch)}`;
+  const { response, data } = await githubJson<{ type?: string; path?: string; content?: string; encoding?: string; size?: number }>(url, headers);
+  if (!response.ok || data?.type !== "file" || data.encoding !== "base64" || !data.content) return null;
+  return { path: data.path ?? path, content: Buffer.from(data.content, "base64").toString("utf8") };
+}
+
+/**
+ * Recursively index the project file tree for Jyinx context. Uses the Git
+ * Trees API (`recursive=1`) so files inside components/, app/, views/, etc. are
+ * discovered — not just root configuration files. Results are ranked by
+ * relevance (component/service directories first), optionally filtered to paths
+ * matching `q`, and bounded by file count + total bytes.
+ */
+async function loadContextFiles(
+  repository: string,
+  branch: string,
+  headers: HeadersInit,
+  query?: string | null
+): Promise<Array<{ path: string; content: string }>> {
+  const treeUrl = `https://api.github.com/repos/${repository}/git/trees/${encodeURIComponent(branch)}?recursive=1`;
+  const { response, data } = await githubJson<{ tree?: Array<{ path?: string; type?: string; size?: number }>; truncated?: boolean }>(treeUrl, headers);
+  if (!response.ok || !data?.tree) return [];
+
+  const needle = query?.trim().toLowerCase();
+  const matches = data.tree
+    .filter((node) => typeof node.path === "string" && node.type === "blob" && isCodePath(node.path))
+    .map((node) => ({ path: node.path as string, size: typeof node.size === "number" ? node.size : 0 }))
+    // Skip lockfiles/binaries/coverage noise and vendored deps for context.
+    .filter((entry) => {
+      const lower = entry.path.toLowerCase();
+      if (lower.includes("/node_modules/") || lower.includes("/dist/") || lower.includes("/build/")) return false;
+      if (lower.endsWith("package-lock.json") || lower.endsWith("yarn.lock") || lower.endsWith("pnpm-lock.yaml") || lower.endsWith("go.sum")) return false;
+      return true;
+    });
+
+  const scored = matches
+    .map((entry) => ({ entry, priority: contextPriority(entry.path) }))
+    .sort((a, b) => {
+      // Search keyword takes precedence when present.
+      if (needle) {
+        const aHit = a.entry.path.toLowerCase().includes(needle) ? 1 : 0;
+        const bHit = b.entry.path.toLowerCase().includes(needle) ? 1 : 0;
+        if (aHit !== bHit) return bHit - aHit;
+      }
+      return b.priority - a.priority || b.entry.size - a.entry.size;
+    });
+
+  const files: Array<{ path: string; content: string }> = [];
+  let totalBytes = 0;
+  for (const { entry } of scored) {
+    if (files.length >= MAX_CONTEXT_FILES) break;
+    if (entry.size > 200_000) continue; // keep context lean
+    const fetched = await fetchRawFile(repository, entry.path, branch, headers);
+    if (fetched) {
+      files.push(fetched);
+      totalBytes += typeof entry.size === "number" ? entry.size : Buffer.byteLength(fetched.content);
+      if (totalBytes >= MAX_CONTEXT_BYTES) break;
+    }
+  }
+  return files;
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const headers = githubHeaders(request);
   if (!headers) return NextResponse.json({ error: "Connect GitHub first." }, { status: 401 });
@@ -62,15 +165,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .map((entry) => ({ name: entry.name, path: entry.path, type: entry.type, size: entry.size ?? 0 }))
       .filter((entry) => entry.type === "file" || entry.type === "dir");
     if (wantsContext) {
-      const candidates = entries.filter((entry) => entry.type === "file" && entry.size <= 120_000).slice(0, 12);
-      const files = [] as Array<{ path: string; content: string }>;
-      for (const entry of candidates) {
-        const fileResult = await githubJson<{ type?: string; path?: string; content?: string; encoding?: string; size?: number }>(`${baseUrl}/${entry.path}?ref=${encodeURIComponent(branch)}`, headers);
-        const file = fileResult.data;
-        if (fileResult.response.ok && file?.type === "file" && file.encoding === "base64" && file.content && (file.size ?? 0) <= 120_000) {
-          files.push({ path: file.path ?? entry.path, content: Buffer.from(file.content, "base64").toString("utf8") });
-        }
-      }
+      const files = await loadContextFiles(repository, branch, headers, request.nextUrl.searchParams.get("q"));
       return NextResponse.json({ type: "context", entries, files });
     }
     return NextResponse.json({ type: "directory", entries });
@@ -112,7 +207,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const existingRef = await fetch(`${repoUrl}/git/ref/heads/${encodeURIComponent(branchName)}`, { headers, cache: "no-store" });
   if (existingRef.status === 404) {
     const createRef = await fetch(`${repoUrl}/git/refs`, { method: "POST", headers, body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: baseSha }) });
-    if (!createRef.ok) return NextResponse.json({ error: "Could not create a review branch." }, { status: 502 });
+    // A concurrent Jyinx run may have created the ref first (422
+    // "Reference already exists") — that is fine; continue writing to it.
+    if (!createRef.ok && createRef.status !== 422) return NextResponse.json({ error: "Could not create a review branch." }, { status: 502 });
   } else if (!existingRef.ok) {
     return NextResponse.json({ error: "Could not access the review branch." }, { status: 502 });
   }

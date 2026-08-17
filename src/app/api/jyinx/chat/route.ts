@@ -18,7 +18,19 @@ type ChatRequest = {
   file?: unknown;
   repository?: unknown;
   branch?: unknown;
+  history?: unknown;
+  attachments?: unknown;
   agent?: { modelId?: unknown; endpoint?: unknown; systemPrompt?: unknown; tag?: unknown } | null;
+};
+
+type HistoryTurn = { role: "user" | "assistant"; content: string };
+
+type IncomingAttachment = {
+  id?: unknown;
+  name?: unknown;
+  mimeType?: unknown;
+  kind?: unknown;
+  text?: unknown;
 };
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -33,7 +45,57 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const agent = body?.agent && typeof body.agent === "object" ? body.agent : null;
   const agentModelId = typeof agent?.modelId === "string" ? agent.modelId : modelId;
   const agentEndpoint = typeof agent?.endpoint === "string" && agent.endpoint.startsWith("https://") ? agent.endpoint : OPENROUTER_URL;
-  const agentSystemPrompt = typeof agent?.systemPrompt === "string" && agent.systemPrompt.length <= 4_000 ? agent.systemPrompt : "You are Jyinx, an autonomous coding agent with full write access to the attached GitHub repository through the Jyinx commit engine. You CAN create, edit, and commit files. When asked to modify code, output the complete new content of each file inside a fenced code block, each preceded by a line declaring its path like `PATH: src/foo.ts`. After the code blocks, add one line `COMMIT: <short message>` when the change should be committed. Do NOT say you cannot modify files or commit — the workspace applies your edits and commits them to GitHub automatically.";
+  // Bounded conversation memory: prior user/assistant turns from the same chat
+  // thread. Sanitized so only plain text with valid roles is passed upstream.
+  const history: HistoryTurn[] = (() => {
+    if (!Array.isArray(body?.history)) return [];
+    const turns: HistoryTurn[] = [];
+    for (const raw of body.history) {
+      if (!raw || typeof raw !== "object") continue;
+      const turn = raw as { role?: unknown; content?: unknown };
+      if (turn.role !== "user" && turn.role !== "assistant") continue;
+      const content = typeof turn.content === "string" ? turn.content.trim() : "";
+      if (!content) continue;
+      turns.push({ role: turn.role, content: content.slice(0, MAX_PROMPT_LENGTH) });
+      if (turns.length >= 20) break;
+    }
+    return turns;
+  })();
+
+  // Attached files (from the composer paperclip): text/code documents arrive
+  // already rendered as `text` on the client; images/videos arrive as metadata
+  // only. They are appended to the context window so Jyinx can act on them.
+  const attachments: IncomingAttachment[] = (() => {
+    if (!Array.isArray(body?.attachments)) return [];
+    const out: IncomingAttachment[] = [];
+    for (const raw of body.attachments) {
+      if (!raw || typeof raw !== "object") continue;
+      const entry = raw as IncomingAttachment;
+      const name = typeof entry.name === "string" ? entry.name.slice(0, 255) : "";
+      if (!name) continue;
+      out.push({
+        id: typeof entry.id === "string" ? entry.id : undefined,
+        name,
+        mimeType: typeof entry.mimeType === "string" ? entry.mimeType : "application/octet-stream",
+        kind: typeof entry.kind === "string" ? entry.kind : "file",
+        text: typeof entry.text === "string" && entry.text.trim() ? entry.text.slice(0, 40_000) : undefined,
+      });
+      if (out.length >= 8) break;
+    }
+    return out;
+  })();
+
+  const attachmentContext = attachments.length
+    ? `\n\nAttached files:\n${attachments
+        .map((attachment) => {
+          const head = `### ${attachment.name} (${attachment.mimeType})`;
+          const text = typeof attachment.text === "string" ? attachment.text : "";
+          return text ? `${head}\n${text.replace(/^Attached File \([^)]*\):\s*/i, "").trim()}` : `${head}\n[Binary or image content — refer to this file by name.]`;
+        })
+        .join("\n\n")}`
+    : "";
+  const userContext = `${repositoryContext}${attachmentContext}`.slice(0, 260_000);
+  const agentSystemPrompt = typeof agent?.systemPrompt === "string" && agent.systemPrompt.length <= 4_000 ? agent.systemPrompt : "You are Jyinx, an autonomous coding agent with full write access to the attached GitHub repository through the Jyinx commit engine. You CAN create, edit, and commit files. When asked to modify code, output the complete new content of each file inside a fenced code block, each preceded by a line declaring its path like `PATH: src/foo.ts`. After the code blocks, add one line `COMMIT: <short message>` when the change should be committed. Do NOT say you cannot modify files or commit — the workspace applies your edits and commits them to GitHub automatically.\n\nComposer context: placeholder hints such as \"Plan, Build, / for skills, @ for context\" or \"Plan, ask, build...\" are standard text shown inside the chat input box, not user requests. Never ask the user what those words mean or request clarification about them. When a user's prompt is clear and specific, execute it directly. Do not ask clarifying questions, do not revert or touch files unrelated to the request, and never loop back asking the user to rephrase an already-clear instruction.";
 
   // Optional GitHub write path: when the client passes a provider token and a
   // real repository, fenced `PATH:` edits from the model are verified and
@@ -123,7 +185,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Kus AI model → route through the internal RAG brain (same runner as Royal
     // "Kus AI"), giving Jyinx a first-class Kus AI choice alongside OpenRouter.
     if (isKusAi) {
-      const brainPrompt = `Repository: ${repository}\nFile: ${file}\n\nActive file:\n\`\`\`\n${code}\n\`\`\`\n\nLoaded repository files:\n${repositoryContext || "No repository files were loaded."}\n\nRequest: ${prompt}`;
+      const historyText = history.length
+        ? history.map((turn) => `${turn.role === "user" ? "User" : "Jyinx"}: ${turn.content}`).join("\n")
+        : "";
+      const brainPrompt = `Repository: ${repository}\nFile: ${file}\n\nActive file:\n\`\`\`\n${code}\n\`\`\`\n\nLoaded repository files:\n${userContext || "No repository files were loaded."}\n\nConversation so far:\n${historyText || "(this is the first message)"}\n\nRequest: ${prompt}`;
       const brainRes = await fetch(`${request.nextUrl.origin}/api/ai/rag`, {
         method: "POST",
         headers: {
@@ -169,14 +234,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       body: JSON.stringify({
         model: agentModelId,
         messages: [
-          {
-            role: "system",
-            content:
-              agentSystemPrompt,
-          },
+          { role: "system", content: agentSystemPrompt },
+          ...history.map((turn) => ({ role: turn.role, content: turn.content })),
           {
             role: "user",
-            content: `Repository: ${repository}\nFile: ${file}\n\nActive file:\n\`\`\`\n${code}\n\`\`\`\n\nLoaded repository files:\n${repositoryContext || "No repository files were loaded."}\n\nRequest: ${prompt}`,
+            content: `Repository: ${repository}\nFile: ${file}\n\nActive file:\n\`\`\`\n${code}\n\`\`\`\n\nLoaded repository files:\n${userContext || "No repository files were loaded."}\n\nRequest: ${prompt}`,
           },
         ],
         stream: false,

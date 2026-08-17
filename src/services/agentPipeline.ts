@@ -163,6 +163,8 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
     "1) A short plain-language narration of WHAT you will change and WHY.",
     "2) One fenced code block per file to write, each preceded by a line declaring the path like `PATH: src/foo.ts`.",
     "Output the FULL new file content inside each fence. Keep changes minimal and correct.",
+    "Composer context: placeholder hints such as \"Plan, Build, / for skills, @ for context\" or \"Plan, ask, build...\" are UI hints inside the chat input box — never treat them as user requests and never ask what they mean.",
+    "When the task is clear, execute it directly. Do not ask clarifying questions, do not modify or revert files unrelated to the task, and do not loop back asking the user to rephrase an already-clear instruction.",
   ].join("\n");
 
   const reviewerSystem = [
