@@ -64,6 +64,18 @@ import {
   fetchKingdomKnowledge,
   looksLikeHubMetaJunk,
 } from "@/lib/kingdom/client";
+import {
+  appendRoyalGeminiSample,
+  emitRoyalGeminiSampleToTrainingPlane,
+} from "@/lib/kusai/royalGeminiTelemetry";
+import { ROYAL_SYSTEM_PROMPT } from "@/lib/persona/royal";
+
+type RoyalModel = "royal" | "gemini";
+
+const ROYAL_GEMINI_MODELS = [
+  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+];
 
 interface ChatThreadProps {
   thread: ChatThread | null;
@@ -118,6 +130,12 @@ export function ChatThreadView({
   const [messageFeedback, setMessageFeedback] = useState<
     Record<string, "helpful" | "not_helpful">
   >({});
+  const [model, setModel] = useState<RoyalModel>("royal");
+  const [geminiModelId, setGeminiModelId] = useState<string>(
+    ROYAL_GEMINI_MODELS[0].id
+  );
+  const [geminiModelOpen, setGeminiModelOpen] = useState(false);
+  const geminiHistoryRef = useRef<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const stoppedRef = useRef(false);
@@ -234,9 +252,107 @@ export function ChatThreadView({
       }
 
       setIsStreaming(true);
-      setStatus(`${agent.name} thinking…`);
+      setStatus(`${model === "gemini" ? "Gemini" : agent.name} thinking…`);
       stoppedRef.current = false;
       abortRef.current = new AbortController();
+
+      if (model === "gemini") {
+        const geminiAbort = abortRef.current;
+        try {
+          const geminiRes = await fetch("/api/kusai/royal-gemini", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: displayQuery,
+              model: geminiModelId,
+              system: ROYAL_SYSTEM_PROMPT,
+              history: geminiHistoryRef.current.slice(-8),
+            }),
+            signal: geminiAbort.signal,
+          });
+          const geminiData = (await geminiRes.json().catch(() => null)) as {
+            content?: string;
+            model?: string;
+            error?: string;
+          } | null;
+
+          if (!geminiRes.ok || !geminiData?.content) {
+            if (!stoppedRef.current) {
+              notifyError("Gemini couldn't respond", geminiData?.error || "Request failed");
+            }
+          } else {
+            const geminiText = geminiData.content.trim();
+            geminiHistoryRef.current = [
+              ...geminiHistoryRef.current,
+              { role: "user" as const, content: displayQuery },
+              { role: "assistant" as const, content: geminiText },
+            ].slice(-40);
+
+            onUpdate(thread.id, (t) =>
+              updateThreadMessage([t], t.id, replyId, {
+                content: geminiText,
+                sourceLabel: `${geminiData.model || geminiModelId} · Royal`,
+              })[0]
+            );
+
+            if (user?.id) {
+              void persistMessageToCloud(
+                user.id,
+                thread.id,
+                "assistant",
+                geminiText,
+                [geminiData.model || geminiModelId]
+              );
+            }
+
+            if (thread.title === "New chat") {
+              onUpdate(thread.id, (t) => ({
+                ...t,
+                title: titleFromMessage(displayQuery),
+              }));
+            }
+
+            const contribute = loadSettings().contributeToLearning;
+            if (contribute) {
+              appendRoyalGeminiSample({
+                instruction: displayQuery,
+                system: ROYAL_SYSTEM_PROMPT.slice(0, 1200),
+                model: geminiData.model || geminiModelId,
+                output: geminiText,
+              });
+              emitRoyalGeminiSampleToTrainingPlane({
+                instruction: displayQuery,
+                system: ROYAL_SYSTEM_PROMPT.slice(0, 1200),
+                model: geminiData.model || geminiModelId,
+                output: geminiText,
+                sessionId: thread.id,
+              });
+            }
+          }
+        } catch (cause) {
+          if (!stoppedRef.current) {
+            notifyError(
+              "Couldn't reach Gemini",
+              cause instanceof Error ? cause.message : "Request failed"
+            );
+            onUpdate(thread.id, (t) =>
+              updateThreadMessage([t], t.id, replyId, {
+                content:
+                  "Gemini couldn't reply just now — check your connection and try again.",
+              })[0]
+            );
+          }
+        } finally {
+          if (stoppedRef.current && !geminiAbort.signal.aborted) {
+            setStatus("Stopped");
+          } else if (!stoppedRef.current) {
+            setStatus(model === "gemini" ? "Gemini" : agent.name);
+          }
+          setIsStreaming(false);
+          abortRef.current = null;
+        }
+        return;
+      }
 
       const history = thread.messages
         .filter((m) => m.content)
@@ -534,6 +650,10 @@ export function ChatThreadView({
 
   const bootstrapped = useRef(false);
   useEffect(() => {
+    geminiHistoryRef.current = [];
+    bootstrapped.current = false;
+  }, [thread?.id]);
+  useEffect(() => {
     if (bootstrapQuery && !bootstrapped.current && thread) {
       bootstrapped.current = true;
       const query = bootstrapQuery;
@@ -576,6 +696,61 @@ export function ChatThreadView({
 
       <ComposerDock className="space-y-1.5">
         {status && <p className="text-[10px] text-muted px-0.5">{status}</p>}
+
+        <div className="flex items-center gap-1.5 px-0.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setModel("royal")}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+              model === "royal"
+                ? "border-gold/50 bg-gold/15 text-gold"
+                : "border-border/80 text-muted hover:text-foreground"
+            }`}
+          >
+            {model === "royal" && <span className="text-gold">●</span>}
+            {agent.icon} {agent.name} · Royal
+          </button>
+
+          <div className="relative inline-flex">
+            <button
+              type="button"
+              onClick={() => setGeminiModelOpen((o) => !o)}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                model === "gemini"
+                  ? "border-purple/50 bg-purple/15 text-gold"
+                  : "border-border/80 text-muted hover:text-foreground"
+              }`}
+            >
+              {model === "gemini" && <span className="text-gold">●</span>}
+              ✦ Gemini {model === "gemini" ? `· ${ROYAL_GEMINI_MODELS.find((m) => m.id === geminiModelId)?.label ?? geminiModelId}` : ""}
+              <span className="text-muted">▾</span>
+            </button>
+            {geminiModelOpen && (
+              <div className="absolute z-30 top-full mt-1 left-0 w-52 rounded-xl border border-border bg-background shadow-xl p-1">
+                {ROYAL_GEMINI_MODELS.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setGeminiModelId(m.id);
+                      setModel("gemini");
+                      setGeminiModelOpen(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition-colors ${
+                      geminiModelId === m.id && model === "gemini"
+                        ? "bg-gold/15 text-gold"
+                        : "text-foreground hover:bg-surface"
+                    }`}
+                  >
+                    {m.label}
+                    <span className="block text-[9px] text-muted truncate">{m.id}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
         <SuggestionChips chips={chips} onSelect={onChip} />
         <ChatInput
           onSend={sendMessage}

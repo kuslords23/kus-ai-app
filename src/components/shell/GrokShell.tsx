@@ -5,7 +5,6 @@ import { Sidebar } from "./Sidebar";
 import { SettingsPanel } from "./SettingsPanel";
 import { HomeCanvas } from "./HomeCanvas";
 import { ChatThreadView } from "@/components/chat/ChatThread";
-import { KusAiRoyalChat } from "@/components/kusai/KusAiRoyalChat";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { useThreads } from "@/lib/hooks/useThreads";
 import { useVoiceInput } from "@/lib/hooks/useVoice";
@@ -16,11 +15,10 @@ import { HubBridgeFab } from "@/components/hub/HubBridgeFab";
 import { useVisualViewport } from "@/lib/hooks/useVisualViewport";
 import Link from "next/link";
 
-type View = "home" | "thread" | "royal-gemini";
+type View = "home" | "thread";
 
 export function GrokShell() {
   const { user, signOut } = useAuth();
-  const [royalTraining, setRoyalTraining] = useState(false);
   const {
     threads,
     activeThread,
@@ -145,21 +143,6 @@ export function GrokShell() {
         </Link>
 
         <button
-          onClick={() =>
-            setView((v) => (v === "royal-gemini" ? "home" : "royal-gemini"))
-          }
-          className={`hidden sm:inline-flex items-center rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-            view === "royal-gemini"
-              ? "border-gold/50 bg-gold/20 text-gold"
-              : "border-border/80 text-muted hover:text-gold"
-          }`}
-          aria-label="Royal Gemini mode"
-          title="Chat with Royal powered by Gemini (isolated). Toggle training data to capture exchanges."
-        >
-          {view === "royal-gemini" ? "● Gemini" : "○ Gemini"}
-        </button>
-
-        <button
           onClick={() => {
             newThread();
             setBootstrapQuery(null);
@@ -176,12 +159,7 @@ export function GrokShell() {
       </header>
 
       <main className="flex-1 min-h-0 overflow-hidden">
-        {view === "royal-gemini" ? (
-          <KusAiRoyalChat
-            trainingEnabled={royalTraining}
-            onTrainingToggle={setRoyalTraining}
-          />
-        ) : showHome ? (
+        {showHome ? (
           <HomeCanvas
             onSend={handleSend}
             onSpeak={voice.toggle}
@@ -239,19 +217,6 @@ export function GrokShell() {
         >
           Jyinx
         </Link>
-        <button
-          type="button"
-          onClick={() =>
-            setView((v) => (v === "royal-gemini" ? "thread" : "royal-gemini"))
-          }
-          className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] transition-colors ${
-            view === "royal-gemini"
-              ? "border-gold/50 bg-gold/20 text-gold"
-              : "border-border text-muted"
-          }`}
-        >
-          Gemini
-        </button>
       </nav>
 
       <Sidebar
