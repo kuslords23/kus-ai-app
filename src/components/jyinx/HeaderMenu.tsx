@@ -9,6 +9,8 @@ export type HeaderMenuAction =
   | "settings"
   | "autonomous"
   | "cost"
+  | "builder"
+  | "blog"
   | "back";
 
 type Props = {
@@ -52,6 +54,8 @@ export function HeaderMenu({ active, onAction, trigger, align = "right" }: Props
     { key: "chat", label: "Chat interface", icon: "💬" },
     { key: "autonomous", label: "Autonomous mode", icon: "⟳", checked: active?.autonomous },
     { key: "cost", label: "Cost & keys", icon: "＄" },
+    { key: "builder", label: "Web builder", icon: "▦" },
+    { key: "blog", label: "Blog & CMS", icon: "✎" },
     { key: "settings", label: "Settings", icon: "⚙" },
     { key: "back", label: "Back to agent", icon: "←" },
   ];
