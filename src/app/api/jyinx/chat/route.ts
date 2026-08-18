@@ -4,6 +4,7 @@ import { lookup as semanticLookup, store as semanticStore, purgeRefusals, purgeR
 import { resolveApiKey, openRouterUrl } from "@/lib/kusai/apiKeysServer";
 import { commitFiles, GitHubCommitError } from "@/services/githubCommit";
 import { parseFileEdits, verifyEdits } from "@/services/agentPipeline";
+import { loadRepositoryContextFiles, formatContextFiles, validRepositoryName } from "@/server/github/context";
 
 export const runtime = "nodejs";
 
@@ -32,6 +33,21 @@ type IncomingAttachment = {
   kind?: unknown;
   text?: unknown;
 };
+
+// Stop words that would produce useless repository searches when deriving the
+// request-time query keyword set for the server-side context loader.
+const QUERY_STOPWORDS = new Set([
+  "the", "a", "an", "to", "of", "in", "on", "at", "for", "and", "or", "is", "are",
+  "i", "you", "me", "it", "this", "that", "these", "those", "my", "your", "we", "our",
+  "please", "make", "add", "change", "edit", "update", "fix", "create", "with", "file", "code",
+  "circle", "circles", "top", "bottom", "left", "right", "middle", "center", "small", "large", "button", "three",
+]);
+
+function promptKeywords(prompt: string): string | null {
+  const words = prompt.toLowerCase().replace(/[^a-z0-9\s/_-]/g, " ").split(/\s+/).filter(Boolean);
+  const meaningful = words.filter((word) => word.length >= 3 && !QUERY_STOPWORDS.has(word));
+  return meaningful.slice(0, 4).join(" ") || null;
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = (await request.json().catch(() => null)) as ChatRequest | null;
@@ -94,7 +110,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         })
         .join("\n\n")}`
     : "";
-  const userContext = `${repositoryContext}${attachmentContext}`.slice(0, 260_000);
+  let userContext = `${repositoryContext}${attachmentContext}`.slice(0, 260_000);
   const agentSystemPrompt = typeof agent?.systemPrompt === "string" && agent.systemPrompt.length <= 4_000 ? agent.systemPrompt : "You are Jyinx, an autonomous coding agent with full write access to the attached GitHub repository through the Jyinx commit engine. You CAN create, edit, and commit files. When asked to modify code, output the complete new content of each file inside a fenced code block, each preceded by a line declaring its path like `PATH: src/foo.ts`. After the code blocks, add one line `COMMIT: <short message>` when the change should be committed. Do NOT say you cannot modify files or commit — the workspace applies your edits and commits them to GitHub automatically.\n\nComposer context: placeholder hints such as \"Plan, Build, / for skills, @ for context\" or \"Plan, ask, build...\" are standard text shown inside the chat input box, not user requests. Never ask the user what those words mean or request clarification about them. When a user's prompt is clear and specific, execute it directly. Do not ask clarifying questions, do not revert or touch files unrelated to the request, and never loop back asking the user to rephrase an already-clear instruction.";
 
   // Optional GitHub write path: when the client passes a provider token and a
@@ -104,13 +120,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const header = request.headers.get("x-github-token");
     return header?.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : null;
   })();
-  const commitActive = Boolean(githubToken && repository && repository !== "local");
+const commitActive = Boolean(githubToken && repository && repository !== "local");
   const wantsAction = isActionPrompt(prompt);
   if (wantsAction) {
     // Old refusal rows in the semantic cache must not be served again. Purge
     // them best-effort while the fresh (capability-granting) run executes.
     void purgeRefusals();
     void purgeRefusalResponses();
+  }
+
+  // Server-side recursive context: when a repository + token are available,
+  // index the full file tree (src/, components/, app/, views/, ...) scoped to
+  // the prompt's keywords so Jyinx — both the chat and the agent — can locate
+  // the actual component/UI files rather than only top-level config files.
+  if (commitActive && githubToken && validRepositoryName(repository)) {
+    const scoped = await loadRepositoryContextFiles(repository, "main", githubToken, promptKeywords(prompt)).catch(() => []);
+    if (scoped.length) {
+      const extra = formatContextFiles(scoped);
+      userContext = `${repositoryContext}\n\n${extra}`.slice(0, 260_000);
+    }
   }
 
   const maybeCommit = async (rawContent: string): Promise<{ content: string; commit: { url: string; sha: string; files: string[] } | null; authorization?: boolean }> => {

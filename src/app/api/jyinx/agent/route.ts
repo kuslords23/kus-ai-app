@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { runAgentFlow, type AgentExecutionEvent } from "@/services/agentPipeline";
 import { resolveApiKey } from "@/lib/kusai/apiKeysServer";
+import { loadRepositoryContextFiles } from "@/server/github/context";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,21 @@ type AgentBody = {
   branch?: unknown;
   repositoryFiles?: unknown;
 };
+
+// Stop words that would produce useless repository searches when deriving the
+// request-time query keyword set for the server-side context loader.
+const QUERY_STOPWORDS = new Set([
+  "the", "a", "an", "to", "of", "in", "on", "at", "for", "and", "or", "is", "are",
+  "i", "you", "me", "it", "this", "that", "these", "those", "my", "your", "we", "our",
+  "please", "make", "add", "change", "edit", "update", "fix", "create", "with", "file", "code",
+  "circle", "circles", "top", "bottom", "left", "right", "middle", "center", "small", "large", "button", "three",
+]);
+
+function promptKeywords(prompt: string): string | null {
+  const words = prompt.toLowerCase().replace(/[^a-z0-9\s/_-]/g, " ").split(/\s+/).filter(Boolean);
+  const meaningful = words.filter((word) => word.length >= 3 && !QUERY_STOPWORDS.has(word));
+  return meaningful.slice(0, 4).join(" ") || null;
+}
 
 /**
  * Streams the autonomous multi-agent pipeline as Server-Sent Events.
@@ -71,6 +87,21 @@ export async function POST(request: NextRequest): Promise<Response> {
       };
 
       try {
+        // Recursively index the repository server-side (src/, components/,
+        // app/, views/, ...) so the agent can locate the actual UI/component
+        // files for the request — not just top-level config files. Client
+        // preloaded files are merged in and deduped (server wins for hits).
+        let mergedFiles = files;
+        try {
+          const scoped = await loadRepositoryContextFiles(repository, branch, token, promptKeywords(prompt));
+          const seen = new Set(files.map((f) => f.path));
+          mergedFiles = [
+            ...scoped.filter((f) => !seen.has(f.path) && !f.path.includes("node_modules") && !f.path.includes("/dist/") && !f.path.includes("/build/")),
+            ...files,
+          ].slice(0, 30);
+        } catch {
+          // Context loading is best-effort; fall back to the passed files.
+        }
         generator = runAgentFlow({
           apiKey,
           config: {
@@ -80,7 +111,7 @@ export async function POST(request: NextRequest): Promise<Response> {
             branch,
             providerToken: token,
             request: prompt,
-            repositoryFiles: files,
+            repositoryFiles: mergedFiles,
           },
         });
         for await (const event of generator) {

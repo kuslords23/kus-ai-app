@@ -174,35 +174,47 @@ export async function runSandboxPipeline(
     const repoDir = `/${repository.split("/")[1] ?? "repo"}`;
 
     // Clone the repository into the sandbox so private repos authenticate.
-    // Preferred path: pass the OAuth token through the SDK's clone credentials
-    // (keeps the secret out of the remote URL / argv). GitHub accepts an
-    // OAuth/PAT token as the HTTPS password with any non-empty username.
+    // The user's GitHub OAuth token is injected directly into the clone URL
+    // (`https://x-access-token:<token>@github.com/<repo>.git`) — GitHub accepts
+    // OAuth/PAT tokens as the HTTPS password with any non-empty username.
     emit({ phase: "cloning", message: `Cloning ${repository}…` });
-    const cloneUrl = `https://github.com/${repository}.git`;
+    const cleanUrl = `https://github.com/${repository}.git`;
+    const encodedToken = encodeURIComponent(providerToken);
+    const authUrl = `https://x-access-token:${encodedToken}@github.com/${repository}.git`;
 
     let clone: RunResult;
-    const sdkClone = await sandbox.git.clone(cloneUrl, {
-      path: repoDir,
-      branch,
-      username: "x-access-token",
-      password: providerToken,
-    });
-    clone = {
-      stdout: String(sdkClone?.stdout ?? ""),
-      stderr: String(sdkClone?.stderr ?? ""),
-      exitCode: typeof sdkClone?.exitCode === "number" ? sdkClone.exitCode : 1,
-    };
+
+    // 1) Primary: git CLI with the token embedded in the URL, then strip the
+    //    secret from the origin remote so it is not persisted in the sandbox.
+    clone = await cmd(sandbox, "/", `git clone --branch "${branch}" --single-branch ${authUrl} ${repoDir}`);
+    if (clone.exitCode === 0) {
+      await cmd(sandbox, repoDir, `git remote set-url origin ${cleanUrl}`);
+    } else {
+      // 2) Fallback: let the E2B SDK manage credentials (keeps the token out of
+      //    argv; the SDK embeds then strips them itself).
+      const sdkClone = await sandbox.git.clone(cleanUrl, {
+        path: repoDir,
+        branch,
+        username: "x-access-token",
+        password: providerToken,
+      });
+      clone = {
+        stdout: String(sdkClone?.stdout ?? ""),
+        stderr: String(sdkClone?.stderr ?? ""),
+        exitCode: typeof sdkClone?.exitCode === "number" ? sdkClone.exitCode : 1,
+      };
+    }
 
     if (clone.exitCode !== 0) {
-      // Fallback: configure a git credential helper so the CLI can authenticate
-      // without baking the token into the remote URL, then retry the clone.
+      // 3) Final fallback: configure a git credential helper so the CLI can
+      //    authenticate without baking the token into argv, then retry.
       emit({ phase: "cloning", message: "Retrying clone with a git credential helper…" });
       const homeProbe = await cmd(sandbox, "/", "echo ${HOME:-/root}");
       const home = homeProbe.stdout.trim() || "/root";
-      await sandbox.files.write([{ path: `${home}/.git-credentials`, data: `https://x-access-token:${providerToken}@github.com\n` }]);
       await cmd(sandbox, "/", "git config --global credential.helper store");
+      await sandbox.files.write([{ path: `${home}/.git-credentials`, data: `https://x-access-token:${providerToken}@github.com\n` }]);
       await cmd(sandbox, "/", `chmod 600 ${home}/.git-credentials`);
-      const retry = await sandbox.commands.run(`git clone --branch "${branch}" --single-branch ${cloneUrl} ${repoDir}`);
+      const retry = await sandbox.commands.run(`git clone --branch "${branch}" --single-branch ${cleanUrl} ${repoDir}`);
       clone = {
         stdout: String(retry?.stdout ?? ""),
         stderr: String(retry?.stderr ?? ""),
