@@ -10,13 +10,19 @@
  * secure backend vault via `/api/connectors`.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import type { ConnectorCategory } from "@/server/connectors/types";
+import {
+  allSpecs,
+  type ConnectorCategory,
+  type ConnectorSpec,
+} from "@/server/connectors/types";
 
 type Status = "connected" | "disconnected" | "error";
 
+// Client view of a connector — derived from the bundled registry (ConnectorSpec)
+// so tools render immediately without waiting on the server.
 interface ConnectorView {
   id: string;
   name: string;
@@ -28,11 +34,14 @@ interface ConnectorView {
 }
 
 interface WorkspaceResponse {
-  catalog?: Record<ConnectorCategory, ConnectorView[]>;
+  catalog?: Record<ConnectorCategory, ConnectorSpec[]>;
   statuses: Record<string, { status: Status; message?: string }>;
 }
 
-const CATEGORIES: Array<{ id: ConnectorCategory; label: string; hint: string }> = [
+type FilterId = "all" | ConnectorCategory;
+
+const CATEGORIES: Array<{ id: FilterId; label: string; hint: string }> = [
+  { id: "all", label: "All", hint: "Every integrated tool" },
   { id: "version-control", label: "Version Control", hint: "GitHub · GitLab · Bitbucket" },
   { id: "hosting", label: "Hosting / Cloud", hint: "Vercel · Netlify · AWS" },
   { id: "database", label: "Databases / BaaS", hint: "Supabase · Mongo · Neon" },
@@ -46,10 +55,40 @@ const STATUS_STYLE: Record<Status, string> = {
   error: "bg-red-500/15 text-red-400 border-red-500/40",
 };
 
+// Baseline catalog from the bundled registry — always available.
+const LOCAL_CATALOG: Record<ConnectorCategory, ConnectorView[]> = (() => {
+  const built: Record<ConnectorCategory, ConnectorView[]> = {
+    "version-control": [],
+    hosting: [],
+    database: [],
+    "cache-search": [],
+    monitoring: [],
+  };
+  for (const spec of allSpecs()) {
+    built[spec.category].push({
+      id: spec.id,
+      name: spec.name,
+      icon: spec.icon,
+      category: spec.category,
+      description: spec.description,
+      authType: spec.authType,
+      bindsApp: spec.bindsApp,
+    });
+  }
+  return built;
+})();
+
+function flattenCatalog(catalog: Record<ConnectorCategory, ConnectorView[]>): ConnectorView[] {
+  return Object.values(catalog).flat();
+}
+
 export function ConnectorsWorkspace() {
-  const [catalog, setCatalog] = useState<Record<ConnectorCategory, ConnectorView[]> | null>(null);
+  export function ConnectorsWorkspace() {
+  // Catalog is seeded from the bundled registry so tools render immediately,
+  // even when the /api/connectors status call is unavailable or unauthenticated.
+  const [catalog, setCatalog] = useState<Record<ConnectorCategory, ConnectorView[]>>(LOCAL_CATALOG);
   const [statuses, setStatuses] = useState<Record<string, { status: Status; message?: string }>>({});
-  const [active, setActive] = useState<ConnectorCategory>("version-control");
+  const [active, setActive] = useState<FilterId>("all");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [connectTarget, setConnectTarget] = useState<ConnectorView | null>(null);
@@ -57,15 +96,51 @@ export function ConnectorsWorkspace() {
   const [endpoint, setEndpoint] = useState("");
   const [authorizing, setAuthorizing] = useState(false);
 
+  // Merge an API-provided catalog (ConnectorSpec[] per category) over the local
+  // baseline, preserving every tool and its placement under the right category.
+  const mergeCatalog = useCallback(
+    (serverCatalog?: Record<ConnectorCategory, ConnectorSpec[]>) => {
+      if (!serverCatalog) return;
+      setCatalog((current) => {
+        const next: Record<ConnectorCategory, ConnectorView[]> = {
+          "version-control": [...current["version-control"]],
+          hosting: [...current.hosting],
+          database: [...current.database],
+          "cache-search": [...current["cache-search"]],
+          monitoring: [...current.monitoring],
+        };
+        for (const [category, specs] of Object.entries(serverCatalog) as Array<[ConnectorCategory, ConnectorSpec[]]>) {
+          if (!next[category]) continue;
+          const seen = new Set(next[category].map((v) => v.id));
+          for (const spec of specs) {
+            if (seen.has(spec.id)) continue;
+            next[category].push({
+              id: spec.id,
+              name: spec.name,
+              icon: spec.icon,
+              category: spec.category,
+              description: spec.description,
+              authType: spec.authType,
+              bindsApp: spec.bindsApp,
+            });
+          }
+        }
+        return next;
+      });
+    },
+    []
+  );
+
   async function refresh() {
     try {
       const res = await fetch("/api/connectors", { credentials: "include" });
       if (!res.ok) throw new Error("Could not load connectors");
       const data = (await res.json()) as WorkspaceResponse;
-      setCatalog(data.catalog ?? null);
+      mergeCatalog(data.catalog);
       setStatuses(data.statuses ?? {});
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to load connectors.");
+      // Status/session sync failed — keep the bundled catalog so tools still render.
+      console.warn("[connectors] status sync failed:", cause);
     } finally {
       setLoading(false);
     }
@@ -78,19 +153,18 @@ export function ConnectorsWorkspace() {
       clearTimeout(timer);
       clearInterval(interval);
     };
-  }, []);
+  }, [refresh]);
 
-  const total = useMemo(() => {
-    if (!catalog) return 0;
-    return Object.values(catalog).reduce((sum, arr) => sum + arr.length, 0);
-  }, [catalog]);
+  const total = useMemo(() => flattenCatalog(catalog).length, [catalog]);
+
+  const allViews = useMemo(() => flattenCatalog(catalog), [catalog]);
 
   const connectedCount = useMemo(
     () => Object.values(statuses).filter((s) => s.status === "connected").length,
     [statuses]
   );
 
-  const list = catalog?.[active] ?? [];
+  const list = active === "all" ? allViews : catalog[active] ?? [];
 
   async function connect() {
     if (!connectTarget) return;

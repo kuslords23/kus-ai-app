@@ -11,7 +11,8 @@
  */
 
 import { useEffect, useState } from "react";
-import type { ConnectorCategory } from "@/server/connectors/types";
+import type { ConnectorCategory, ConnectorSpec } from "@/server/connectors/types";
+import { allSpecs } from "@/server/connectors/types";
 
 type Status = "connected" | "disconnected" | "error";
 
@@ -26,7 +27,7 @@ interface ConnectorView {
 }
 
 interface HubResponse {
-  catalog?: Record<ConnectorCategory, ConnectorView[]>;
+  catalog?: Record<ConnectorCategory, ConnectorSpec[]>;
   statuses: Record<string, { status: Status; message?: string }>;
 }
 
@@ -44,8 +45,32 @@ const STATUS_STYLE: Record<Status, string> = {
   error: "bg-red-500/15 text-red-400 border-red-500/40",
 };
 
+// Baseline catalog from the bundled registry — always available so tools render
+// even when the /api/connectors status call is unavailable or unauthenticated.
+const LOCAL_CATALOG: Record<ConnectorCategory, ConnectorView[]> = (() => {
+  const built: Record<ConnectorCategory, ConnectorView[]> = {
+    "version-control": [],
+    hosting: [],
+    database: [],
+    "cache-search": [],
+    monitoring: [],
+  };
+  for (const spec of allSpecs()) {
+    built[spec.category].push({
+      id: spec.id,
+      name: spec.name,
+      icon: spec.icon,
+      category: spec.category,
+      description: spec.description,
+      authType: spec.authType,
+      bindsApp: spec.bindsApp,
+    });
+  }
+  return built;
+})();
+
 export function ConnectorsHub({ onClose }: { onClose?: () => void }) {
-  const [catalog, setCatalog] = useState<Record<ConnectorCategory, ConnectorView[]> | null>(null);
+  const [catalog, setCatalog] = useState<Record<ConnectorCategory, ConnectorView[]>>(LOCAL_CATALOG);
   const [statuses, setStatuses] = useState<Record<string, { status: Status; message?: string }>>({});
   const [active, setActive] = useState<ConnectorCategory>("version-control");
   const [loading, setLoading] = useState(true);
@@ -61,7 +86,35 @@ export function ConnectorsHub({ onClose }: { onClose?: () => void }) {
       const res = await fetch("/api/connectors", { credentials: "include" });
       if (!res.ok) return;
       const data = (await res.json()) as HubResponse;
-      setCatalog(data.catalog ?? null);
+      // Merge server spec catalog(s) over the local baseline so every category stays populated.
+      if (data.catalog) {
+        setCatalog((current) => {
+          const next: Record<ConnectorCategory, ConnectorView[]> = {
+            "version-control": [...current["version-control"]],
+            hosting: [...current.hosting],
+            database: [...current.database],
+            "cache-search": [...current["cache-search"]],
+            monitoring: [...current.monitoring],
+          };
+          for (const [category, specs] of Object.entries(data.catalog!) as Array<[ConnectorCategory, ConnectorSpec[]]>) {
+            if (!next[category]) continue;
+            const seen = new Set(next[category].map((v) => v.id));
+            for (const spec of specs) {
+              if (seen.has(spec.id)) continue;
+              next[category].push({
+                id: spec.id,
+                name: spec.name,
+                icon: spec.icon,
+                category: spec.category,
+                description: spec.description,
+                authType: spec.authType,
+                bindsApp: spec.bindsApp,
+              });
+            }
+          }
+          return next;
+        });
+      }
       setStatuses(data.statuses ?? {});
     } finally {
       setLoading(false);
@@ -82,7 +135,7 @@ export function ConnectorsHub({ onClose }: { onClose?: () => void }) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const list = (catalog?.[active] ?? []);
+  const list = catalog[active] ?? [];
 
   async function connect() {
     if (!connectTarget) return;
@@ -138,9 +191,7 @@ export function ConnectorsHub({ onClose }: { onClose?: () => void }) {
     }
   }
 
-  const entryCount = catalog
-    ? Object.values(catalog).reduce((sum, arr) => sum + arr.length, 0)
-    : 0;
+  const entryCount = Object.values(catalog).reduce((sum, arr) => sum + arr.length, 0);
 
   return (
     <div className="flex flex-col h-full">
