@@ -1,0 +1,6 @@
+﻿src/server/ai/proxy.ts(80,5): error TS2322: Type '{ ok: false; blocked: true; error: string; code: "insufficient_credits"; message: string; action: "byok" | "top_up"; }' is not assignable to type 'T | { ok: false; blocked: true; error: string; code: "insufficient_credits"; message: string; action: "top_up"; }'.
+  Types of property 'action' are incompatible.
+    Type '"byok" | "top_up"' is not assignable to type '"top_up" | undefined'.
+      Type '"byok"' is not assignable to type '"top_up"'.
+src/server/payments/index.ts(173,25): error TS2339: Property 'data' does not exist on type 'never'.
+src/server/payments/index.ts(179,28): error TS2339: Property 'type' does not exist on type 'never'.

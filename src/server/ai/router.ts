@@ -23,6 +23,8 @@ import {
 } from "@/server/ai/gemini";
 import { evaluateQuota, recordConsumption, type QuotaSubject } from "@/server/ai/quotas";
 import { getByokKey } from "@/server/auth/byok";
+import { isPoolEligible } from "@/server/ai/pool";
+import { assertCredits, meterProxyCtx } from "@/server/ai/proxy";
 
 export interface RouterRequest {
   provider: string;
@@ -36,6 +38,9 @@ export interface RouterRequest {
   maxTokens?: number;
   /** When true, skip BYOK so platform buffer is used (new-user onboarding). */
   forcePlatformKey?: boolean;
+  /** Meter credits for platform-default calls. Off when a caller already meters. */
+  meter?: boolean;
+  inputTokens?: number;
 }
 
 export interface RouterResult {
@@ -47,6 +52,10 @@ export interface RouterResult {
   error?: string;
   exceeded?: boolean;
   notice?: { level: "info" | "warn"; message: string };
+  /** Credits debited for a platform-default paid call. */
+  cost?: number;
+  /** Remaining credit balance after metering. */
+  creditsAfter?: number;
 }
 
 const PLATFORM_KEYS: Record<string, string | undefined> = {
@@ -209,9 +218,9 @@ async function anthropicCall(
   }
 }
 
-export interface RouteRequest extends RouterRequest {}
+export type RouteRequest = RouterRequest;
 
-export interface RouteOutcome extends ProviderOutcome {}
+export type RouteOutcome = ProviderOutcome;
 
 /**
  * Executes a request across any integrated provider with BYOK-first,
@@ -256,12 +265,47 @@ export async function routeAi(req: RouterRequest): Promise<RouterResult> {
     }
   }
 
-  // 3. Execute with provider-level fallback.
+  // 3. Zero-cost pool guardrail: paid (non-free) platform calls require credits.
   const requestedModel = req.model || config.fallbackModel;
+  const metered = req.meter !== false;
+  const requiresCreditGate = metered && !usedUserKey && req.userId && !isPoolEligible(requestedModel);
+  if (requiresCreditGate) {
+    const gate = await assertCredits({ userId: req.userId, provider: config.id, model: requestedModel });
+    if (!gate.allowed) {
+      return {
+        content: "",
+        model: requestedModel,
+        provider: config.id,
+        usedUserKey: false,
+        retried: false,
+        exceeded: true,
+        error: gate.payload?.message ?? "Insufficient credits.",
+        notice: { level: "warn", message: "Add credits in Billing or switch to a free model / your own key." },
+      };
+    }
+  }
+
+  // 4. Execute with provider-level fallback.
   const messages = buildMessages(req);
   const outcome = await runProvider(apiKey, config, requestedModel, messages, req);
 
   if (!usedUserKey) await recordConsumption(subject);
+
+  // 5. Real-time credit metering for platform-default calls (unless the caller
+  //    already meters via the gateway wrapper).
+  let cost: number | undefined;
+  let creditsAfter: number | undefined;
+  if (metered && !usedUserKey && req.userId) {
+    const meteredResult = await meterProxyCtx({
+      userId: req.userId,
+      provider: config.id,
+      model: outcome.model || requestedModel,
+      inputTokens: req.inputTokens ?? promptTokens(req.prompt),
+      outputTokens: 64,
+    });
+    cost = meteredResult.cost;
+    creditsAfter = Number.isSafeInteger(meteredResult.balance) ? meteredResult.balance : undefined;
+  }
 
   return {
     content: outcome.content,
@@ -270,7 +314,13 @@ export async function routeAi(req: RouterRequest): Promise<RouterResult> {
     usedUserKey,
     retried: outcome.retried,
     error: outcome.error,
+    cost,
+    creditsAfter,
   };
+}
+
+function promptTokens(prompt: string): number {
+  return Math.max(1, Math.floor(prompt.length / 3.8));
 }
 
 /** Default fallback lists for UI/agent hints. */

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useJyinxModelStore } from "@/lib/jyinx/model-store";
 import { providerFromModel, type HierarchicalSelection } from "@/lib/models/catalog";
 import { HierarchicalModelSelector } from "@/components/models/HierarchicalModelSelector";
 import { JyinxGitHubRepos, type JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
+import { ConnectorsHub } from "@/components/settings/ConnectorsHub";
+import { BillingModal } from "@/components/settings/BillingModal";
 
 type Props = {
   open: boolean;
@@ -18,6 +20,12 @@ type Props = {
   redirectPath?: string;
 };
 
+function readFlag(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const value = localStorage.getItem(key);
+  return value === null ? fallback : value !== "false";
+}
+
 export function JyinxSettingsPanel({
   open,
   onClose,
@@ -29,10 +37,12 @@ export function JyinxSettingsPanel({
   redirectPath = "/jyinx",
 }: Props) {
   const { setHistoryEnabled: setSharedHistoryEnabled } = useJyinxModelStore();
-  const [autoOpenChat, setAutoOpenChat] = useState(true);
-  const [historyEnabled, setHistoryEnabledState] = useState(true);
+const [autoOpenChat, setAutoOpenChat] = useState<boolean>(() => readFlag("jyinx:auto-open-chat", true));
+const [historyEnabled, setHistoryEnabledState] = useState<boolean>(() => readFlag("jyinx:history-enabled", true));
   const [cacheState, setCacheState] = useState<"idle" | "clearing" | "done" | "error">("idle");
   const [cacheMessage, setCacheMessage] = useState("");
+  const [showConnectors, setShowConnectors] = useState(false);
+  const [showBilling, setShowBilling] = useState(false);
 
   const selection: HierarchicalSelection = useMemo(() => {
     const p = providerFromModel(activeModel);
@@ -47,10 +57,6 @@ export function JyinxSettingsPanel({
     };
   }, [activeModel]);
 
-  useEffect(() => {
-    setAutoOpenChat(localStorage.getItem("jyinx:auto-open-chat") !== "false");
-    setHistoryEnabledState(localStorage.getItem("jyinx:history-enabled") !== "false");
-  }, [open]);
   if (!open) return null;
 
   const toggle = (key: string, value: boolean, setter: (value: boolean) => void) => {
@@ -72,5 +78,5 @@ export function JyinxSettingsPanel({
       setCacheMessage(cause instanceof Error ? cause.message : "Cache cleanup failed.");
     }
   };
-  return <div className="fixed inset-0 z-[60] bg-black/60" onClick={onClose}><section className="absolute right-0 top-0 flex h-full w-[min(92vw,390px)] flex-col border-l border-border bg-surface p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}><header className="flex items-center justify-between border-b border-border pb-3"><div><p className="text-sm font-semibold">Jyinx settings</p><p className="mt-1 text-xs text-muted">Workspace and connection preferences</p></div><button type="button" onClick={onClose} className="rounded-lg border border-border px-2 py-1 text-xs text-muted">Close</button></header><div className="space-y-4 overflow-y-auto py-4"><section className="rounded-xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Model routing</p><p className="mt-1 text-xs text-muted">Active model: {selection.modelLabel}</p><div className="mt-3"><HierarchicalModelSelector value={selection} onChange={(sel) => onModelChange(sel.model)} components={{ optionMeta: (entry) => `${entry.contextWindow.toLocaleString()} ctx` }} /></div></section><section className="rounded-xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Workspace repository</p>{onRepositoryChange ? <JyinxGitHubRepos redirectPath={redirectPath} selectedRepositoryId={selectedRepositoryId ?? undefined} onSelectRepository={onRepositoryChange} onRepositoriesLoaded={onRepositoriesLoaded} /> : <p className="mt-1 text-xs text-muted">Sign in to GitHub in the workspace to choose a repository.</p>}</section><section className="rounded-xl border border-border bg-background/50 p-3"><label className="flex items-center justify-between gap-4 text-sm"><span><span className="block font-medium">Persist chat history</span><span className="mt-1 block text-xs text-muted">Store Jyinx conversations locally on this device.</span></span><input type="checkbox" checked={historyEnabled} onChange={(event) => toggle("jyinx:history-enabled", event.target.checked, setHistoryEnabledState)} /></label></section><section className="rounded-xl border border-border bg-background/50 p-3"><label className="flex items-center justify-between gap-4 text-sm"><span><span className="block font-medium">Open agent chat</span><span className="mt-1 block text-xs text-muted">Open the chat panel when entering Jyinx.</span></span><input type="checkbox" checked={autoOpenChat} onChange={(event) => toggle("jyinx:auto-open-chat", event.target.checked, setAutoOpenChat)} /></label></section><section className="rounded-xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Cached responses</p><p className="mt-1 text-xs text-muted">Jyinx caches similar prompts to answer at $0 cost. Clear stale entries if a response seems outdated.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void clearCache("refusals")} disabled={cacheState === "clearing"} className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/20 disabled:opacity-60">Clear stale refusals</button><button type="button" onClick={() => void clearCache("all")} disabled={cacheState === "clearing"} className="rounded-lg border border-border px-3 py-2 text-xs text-muted hover:text-foreground disabled:opacity-60">Clear all cache</button></div>{cacheMessage && <p className={`mt-2 text-xs ${cacheState === "error" ? "text-danger" : "text-gold"}`}>{cacheMessage}</p>}</section><section className="rounded-xl border border-gold/25 bg-gold/5 p-3 text-xs text-muted"><p className="font-medium text-gold">Connection controls</p><p className="mt-1">GitHub access uses your authorized connection with the <code className="text-gold">repo</code> scope. If a commit is blocked, Jyinx will prompt you to reconnect GitHub.</p></section></div></section></div>;
+  return <div className="fixed inset-0 z-[60] bg-black/60" onClick={onClose}><section className="absolute right-0 top-0 flex h-full w-[min(92vw,390px)] flex-col border-l border-border bg-surface p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}><header className="flex items-center justify-between border-b border-border pb-3"><div><p className="text-sm font-semibold">Jyinx settings</p><p className="mt-1 text-xs text-muted">Workspace and connection preferences</p></div><button type="button" onClick={onClose} className="rounded-lg border border-border px-2 py-1 text-xs text-muted">Close</button></header><div className="space-y-4 overflow-y-auto py-4"><section className="rounded-xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Model routing</p><p className="mt-1 text-xs text-muted">Active model: {selection.modelLabel}</p><div className="mt-3"><HierarchicalModelSelector value={selection} onChange={(sel) => onModelChange(sel.model)} components={{ optionMeta: (entry) => `${entry.contextWindow.toLocaleString()} ctx` }} /></div></section><section className="rounded-xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Workspace repository</p>{onRepositoryChange ? <JyinxGitHubRepos redirectPath={redirectPath} selectedRepositoryId={selectedRepositoryId ?? undefined} onSelectRepository={onRepositoryChange} onRepositoriesLoaded={onRepositoriesLoaded} /> : <p className="mt-1 text-xs text-muted">Sign in to GitHub in the workspace to choose a repository.</p>}</section><div className="grid grid-cols-2 gap-2"><a href="/jyinx/workspace" className="rounded-xl border border-border bg-background/40 px-3 py-2.5 text-xs text-muted hover:border-gold/40 hover:text-gold">🔌 Connectors workspace</a><a href="/jyinx/billing" className="rounded-xl border border-border bg-background/40 px-3 py-2.5 text-xs text-muted hover:border-gold/40 hover:text-gold">💳 Billing dashboard</a></div><button type="button" onClick={() => setShowBilling(true)} className="flex w-full items-center justify-between rounded-xl border border-border bg-background/40 px-3 py-2.5 text-sm hover:border-gold/40"><span className="flex items-center gap-2">💳 Credits &amp; Billing</span><span className="text-[11px] text-muted">Balance &amp; top-up</span></button><section className="rounded-xl border border-gold/25 bg-gold/5 p-3"><button type="button" onClick={() => setShowConnectors((v) => !v)} className="flex w-full items-center justify-between text-sm"><span className="flex items-center gap-2 font-medium text-gold">🔌 Connectors &amp; Services</span><span className="text-xs text-muted">{showConnectors ? "Hide" : "Manage"}</span></button><p className="mt-1 text-left text-xs text-muted">Link GitHub, Vercel, Supabase, and 40+ hosting, database, cache and monitoring tools. Connected tools can be invoked by Jyinx agents.</p>{showConnectors && <div className="mt-3 max-h-[55vh] overflow-y-auto rounded-xl border border-border bg-background/40"><ConnectorsHub /></div>}</section><section className="rounded-xl border border-border bg-background/50 p-3"><label className="flex items-center justify-between gap-4 text-sm"><span><span className="block font-medium">Persist chat history</span><span className="mt-1 block text-xs text-muted">Store Jyinx conversations locally on this device.</span></span><input type="checkbox" checked={historyEnabled} onChange={(event) => toggle("jyinx:history-enabled", event.target.checked, setHistoryEnabledState)} /></label></section><section className="rounded-xl border border-border bg-background/50 p-3"><label className="flex items-center justify-between gap-4 text-sm"><span><span className="block font-medium">Open agent chat</span><span className="mt-1 block text-xs text-muted">Open the chat panel when entering Jyinx.</span></span><input type="checkbox" checked={autoOpenChat} onChange={(event) => toggle("jyinx:auto-open-chat", event.target.checked, setAutoOpenChat)} /></label></section><section className="rounded-xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Cached responses</p><p className="mt-1 text-xs text-muted">Jyinx caches similar prompts to answer at $0 cost. Clear stale entries if a response seems outdated.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void clearCache("refusals")} disabled={cacheState === "clearing"} className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/20 disabled:opacity-60">Clear stale refusals</button><button type="button" onClick={() => void clearCache("all")} disabled={cacheState === "clearing"} className="rounded-lg border border-border px-3 py-2 text-xs text-muted hover:text-foreground disabled:opacity-60">Clear all cache</button></div>{cacheMessage && <p className={`mt-2 text-xs ${cacheState === "error" ? "text-danger" : "text-gold"}`}>{cacheMessage}</p>}</section><section className="rounded-xl border border-gold/25 bg-gold/5 p-3 text-xs text-muted"><p className="font-medium text-gold">Connection controls</p><p className="mt-1">GitHub access uses your authorized connection with the <code className="text-gold">repo</code> scope. If a commit is blocked, Jyinx will prompt you to reconnect GitHub.</p></section></div></section><BillingModal open={showBilling} onClose={() => setShowBilling(false)} /></div>;
 }

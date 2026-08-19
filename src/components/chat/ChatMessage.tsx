@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { InlineCard } from "./InlineCard";
 import { sanitizeAssistantContent } from "@/lib/sanitizeAssistant";
+import { renderMessageText } from "./MessageRenderer";
 
 export interface ChatMessageData {
   id: string;
@@ -59,20 +60,10 @@ interface ChatMessageProps {
   editing?: boolean;
 }
 
-/** Lightweight **bold** rendering for hub-style answers. */
-function renderContent(text: string) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <strong key={i} className="font-semibold text-gold-light">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    return <span key={i}>{part}</span>;
-  });
-}
+/**
+ * Lightweight renderer — delegates to MessageRenderer for bold, inline code,
+ * and safe URL autolinking.
+ */
 
 export function ChatMessage({
   message,
@@ -124,7 +115,7 @@ export function ChatMessage({
         <div className="whitespace-pre-wrap text-[13.5px] leading-relaxed">
           {isUser && editing && visibleContent.length > 60
             ? `${visibleContent.slice(0, 60)}…`
-            : renderContent(visibleContent)}
+            : renderMessageText(visibleContent)}
           {isStreaming && (
             <span className="inline-block w-1.5 h-3.5 bg-gold ml-0.5 align-middle animate-pulse rounded-sm" />
           )}
