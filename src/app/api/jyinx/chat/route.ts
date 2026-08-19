@@ -134,10 +134,10 @@ const commitActive = Boolean(githubToken && repository && repository !== "local"
   // the prompt's keywords so Jyinx — both the chat and the agent — can locate
   // the actual component/UI files rather than only top-level config files.
   if (commitActive && githubToken && validRepositoryName(repository)) {
-    const scoped = await loadRepositoryContextFiles(repository, "main", githubToken, promptKeywords(prompt)).catch(() => []);
+    const scoped = await loadRepositoryContextFiles(repository, branch, githubToken, promptKeywords(prompt)).catch(() => []);
     if (scoped.length) {
       const extra = formatContextFiles(scoped);
-      userContext = `${repositoryContext}\n\n${extra}`.slice(0, 260_000);
+      userContext = `${userContext}\n\n${extra}`.slice(0, 260_000);
     }
   }
 

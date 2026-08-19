@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { InlineCard } from "./InlineCard";
+import { sanitizeAssistantContent } from "@/lib/sanitizeAssistant";
 
 export interface ChatMessageData {
   id: string;
@@ -88,8 +89,14 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const isUser = message.role === "user";
 
+  // Royal must never show raw tool-call markup. Strip it before render so the
+  // bubble (and copy) only ever expose clean, human-readable markdown.
+  const visibleContent = isUser
+    ? message.content
+    : sanitizeAssistantContent(message.content);
+
   const handleCopy = () => {
-    if (message.content) onCopy?.(message.content);
+    if (visibleContent) onCopy?.(visibleContent);
   };
 
   const actionBtn =
@@ -115,15 +122,15 @@ export function ChatMessage({
         }`}
       >
         <div className="whitespace-pre-wrap text-[13.5px] leading-relaxed">
-          {isUser && editing && message.content.length > 60
-            ? `${message.content.slice(0, 60)}…`
-            : renderContent(message.content)}
+          {isUser && editing && visibleContent.length > 60
+            ? `${visibleContent.slice(0, 60)}…`
+            : renderContent(visibleContent)}
           {isStreaming && (
             <span className="inline-block w-1.5 h-3.5 bg-gold ml-0.5 align-middle animate-pulse rounded-sm" />
           )}
         </div>
 
-        {!isStreaming && message.content && (
+        {!isStreaming && visibleContent && (
           <div className="mt-1.5 flex items-center gap-1 opacity-70 transition-opacity hover:opacity-100">
             <button type="button" onClick={handleCopy} className={actionBtn} aria-label="Copy message">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -216,10 +223,10 @@ export function ChatMessage({
           </p>
         )}
 
-        {!isUser && !isStreaming && message.content && onSpeak && (
+        {!isUser && !isStreaming && visibleContent && onSpeak && (
           <div className="mt-2 flex items-center gap-3 flex-wrap">
             <button
-              onClick={() => onSpeak(message.content)}
+              onClick={() => onSpeak(visibleContent)}
               className="text-[10px] text-muted hover:text-gold transition-colors"
             >
               ▶ Listen

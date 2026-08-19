@@ -174,3 +174,82 @@ html.keyboard-open .app-shell {
   margin: 0;
   background: var(--background);
 }
+
+/* ---------------------------------------------------------------
+   Chat layout — symmetric bubbles, safe-area input, clean scrolling.
+   --------------------------------------------------------------- */
+.msg-list {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 0.75rem 1rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
+
+.bubble-row {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.bubble-row.user {
+  justify-content: flex-end;
+}
+
+.bubble-row.assistant {
+  justify-content: flex-start;
+}
+
+/* Strict max-width + w-fit so bubbles never touch or overflow the screen edge. */
+.bubble-user,
+.bubble-ai {
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 85%;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+.bubble-user {
+  margin-left: auto;
+}
+.bubble-ai {
+  margin-right: auto;
+}
+
+/* Fixed input bar — anchored to the viewport with safe-area padding. */
+.input-bar {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.5rem 0.75rem env(safe-area-inset-bottom, 0.625rem);
+  background: linear-gradient(to top, var(--composer-bg), color-mix(in srgb, var(--composer-bg) 88%, transparent));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* kb handled by app-shell when keyboard-open; keep composer above scroll. */
+.scroll-anchor {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+@media (min-width: 640px) {
+  .bubble-user,
+  .bubble-ai {
+    max-width: 75%;
+  }
+}

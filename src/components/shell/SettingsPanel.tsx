@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { AppSettings } from "@/lib/settings";
 import { AGENTS } from "@/lib/agents/registry";
 import { MemoryPanel } from "@/components/memory/MemoryPanel";
+import { ConnectorsHub } from "@/components/settings/ConnectorsHub";
 import {
   addRegrettedAction,
   fadeTopic,
@@ -32,6 +34,7 @@ export function SettingsPanel({
   userId,
 }: SettingsPanelProps) {
   const { user } = useAuth();
+  const [showConnectors, setShowConnectors] = useState(false);
   const { toggle: togglePush } = usePushNotifications(
     settings.pushNotifications,
     userId ?? user?.id,
@@ -57,6 +60,18 @@ export function SettingsPanel({
           >
             <h2 className="text-lg font-semibold text-gold">Royal settings</h2>
 
+            <button
+              onClick={() => setShowConnectors((v) => !v)}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-border bg-background/40 text-sm hover:border-gold/40 transition-colors"
+            >
+              <span className="flex items-center gap-2">🔌 Connectors &amp; Workspace</span>
+              <span className={`text-[11px] ${showConnectors ? "text-gold" : "text-muted"}`}>{showConnectors ? "Hide" : "Manage"}</span>
+            </button>
+
+            {showConnectors ? (
+              <ConnectorsHub onClose={() => setShowConnectors(false)} />
+            ) : (
+              <>
             <label className="flex items-center justify-between gap-3 text-sm">
               <span>Open app in voice mode</span>
               <input
@@ -253,6 +268,8 @@ export function SettingsPanel({
             >
               Sign out
             </button>
+              </>
+            )}
           </motion.div>
         </motion.div>
       )}

@@ -17,6 +17,7 @@ import {
   storeCache,
   type UsageSubject,
 } from "@/services/gatewayGuardrails";
+import { sanitizeAssistantContent } from "@/lib/sanitizeAssistant";
 
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 export const OPENROUTER_CHAT_URL = `${OPENROUTER_BASE_URL}/chat/completions`;
@@ -148,7 +149,11 @@ async function call(apiKey: string, endpoint: string, body: Record<string, unkno
   }
   const choice = data?.choices?.[0];
   const content = choice?.message?.content ?? (typeof choice?.text === "string" ? choice.text : undefined);
-  return { content, usage: data?.usage, media: data?.data };
+  // Royal must never surface raw tool-call XML in the message stream. Strip it
+  // at the gateway so both stored (cache/learning) and displayed content stay
+  // clean, while Jyinx's separate pipeline (which does not use this gateway)
+  // keeps its dev/sandbox logs untouched.
+  return { content: content === undefined ? undefined : sanitizeAssistantContent(content), usage: data?.usage, media: data?.data };
 }
 
 /**
@@ -185,7 +190,7 @@ export async function generate(apiKey: string, req: GatewayRequest): Promise<Gat
       const hit = await lookupCache(key);
       if (hit.hit && hit.response) {
         return {
-          content: hit.response,
+          content: sanitizeAssistantContent(hit.response),
           model: targetModel,
           modality,
           source: isUsingUserKey ? "byok" : "openrouter",

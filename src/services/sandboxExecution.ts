@@ -149,6 +149,44 @@ function tail(s: string, lines = 12): string {
 }
 
 /**
+ * Global git credential provisioning. Runs once per sandbox so that EVERY git
+ * operation Jyinx performs in the microVM (clone, submodule fetch, git
+ * dependencies during install, auxiliary push) authenticates against GitHub
+ * with the user's token — not just the one clone command that carries
+ * credentials inline.
+ *
+ * Two complementary mechanisms:
+ *  1. A global URL rewrite (`insteadOf`) that transparently rewrites every
+ *     `https://github.com/…` URL to carry `x-access-token:<token>@` credentials.
+ *  2. A stored credential helper, so `git push`/`git pull` on already-checked
+ *     out repos also authenticate.
+ */
+async function configureGitAuth(sandbox: Sandbox, token: string): Promise<void> {
+  const cleanToken = token.replace(/[%'"\\\s]/g, "");
+  const pathRewrite = `url."https://x-access-token:${cleanToken}@github.com/".insteadOf`;
+  const commands = [
+    `git config --global ${pathRewrite} "https://github.com/"`,
+    'git config --global credential.helper store',
+  ];
+  for (const command of commands) {
+    try {
+      await sandbox.commands.run(command);
+    } catch {
+      // Best-effort; clone + credential-flow fallbacks cover the rest.
+    }
+  }
+  // Persist a credential line so pushes on already-cloned repos authenticate.
+  try {
+    const homeProbe = await sandbox.commands.run("echo ${HOME:-/root}");
+    const home = homeProbe.stdout?.trim() || "/root";
+    await sandbox.files.write([{ path: `${home}/.git-credentials`, data: `https://x-access-token:${cleanToken}@github.com\n` }]);
+    await sandbox.commands.run(`chmod 600 ${home}/.git-credentials`);
+  } catch {
+    // Best-effort.
+  }
+}
+
+/**
  * Provisions an E2B sandbox and runs the full cloud verification pipeline.
  * Emits a status report to `report` for each phase so the UI can stream it live.
  */
@@ -172,6 +210,11 @@ export async function runSandboxPipeline(
 
     const { repository, branch, providerToken, files, commitMessage } = opts;
     const repoDir = `/${repository.split("/")[1] ?? "repo"}`;
+
+    // Provision global git credentials so every clone/push/submodule edits
+    // authenticates with the user's GitHub token, not just the primary clone.
+    await configureGitAuth(sandbox, providerToken);
+    emit({ phase: "connecting", message: "Git credentials provisioned for the sandbox." });
 
     // Clone the repository into the sandbox so private repos authenticate.
     // The user's GitHub OAuth token is injected directly into the clone URL
