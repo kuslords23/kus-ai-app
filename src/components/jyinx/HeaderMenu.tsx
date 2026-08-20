@@ -11,6 +11,9 @@ export type HeaderMenuAction =
   | "cost"
   | "builder"
   | "blog"
+  | "search"
+  | "peer-chat"
+  | "code-library"
   | "back";
 
 type Props = {
@@ -56,6 +59,9 @@ export function HeaderMenu({ active, onAction, trigger, align = "right" }: Props
     { key: "cost", label: "Cost & keys", icon: "＄" },
     { key: "builder", label: "Web builder", icon: "▦" },
     { key: "blog", label: "Blog & CMS", icon: "✎" },
+    { key: "search", label: "Online code search", icon: "🔎" },
+    { key: "peer-chat", label: "Peer-to-Peer chat", icon: "👥" },
+    { key: "code-library", label: "Code library", icon: "📦" },
     { key: "settings", label: "Settings", icon: "⚙" },
     { key: "back", label: "Back to Royal", icon: "←" },
   ];

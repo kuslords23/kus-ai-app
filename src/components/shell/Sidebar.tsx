@@ -287,6 +287,22 @@ export function Sidebar({
                     <span>Jyinx Studio</span>
                     <span className="text-xs">↗</span>
                   </Link>
+                  <Link
+                    href="/jyinx/peer-chat"
+                    onClick={onClose}
+                    className="flex items-center justify-between rounded-lg border border-blue-500/25 bg-blue-500/10 px-3 py-2 text-sm text-blue-400 hover:bg-blue-500/15"
+                  >
+                    <span>Peer-to-Peer Chat</span>
+                    <span className="text-xs">👥</span>
+                  </Link>
+                  <Link
+                    href="/jyinx/code-library"
+                    onClick={onClose}
+                    className="flex items-center justify-between rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-400 hover:bg-emerald-500/15"
+                  >
+                    <span>Code Library</span>
+                    <span className="text-xs">📦</span>
+                  </Link>
                   {COMPANIONS.map((c) => (
                     <a
                       key={c.id}
