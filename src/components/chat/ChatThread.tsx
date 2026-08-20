@@ -76,6 +76,7 @@ import {
 } from "@/lib/kusai/royalGeminiTelemetry";
 import { ROYAL_SYSTEM_PROMPT } from "@/lib/persona/royal";
 import { getPreferredCustomKey, gatewayFetch } from "@/lib/kusai/apiKeys";
+import { ReportModal } from "@/components/legal/ReportModal";
 
 type RoyalModel = "royal" | "gemini" | "kusai";
 
@@ -154,6 +155,7 @@ export function ChatThreadView({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [editingMsg, setEditingMsg] = useState<ChatMessageData | null>(null);
   const [editingBump, setEditingBump] = useState(0);
+  const [reportMsg, setReportMsg] = useState<ChatMessageData | null>(null);
 
   // Persist the chosen Royal persona model + Gemini sub-model across reloads.
   useEffect(() => {
@@ -905,6 +907,7 @@ export function ChatThreadView({
             onEdit={msg.role === "user" ? handleEdit : undefined}
             onRetry={msg.role === "assistant" ? handleRetry : undefined}
             onSave={msg.role === "assistant" ? handleSave : undefined}
+            onReport={msg.role === "assistant" ? () => setReportMsg(msg) : undefined}
             editing={editingMsg?.id === msg.id}
           />
         ))}
@@ -998,6 +1001,14 @@ export function ChatThreadView({
           setPendingAction(null);
         }}
         onCancel={() => setPendingAction(null)}
+      />
+
+      <ReportModal
+        open={reportMsg !== null}
+        onClose={() => setReportMsg(null)}
+        messageId={reportMsg?.id}
+        chatId={thread?.id}
+        snippet={reportMsg?.content}
       />
     </div>
   );

@@ -1,28 +1,19 @@
 "use client";
 
 /**
- * Connectors Workspace — dedicated interactive page for managing service
- * integrations in Jyinx.
+ * Connectors Workspace — interactive page for managing service integrations.
  *
- * Lists all mainstream tools by category with ON/OFF toggle switches and live
- * connection status indicators. Connection + credential input happens inline in
- * a modal (API key / connection string / OAuth consent) and persists to the
- * secure backend vault via `/api/connectors`.
+ * Shows all mainstream tools (from bundled registry) immediately, overlayed
+ * with live connection status from the API when available.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import {
-  allSpecs,
-  type ConnectorCategory,
-  type ConnectorSpec,
-} from "@/server/connectors/types";
+import { allSpecs, type ConnectorCategory, type ConnectorSpec } from "@/server/connectors/types";
 
 type Status = "connected" | "disconnected" | "error";
 
-// Client view of a connector — derived from the bundled registry (ConnectorSpec)
-// so tools render immediately without waiting on the server.
 interface ConnectorView {
   id: string;
   name: string;
@@ -41,7 +32,7 @@ interface WorkspaceResponse {
 type FilterId = "all" | ConnectorCategory;
 
 const CATEGORIES: Array<{ id: FilterId; label: string; hint: string }> = [
-  { id: "all", label: "All", hint: "Every integrated tool" },
+  { id: "all", label: "All", hint: "Every tool" },
   { id: "version-control", label: "Version Control", hint: "GitHub · GitLab · Bitbucket" },
   { id: "hosting", label: "Hosting / Cloud", hint: "Vercel · Netlify · AWS" },
   { id: "database", label: "Databases / BaaS", hint: "Supabase · Mongo · Neon" },
@@ -55,7 +46,6 @@ const STATUS_STYLE: Record<Status, string> = {
   error: "bg-red-500/15 text-red-400 border-red-500/40",
 };
 
-// Baseline catalog from the bundled registry — always available.
 const LOCAL_CATALOG: Record<ConnectorCategory, ConnectorView[]> = (() => {
   const built: Record<ConnectorCategory, ConnectorView[]> = {
     "version-control": [],
@@ -83,9 +73,6 @@ function flattenCatalog(catalog: Record<ConnectorCategory, ConnectorView[]>): Co
 }
 
 export function ConnectorsWorkspace() {
-  export function ConnectorsWorkspace() {
-  // Catalog is seeded from the bundled registry so tools render immediately,
-  // even when the /api/connectors status call is unavailable or unauthenticated.
   const [catalog, setCatalog] = useState<Record<ConnectorCategory, ConnectorView[]>>(LOCAL_CATALOG);
   const [statuses, setStatuses] = useState<Record<string, { status: Status; message?: string }>>({});
   const [active, setActive] = useState<FilterId>("all");
@@ -96,40 +83,24 @@ export function ConnectorsWorkspace() {
   const [endpoint, setEndpoint] = useState("");
   const [authorizing, setAuthorizing] = useState(false);
 
-  // Merge an API-provided catalog (ConnectorSpec[] per category) over the local
-  // baseline, preserving every tool and its placement under the right category.
-  const mergeCatalog = useCallback(
-    (serverCatalog?: Record<ConnectorCategory, ConnectorSpec[]>) => {
-      if (!serverCatalog) return;
-      setCatalog((current) => {
-        const next: Record<ConnectorCategory, ConnectorView[]> = {
-          "version-control": [...current["version-control"]],
-          hosting: [...current.hosting],
-          database: [...current.database],
-          "cache-search": [...current["cache-search"]],
-          monitoring: [...current.monitoring],
-        };
-        for (const [category, specs] of Object.entries(serverCatalog) as Array<[ConnectorCategory, ConnectorSpec[]]>) {
-          if (!next[category]) continue;
-          const seen = new Set(next[category].map((v) => v.id));
-          for (const spec of specs) {
-            if (seen.has(spec.id)) continue;
-            next[category].push({
-              id: spec.id,
-              name: spec.name,
-              icon: spec.icon,
-              category: spec.category,
-              description: spec.description,
-              authType: spec.authType,
-              bindsApp: spec.bindsApp,
-            });
-          }
-        }
-        return next;
-      });
-    },
-    []
-  );
+  const mergeCatalog = useCallback((serverCatalog?: Record<ConnectorCategory, ConnectorSpec[]>) => {
+    if (!serverCatalog) return;
+    setCatalog((current) => {
+      const next: Record<ConnectorCategory, ConnectorView[]> = {
+        "version-control": [...current["version-control"]],
+        hosting: [...current.hosting],
+        database: [...current.database],
+        "cache-search": [...current["cache-search"]],
+        monitoring: [...current.monitoring],
+      };
+      for (const [cat, specs] of Object.entries(serverCatalog) as Array<[ConnectorCategory, ConnectorSpec[]]>) {
+        if (!next[cat]) continue;
+        const seen = new Set(next[cat].map((v) => v.id));
+        for (const spec of specs) if (!seen.has(spec.id)) next[cat].push({ ...spec, category: spec.category });
+      }
+      return next;
+    });
+  }, []);
 
   async function refresh() {
     try {
@@ -138,35 +109,27 @@ export function ConnectorsWorkspace() {
       const data = (await res.json()) as WorkspaceResponse;
       mergeCatalog(data.catalog);
       setStatuses(data.statuses ?? {});
-    } catch (cause) {
-      // Status/session sync failed — keep the bundled catalog so tools still render.
-      console.warn("[connectors] status sync failed:", cause);
+    } catch (e) {
+      console.warn("[connectors] sync failed:", e);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    const timer = setTimeout(() => void refresh(), 0); // initial load
-    const interval = setInterval(() => void refresh(), 30_000); // live status sync
-    return () => {
-      clearTimeout(timer);
-      clearInterval(interval);
-    };
-  }, [refresh]);
-
-  const total = useMemo(() => flattenCatalog(catalog).length, [catalog]);
+    const timer = setTimeout(() => void refresh(), 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const allViews = useMemo(() => flattenCatalog(catalog), [catalog]);
-
+  const list = active === "all" ? allViews : catalog[active] ?? [];
+  const total = allViews.length;
   const connectedCount = useMemo(
     () => Object.values(statuses).filter((s) => s.status === "connected").length,
     [statuses]
   );
 
-  const list = active === "all" ? allViews : catalog[active] ?? [];
-
-  async function connect() {
+  const connect = async () => {
     if (!connectTarget) return;
     if (connectTarget.authType !== "oauth" && !credValue) {
       toast.error("Enter the credential first.");
@@ -179,80 +142,56 @@ export function ConnectorsWorkspace() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          op: "connect",
-          connectorId: connectTarget.id,
-          authType: connectTarget.authType,
-          value: credValue || "oauth-consent",
-          endpoint:
-            connectTarget.id === "supabase" || connectTarget.authType === "connection-string"
-              ? endpoint || undefined
-              : undefined,
-          boundApp: "auto",
-        }),
+        body: JSON.stringify({ op: "connect", connectorId: connectTarget.id, authType: connectTarget.authType, value: credValue, endpoint }),
       });
-      const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
-      if (!res.ok || !data?.ok) {
-        toast.error(data?.error ?? "Could not connect.");
+      const d = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || !d?.ok) {
+        toast.error(d?.error ?? "Could not connect.");
         return;
       }
       toast.success(`${connectTarget.name} connected.`);
-      await refresh();
-    } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : "Connection failed.");
+      refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Connection failed.");
     } finally {
       setAuthorizing(false);
-      setBusy((p) => (connectTarget ? { ...p, [connectTarget.id]: false } : p));
+      setBusy({});
       setConnectTarget(null);
       setCredValue("");
       setEndpoint("");
     }
-  }
+  };
 
-  async function toggle(connector: ConnectorView, next: boolean) {
-    setBusy((p) => ({ ...p, [connector.id]: true }));
-    try {
-      if (next) {
-        setConnectTarget(connector);
-      } else {
-        await fetch("/api/connectors", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ op: "disconnect", connectorId: connector.id }),
-        });
-        setStatuses((prev) => ({ ...prev, [connector.id]: { status: "disconnected" } }));
-        toast.success(`${connector.name} disconnected.`);
-      }
-    } finally {
-      setBusy((p) => ({ ...p, [connector.id]: false }));
-    }
-  }
+  const toggle = (c: ConnectorView, next: boolean) => {
+    setBusy((p) => ({ ...p, [c.id]: true }));
+    (async () => {
+      if (next) return setConnectTarget(c);
+      await fetch("/api/connectors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ op: "disconnect", connectorId: c.id }),
+      });
+      setStatuses((s) => ({ ...s, [c.id]: { status: "disconnected" } }));
+      toast.success(`${c.name} disconnected.`);
+      setBusy({});
+    })();
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur px-4 py-3 flex items-center gap-3">
-        <Link
-          href="/jyinx"
-          className="text-xs text-muted hover:text-gold px-2 py-1 rounded-lg border border-border"
-        >
-          ← Back to Jyinx
-        </Link>
-        <div className="min-w-0">
-          <h1 className="text-sm font-semibold text-gold truncate">Connectors workspace</h1>
-          <p className="text-[10px] text-muted truncate">
-            {connectedCount} connected · {total} tools available
-          </p>
+        <Link href="/jyinx" className="text-xs text-muted hover:text-gold px-2 py-1 rounded-lg border border-border">← Back to Jyinx</Link>
+        <div>
+          <h1 className="text-sm font-semibold text-gold">Connectors workspace</h1>
+          <p className="text-[10px] text-muted">{connectedCount} connected · {total} tools</p>
         </div>
       </header>
 
       <div className="mx-auto max-w-3xl px-4 pb-32 pt-4">
         <section className="rounded-2xl border border-gold/25 bg-gold/5 p-3 text-xs text-muted">
           <p className="font-medium text-gold">Service toggles</p>
-          <p className="mt-1">
-            Flip any tool ON to start the inline connect flow. Connected tools are stored securely and exposed to Jyinx
-            agents as tools (deploy, migrate, push, env-sync). Statuses refresh live.
-          </p>
+          <p className="mt-1">Flip any tool ON to start the inline connect flow. Statuses refresh live.</p>
         </section>
 
         <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1">
@@ -271,17 +210,13 @@ export function ConnectorsWorkspace() {
 
         <div className="mt-3 space-y-2">
           {loading && <p className="py-10 text-center text-xs text-muted">Loading connectors…</p>}
-          {!loading && list.length === 0 && <p className="py-10 text-center text-xs text-muted">No tools in this category.</p>}
+          {!loading && list.length === 0 && <p className="py-10 text-center text-xs text-muted">No tools found.</p>}
           {list.map((c) => {
             const st = statuses[c.id]?.status ?? "disconnected";
             const on = st === "connected";
-            const busyThis = busy[c.id];
             return (
-              <div
-                key={c.id}
-                className="flex items-center gap-3 rounded-2xl border border-border bg-background/50 p-3 w-full box-border"
-              >
-                <div className="w-10 h-10 rounded-xl bg-surface border border-border flex items-center justify-center text-lg shrink-0">
+              <div key={c.id} className="flex items-center gap-3 rounded-2xl border border-border bg-background/50 p-3">
+                <div className="w-10 h-10 rounded-xl bg-surface border border-border flex items-center justify-center text-lg">
                   {c.icon}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -291,96 +226,52 @@ export function ConnectorsWorkspace() {
                       {st}
                     </span>
                   </div>
-                  <p className="text-[11px] text-muted truncate max-w-[46vw]">{c.description}</p>
+                  <p className="text-[11px] text-muted">{c.description}</p>
                 </div>
-
                 <button
                   role="switch"
                   aria-checked={on}
                   aria-label={`Toggle ${c.name}`}
                   onClick={() => void toggle(c, !on)}
-                  disabled={busyThis}
-                  className={`w-11 h-6 rounded-full border relative transition-colors shrink-0 ${
+                  disabled={busy[c.id]}
+                  className={`w-11 h-6 rounded-full border relative transition-colors ${
                     on ? "bg-gold/40 border-gold" : "bg-background/40 border-border"
-                  } ${busyThis ? "opacity-50" : ""}`}
+                  }`}
                 >
-                  <span
-                    className={`absolute top-0.5 w-5 h-5 rounded-full transition-all ${
-                      on ? "left-5 bg-gold" : "left-0.5 bg-muted"
-                    }`}
-                  />
+                  <span className={`absolute top-0.5 w-5 h-5 rounded-full transition-all ${on ? "left-5" : "left-0.5"} ${on ? "bg-gold" : "bg-muted"}`} />
                 </button>
               </div>
             );
           })}
         </div>
-
-        <p className="mt-4 text-[10px] text-muted">
-          Credentials are encrypted at rest per user. OAuth tokens never leave the backend vault. Run automated actions
-          from the agent panel once tools are ON.
-        </p>
       </div>
 
       {connectTarget && (
-        <div
-          className="fixed inset-0 z-[70] bg-black/60 flex items-end sm:items-center justify-center p-4"
-          onClick={() => setConnectTarget(null)}
-        >
+        <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4" onClick={() => setConnectTarget(null)}>
           <div className="glass border border-border rounded-2xl p-4 w-full max-w-sm space-y-3" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between">
-              <h3 className="font-medium text-sm">
-                {connectTarget.icon} Connect {connectTarget.name}
-              </h3>
-              <button onClick={() => setConnectTarget(null)} className="text-muted text-sm" aria-label="Close">
-                ✕
-              </button>
+              <h3 className="font-medium text-sm">Connect {connectTarget.name}</h3>
+              <button onClick={() => setConnectTarget(null)} className="text-muted text-sm" aria-label="Close">✕</button>
             </div>
             <p className="text-[11px] text-muted">{connectTarget.description}</p>
-
             {connectTarget.authType === "oauth" ? (
               <div className="rounded-xl border border-border bg-background/40 p-3 text-[11px] text-muted">
-                OAuth flow — click authorize to securely wire {connectTarget.name} to your workspace. No key needed.
+                OAuth flow — click authorize to securely wire {connectTarget.name} to your workspace.
               </div>
-            ) : connectTarget.authType === "connection-string" ? (
-              <>
-                <label className="block text-[11px] text-muted">Connection string</label>
-                <input
-                  value={credValue}
-                  onChange={(e) => setCredValue(e.target.value)}
-                  placeholder="postgres://…  or  mongodb+srv://…"
-                  className="w-full px-3 py-2 rounded-xl bg-background/60 border border-border text-xs"
-                />
-                <label className="block text-[11px] text-muted">Endpoint host</label>
-                <input
-                  value={endpoint}
-                  onChange={(e) => setEndpoint(e.target.value)}
-                  placeholder="project-ref.supabase.co"
-                  className="w-full px-3 py-2 rounded-xl bg-background/60 border border-border text-xs"
-                />
-              </>
             ) : (
-              <>
-                <label className="block text-[11px] text-muted">API token</label>
+              <div>
+                <label className="block text-[11px] text-muted">Token / Connection string</label>
                 <input
                   value={credValue}
                   onChange={(e) => setCredValue(e.target.value)}
-                  placeholder="Paste API token"
-                  className="w-full px-3 py-2 rounded-xl bg-background/60 border border-border text-xs"
+                  placeholder="API token or connection string"
+                  className="mt-1 w-full px-3 py-2 rounded-xl bg-background/60 border border-border text-xs"
                 />
                 {connectTarget.id === "supabase" && (
-                  <>
-                    <label className="block text-[11px] text-muted">Project endpoint</label>
-                    <input
-                      value={endpoint}
-                      onChange={(e) => setEndpoint(e.target.value)}
-                      placeholder="https://your-ref.supabase.co"
-                      className="w-full px-3 py-2 rounded-xl bg-background/60 border border-border text-xs"
-                    />
-                  </>
+                  <label className="block text-[11px] text-muted mt-2">Endpoint</label>
                 )}
-              </>
+              </div>
             )}
-
             <div className="flex gap-2 pt-1">
               <button onClick={() => setConnectTarget(null)} className="flex-1 py-2 rounded-lg border border-border text-xs text-muted">
                 Cancel
@@ -390,16 +281,7 @@ export function ConnectorsWorkspace() {
                 disabled={authorizing}
                 className="flex-1 py-2 rounded-lg bg-gold/20 border border-gold/40 text-gold text-xs disabled:opacity-50"
               >
-                {authorizing ? (
-                  <span className="inline-flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full border border-gold/50 border-t-transparent animate-spin" />
-                    Connecting…
-                  </span>
-                ) : connectTarget.authType === "oauth" ? (
-                  "Authorize"
-                ) : (
-                  "Connect"
-                )}
+                {authorizing ? "Connecting…" : "Connect"}
               </button>
             </div>
           </div>

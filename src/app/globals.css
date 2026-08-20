@@ -119,6 +119,42 @@ body {
   animation: pulse-gold 2s ease-in-out infinite;
 }
 
+/* Confetti micro-animations for milestone celebration */
+@keyframes confetti-fall {
+  0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(120px) rotate(360deg); opacity: 0; }
+}
+
+.confetti-a, .confetti-b, .confetti-c, .confetti-d,
+.confetti-e, .confetti-f, .confetti-g, .confetti-h {
+  position: absolute;
+  top: -12px;
+  width: 7px;
+  height: 12px;
+  border-radius: 2px;
+  opacity: 0.9;
+  animation: confetti-fall 1.8s ease-in forwards;
+}
+
+.confetti-a { left: 10%; background: #d4a843; animation-delay: 0s; }
+.confetti-b { left: 25%; background: #7dd3fc; animation-delay: 0.15s; transform: rotate(20deg); }
+.confetti-c { left: 40%; background: #f472b6; animation-delay: 0.3s; }
+.confetti-d { left: 55%; background: #34d399; animation-delay: 0.1s; transform: rotate(-25deg); }
+.confetti-e { left: 70%; background: #fbbf24; animation-delay: 0.45s; }
+.confetti-f { left: 85%; background: #a78bfa; animation-delay: 0.2s; }
+.confetti-g { left: 20%; background: #94a3b8; animation-delay: 0.55s; transform: rotate(40deg); }
+.confetti-h { left: 45%; background: #f87171; animation-delay: 0.35s; transform: rotate(-15deg); }
+
+.confetti-pop {
+  animation: confetti-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes confetti-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
 [data-theme="light"] .bubble-user {
   background: linear-gradient(145deg, rgba(184, 134, 11, 0.18), rgba(184, 134, 11, 0.08));
   border: 1px solid rgba(184, 134, 11, 0.28);

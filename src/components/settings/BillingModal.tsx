@@ -33,11 +33,14 @@ interface BillingData {
   bundles: Bundle[];
 }
 
+type Gateway = "stripe" | "hubtel";
+
 export function BillingModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [data, setData] = useState<BillingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [gateway, setGateway] = useState<Gateway>("stripe");
 
   async function refresh() {
     try {
@@ -65,14 +68,14 @@ export function BillingModal({ open, onClose }: { open: boolean; onClose: () => 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ bundleId }),
+        body: JSON.stringify({ bundleId, gateway }),
       });
       const payload = (await res.json().catch(() => null)) as { ok?: boolean; url?: string; error?: string } | null;
       if (!res.ok || !payload?.url) {
         setError(payload?.error ?? "Checkout could not be started.");
         return;
       }
-      window.location.assign(payload.url); // Stripe hosted checkout
+      window.location.assign(payload.url); // hosted checkout (Stripe or Hubtel)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Checkout failed.");
     } finally {
@@ -104,6 +107,28 @@ export function BillingModal({ open, onClose }: { open: boolean; onClose: () => 
                 Flagship model calls draw from this balance when you&apos;re not using your own key.
               </p>
               {error && <p className="mt-2 text-xs text-danger">{error}</p>}
+            </div>
+
+            <p className="mt-5 text-sm font-medium">Payment method</p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setGateway("stripe")}
+                className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                  gateway === "stripe" ? "border-gold/50 bg-gold/15" : "border-border bg-background/50"
+                }`}
+              >
+                <p className="text-xs font-medium">Stripe</p>
+                <p className="text-[10px] text-muted">Card · International</p>
+              </button>
+              <button
+                onClick={() => setGateway("hubtel")}
+                className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                  gateway === "hubtel" ? "border-gold/50 bg-gold/15" : "border-border bg-background/50"
+                }`}
+              >
+                <p className="text-xs font-medium">Hubtel</p>
+                <p className="text-[10px] text-muted">Mobile money · Local</p>
+              </button>
             </div>
 
             <p className="mt-5 text-sm font-medium">Top up</p>

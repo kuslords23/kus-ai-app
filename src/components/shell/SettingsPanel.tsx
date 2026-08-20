@@ -7,6 +7,8 @@ import { AGENTS } from "@/lib/agents/registry";
 import { MemoryPanel } from "@/components/memory/MemoryPanel";
 import { ConnectorsHub } from "@/components/settings/ConnectorsHub";
 import { BillingModal } from "@/components/settings/BillingModal";
+import { ReportModal } from "@/components/legal/ReportModal";
+import { DeleteAccountModal } from "@/components/legal/DeleteAccountModal";
 import {
   addRegrettedAction,
   fadeTopic,
@@ -37,6 +39,8 @@ export function SettingsPanel({
   const { user } = useAuth();
   const [showConnectors, setShowConnectors] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const { toggle: togglePush } = usePushNotifications(
     settings.pushNotifications,
     userId ?? user?.id,
@@ -272,6 +276,42 @@ export function SettingsPanel({
               and cross-app chat sync via Supabase.
             </p>
 
+            <div className="border-t border-border pt-3 space-y-2">
+              <p className="text-[10px] font-medium text-muted uppercase tracking-wide">Legal &amp; Safety</p>
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-border bg-background/40 text-xs text-muted hover:border-gold/40 hover:text-foreground transition-colors"
+              >
+                <span>Privacy Policy</span>
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+              </a>
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-border bg-background/40 text-xs text-muted hover:border-gold/40 hover:text-foreground transition-colors"
+              >
+                <span>Terms of Service</span>
+                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+              </a>
+              <button
+                onClick={() => setShowReport(true)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-border bg-background/40 text-xs text-muted hover:border-gold/40 hover:text-foreground transition-colors"
+              >
+                <span>Report Content</span>
+                <span className="text-[10px] text-muted">Flag unsafe AI output</span>
+              </button>
+              <button
+                onClick={() => setShowDelete(true)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-red-500/20 bg-red-500/5 text-xs text-red-400 hover:border-red-500/40 transition-colors"
+              >
+                <span>Delete Account &amp; Data</span>
+                <span className="text-[10px]">Irreversible</span>
+              </button>
+            </div>
+
             <button
               onClick={onSignOut}
               className="w-full py-2.5 rounded-xl border border-danger/40 text-danger text-sm"
@@ -285,6 +325,8 @@ export function SettingsPanel({
       )}
 
       <BillingModal open={showBilling} onClose={() => setShowBilling(false)} />
+      <ReportModal open={showReport} onClose={() => setShowReport(false)} />
+      <DeleteAccountModal open={showDelete} onClose={() => setShowDelete(false)} />
     </AnimatePresence>
   );
 }

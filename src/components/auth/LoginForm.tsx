@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { toast } from "sonner";
 import { hubLoginUrl } from "@/lib/auth/hubBridge";
+import { DemoAccountButton } from "@/components/auth/DemoAccountButton";
 
 export function LoginForm({ onSuccess }: { onSuccess?: () => void }) {
   const [email, setEmail] = useState("");
@@ -92,6 +93,7 @@ export function LoginForm({ onSuccess }: { onSuccess?: () => void }) {
         >
           Sign in via Hub
         </button>
+        <DemoAccountButton onSuccess={onSuccess} />
         <p className="text-[10px] text-center text-muted leading-relaxed">
           Hub unlocks wallet, sports, and kingdom actions. A{" "}
           <strong className="text-gold">← Royal</strong> button on Hub brings you back here.
@@ -106,6 +108,18 @@ export function LoginForm({ onSuccess }: { onSuccess?: () => void }) {
           ? "Already have an account? Sign in"
           : "Need an account? Sign up"}
       </button>
+
+      <p className="text-[10px] text-center text-muted mt-4 leading-relaxed">
+        By continuing you agree to the{" "}
+        <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-gold underline">
+          Terms of Service
+        </a>{" "}
+        and{" "}
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-gold underline">
+          Privacy Policy
+        </a>
+        .
+      </p>
     </motion.div>
   );
 }

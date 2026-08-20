@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { PwaUpdater } from "@/components/pwa/PwaUpdater";
 import { JyinxModelProvider } from "@/lib/jyinx/model-store";
+import { ErrorBoundary } from "@/components/legal/ErrorBoundary";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,6 +21,9 @@ export const metadata: Metadata = {
   title: "Kus-lords AI",
   description: "The Royal Advisor — your conversational guide to the whole kingdom",
   manifest: "/manifest.json",
+  applicationName: "Kus-lords AI",
+  authors: [{ name: "Kus-Lords" }],
+  robots: { index: true, follow: true },
   icons: {
     icon: [
       { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -54,7 +58,9 @@ export default function RootLayout({
     >
       <body className="h-full overflow-hidden flex flex-col bg-background text-foreground">
         <PwaUpdater />
-        <ThemeProvider><JyinxModelProvider>{children}</JyinxModelProvider></ThemeProvider>
+        <ErrorBoundary>
+          <ThemeProvider><JyinxModelProvider>{children}</JyinxModelProvider></ThemeProvider>
+        </ErrorBoundary>
         <Toaster
           theme="system"
           toastOptions={{
