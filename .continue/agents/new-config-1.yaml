@@ -1,7 +1,14 @@
+name: OpenRouter Config
+version: 1.0.0
+schema: v1
+
 models:
-  - name: OpenRouter Grok
+  - name: DeepSeek V4 Flash
     provider: openrouter
-    model: x-ai/grok-2-1212
-    apiBase: https://openrouter.ai/api/v1
-    apiKey: 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
-    
+    model: deepseek/deepseek-v4-flash
+    apiKey: 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
+    roles:
+      - chat
+      - edit
+      - apply
+      - summarize

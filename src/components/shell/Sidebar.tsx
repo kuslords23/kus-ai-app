@@ -303,6 +303,14 @@ export function Sidebar({
                     <span>Code Library</span>
                     <span className="text-xs">📦</span>
                   </Link>
+                  <Link
+                    href="/jyinx/marketplace"
+                    onClick={onClose}
+                    className="flex items-center justify-between rounded-lg border border-violet-500/25 bg-violet-500/10 px-3 py-2 text-sm text-violet-300 hover:bg-violet-500/15"
+                  >
+                    <span>Marketplace</span>
+                    <span className="text-xs">🏪</span>
+                  </Link>
                   {COMPANIONS.map((c) => (
                     <a
                       key={c.id}

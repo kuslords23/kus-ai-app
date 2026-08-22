@@ -14,6 +14,7 @@ export type HeaderMenuAction =
   | "search"
   | "peer-chat"
   | "code-library"
+  | "marketplace"
   | "back";
 
 type Props = {
@@ -62,6 +63,7 @@ export function HeaderMenu({ active, onAction, trigger, align = "right" }: Props
     { key: "search", label: "Online code search", icon: "🔎" },
     { key: "peer-chat", label: "Peer-to-Peer chat", icon: "👥" },
     { key: "code-library", label: "Code library", icon: "📦" },
+    { key: "marketplace", label: "Marketplace", icon: "🏪" },
     { key: "settings", label: "Settings", icon: "⚙" },
     { key: "back", label: "Back to Royal", icon: "←" },
   ];
