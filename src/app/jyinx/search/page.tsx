@@ -1,10 +1,5 @@
-﻿import type { Metadata } from 'next';
+﻿'use client';
 import { OnlineCodeSearch, type OnlineCodeResult } from '@/components/ide/OnlineCodeSearch';
-
-export const metadata: Metadata = {
-  title: 'Online Code Search | Jyinx',
-  description: 'Search public codebases, documentation, and code snippets.',
-};
 
 export default function JyinxSearchPage() {
   return (
@@ -17,3 +12,4 @@ export default function JyinxSearchPage() {
     </div>
   );
 }
+
