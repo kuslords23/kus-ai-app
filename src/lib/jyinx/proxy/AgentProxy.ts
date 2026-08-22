@@ -12,7 +12,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import type { SkillMetadata } from '../configs/skillRegistry';
+import type { SkillMetadata } from '@/configs/skillRegistry';
 
 export interface ProxyConnectionConfig {
   agentId: string;

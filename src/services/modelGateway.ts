@@ -63,9 +63,35 @@ export type GatewayResponse = {
 
 export const DEFAULT_FREE_MODEL = "openrouter/free";
 
+/**
+ * Multi-provider API keys from environment variables.
+ * These enable the independent cloud routing across aggregators.
+ */
+export const PROVIDER_CONFIGS: Record<string, { baseUrl: string; envKey: string }> = {
+  openrouter: { baseUrl: "https://openrouter.ai/api/v1", envKey: "OPENROUTER_API_KEY" },
+  "together-ai": { baseUrl: "https://api.together.xyz/v1", envKey: "TOGETHER_API_KEY" },
+  deepinfra: { baseUrl: "https://api.deepinfra.com/v1/openai", envKey: "DEEPINFRA_API_KEY" },
+};
+
+/**
+ * Multi-Tier Fallback Ladder:
+ * 1. Primary Free Tier – openrouter/free
+ * 2. Budget Cloud Tier – DeepSeek / Qwen via Together or DeepInfra
+ * 3. Premium Expert Tier – GPT-4.1 via OpenRouter
+ */
+export const FALLBACK_LADDER: Array<{ provider: string; model: string; tier: string }> = [
+  { provider: "openrouter", model: "openrouter/free", tier: "free" },
+  { provider: "openrouter", model: "deepseek/deepseek-r1:free", tier: "budget" },
+  { provider: "together-ai", model: "deepseek-ai/DeepSeek-R1-Distill-Llama-70B", tier: "budget" },
+  { provider: "openrouter", model: "qwen/qwen-2.5-72b-instruct:free", tier: "budget" },
+  { provider: "deepinfra", model: "deepseek-ai/DeepSeek-R1-Distill-Llama-70B", tier: "budget" },
+  { provider: "openrouter", model: "openai/gpt-4.1-mini", tier: "premium" },
+  { provider: "openrouter", model: "google/gemini-2.5-flash", tier: "premium" },
+];
+
 /** Per-modality model pipelines in failover order. */
 export const MODALITY_MODELS: Record<GenerationModality, string[]> = {
-  conversation: [DEFAULT_FREE_MODEL, "openai/gpt-4.1-mini", "google/gemini-2.5-flash"],
+  conversation: FALLBACK_LADDER.map((f) => f.model),
   reasoning: ["openrouter/reasoning", "deepseek/deepseek-r1:free", "openai/o3"],
   image: ["openrouter/auto", "black-forest-labs/flux-schnell", "stabilityai/stable-diffusion-3.5-large"],
   video: ["openrouter/auto", "minimax/video-01"],

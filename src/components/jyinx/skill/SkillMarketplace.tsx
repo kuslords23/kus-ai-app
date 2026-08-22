@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { skillRegistryService } from '../../lib/skillRegistryService';
-import { SkillMetadata, SkillSource, RegistryStatus } from '../../configs/skillRegistry';
+import { skillRegistryService } from '@/lib/skillRegistryService';
+import type { SkillMetadata, SkillSource, RegistryStatus } from '@/configs/skillRegistry';
 
 /**
  * Skill Marketplace UI Component
