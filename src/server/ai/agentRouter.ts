@@ -28,6 +28,8 @@ export interface AgentRequest {
   userId?: string;
   /** Optional file paths / repo context to inject. */
   files?: Array<{ path: string; content: string }>;
+  /** Model identifier for routing (e.g. "kus-ai/royal", "kus-ai/kus-code"). */
+  model?: string;
 }
 
 export interface AgentResult {
@@ -64,23 +66,33 @@ const ROLE_SYSTEMS: Record<KusAgentRole, string> = {
 };
 
 const KUS_AI_ENDPOINT = process.env.KUS_AI_ENDPOINT ?? "https://api.kus-ai.app/v1/chat/completions";
+const KUS_CODE_ENDPOINT = process.env.KUS_CODE_ENDPOINT ?? "https://api.kus-code.ai/v1/chat/completions";
 const KUS_AI_KEY = process.env.KUS_AI_API_KEY ?? process.env.KUSAI_API_KEY ?? "";
+const KUS_CODE_KEY = process.env.KUS_CODE_API_KEY ?? process.env.KUS_CODE_KEY ?? KUS_AI_KEY;
 
 /**
  * Routes a request to the Kus AI sub-agent system.
  * Falls back gracefully if the endpoint is not configured.
  */
 export async function routeToKusAgent(req: AgentRequest): Promise<AgentResult> {
-  if (!KUS_AI_KEY) {
+  const isKusCode = req.model === "kus-ai/kus-code";
+  const apiKey = isKusCode ? KUS_CODE_KEY : KUS_AI_KEY;
+  const endpoint = isKusCode ? KUS_CODE_ENDPOINT : KUS_AI_ENDPOINT;
+
+  if (!apiKey) {
     return {
       content: "",
       role: req.role,
-      model: "kus-ai",
-      error: "Kus AI is not configured. Add KUS_AI_API_KEY in environment variables.",
+      model: isKusCode ? "kus-code" : "kus-ai",
+      error: isKusCode
+        ? "Kus Code / AI 3 is not configured. Add KUS_CODE_API_KEY in environment variables."
+        : "Kus AI is not configured. Add KUS_AI_API_KEY in environment variables.",
     };
   }
 
-  const systemMessage = ROLE_SYSTEMS[req.role] ?? ROLE_SYSTEMS.general;
+  const systemMessage = isKusCode
+    ? "You are Kus Code / AI 3, a high-level general LLM focused on software architecture, code generation, and technical problem-solving. Provide thorough, well-structured responses with complete code examples. You have a 256K context window and can handle large codebases, complex refactors, and architectural planning."
+    : ROLE_SYSTEMS[req.role] ?? ROLE_SYSTEMS.general;
 
   const messages: Array<{ role: string; content: string }> = [
     { role: "system", content: systemMessage },
@@ -102,17 +114,17 @@ export async function routeToKusAgent(req: AgentRequest): Promise<AgentResult> {
   messages.push({ role: "user", content: req.prompt });
 
   try {
-    const response = await fetch(KUS_AI_ENDPOINT, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${KUS_AI_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: `kus-ai/${req.role}`,
+        model: isKusCode ? "kus-code/ai-3" : `kus-ai/${req.role}`,
         messages,
         temperature: 0.3,
-        max_tokens: 4096,
+        max_tokens: isKusCode ? 8192 : 4096,
       }),
       cache: "no-store",
     });
@@ -123,16 +135,16 @@ export async function routeToKusAgent(req: AgentRequest): Promise<AgentResult> {
     } | null;
 
     if (!response.ok) {
-      return { content: "", role: req.role, model: "kus-ai", error: data?.error?.message ?? `Kus AI returned ${response.status}` };
+      return { content: "", role: req.role, model: isKusCode ? "kus-code" : "kus-ai", error: data?.error?.message ?? `${isKusCode ? "Kus Code" : "Kus AI"} returned ${response.status}` };
     }
 
     return {
       content: data?.choices?.[0]?.message?.content ?? "",
       role: req.role,
-      model: "kus-ai",
+      model: isKusCode ? "kus-code/ai-3" : "kus-ai",
     };
   } catch (cause) {
-    return { content: "", role: req.role, model: "kus-ai", error: cause instanceof Error ? cause.message : "Kus AI request failed." };
+    return { content: "", role: req.role, model: isKusCode ? "kus-code" : "kus-ai", error: cause instanceof Error ? cause.message : `${isKusCode ? "Kus Code" : "Kus AI"} request failed.` };
   }
 }
 

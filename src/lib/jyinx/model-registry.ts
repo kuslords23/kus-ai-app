@@ -7,6 +7,7 @@ export type JyinxModel = {
 
 export const JYINX_MODELS: JyinxModel[] = [
   { id: "kus-ai/royal", label: "Kus AI", tier: "Auto", contextWindow: 128_000 },
+  { id: "kus-ai/kus-code", label: "Kus Code / AI 3", tier: "Auto", contextWindow: 256_000 },
   { id: "openrouter/auto", label: "OpenRouter Auto", tier: "Auto", contextWindow: 128_000 },
   { id: "openrouter/free", label: "OpenRouter Free", tier: "Free", contextWindow: 128_000 },
   { id: "meta-llama/llama-3-8b-instruct:free", label: "Llama 3 8B (free)", tier: "Free", contextWindow: 8_192 },

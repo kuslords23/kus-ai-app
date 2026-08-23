@@ -194,6 +194,7 @@ const commitActive = Boolean(githubToken && repository && repository !== "local"
   const apiKey = resolved.key as string;
   const endpoint = agentEndpoint === OPENROUTER_URL ? openRouterUrl() : agentEndpoint;
   const isKusAi = modelId.startsWith("kus-ai/");
+  const isKusCode = modelId === "kus-ai/kus-code";
 
   try {
     // Semantic cache: serve matching queries instantly at $0 cost. Skipped for
@@ -210,8 +211,9 @@ const commitActive = Boolean(githubToken && repository && repository !== "local"
       }
     }
 
-    // Kus AI model → route through the internal RAG brain (same runner as Royal
-    // "Kus AI"), giving Jyinx a first-class Kus AI choice alongside OpenRouter.
+    // Kus AI / Kus Code models → route through the internal RAG brain or dedicated
+    // Kus Code endpoint. Kus AI (Royal) uses the same runner as Royal "Kus AI".
+    // Kus Code / AI 3 uses a higher-context endpoint for general LLM tasks.
     if (isKusAi) {
       const historyText = history.length
         ? history.map((turn) => `${turn.role === "user" ? "User" : "Jyinx"}: ${turn.content}`).join("\n")

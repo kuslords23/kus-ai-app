@@ -13,10 +13,18 @@ export default function CodeLibraryPage() {
       <div className="flex flex-1 flex-col">
         <header className="shrink-0 border-b border-border bg-background/90 px-6 py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-bold text-gold">Code Library</h1>
-              <p className="text-xs text-muted">Your curated code vault — search, clone, and reuse battle-tested snippets.</p>
-            </div>
+            <div className="flex items-center gap-3">
+                          <Link
+                            href="/jyinx"
+                            className="shrink-0 rounded-lg border border-gold/30 bg-gold/10 px-3 py-1.5 text-xs font-medium text-gold hover:bg-gold/15"
+                          >
+                            ← Back
+                          </Link>
+                          <div>
+                            <h1 className="text-lg font-bold text-gold">Code Library</h1>
+                            <p className="text-xs text-muted">Your curated code vault — search, clone, and reuse battle-tested snippets.</p>
+                          </div>
+                        </div>
             <Link href="/jyinx/search" className="rounded-xl border border-gold/30 bg-gold/10 px-4 py-2 text-sm text-gold hover:bg-gold/15">
               🔎 Search online
             </Link>

@@ -74,6 +74,12 @@ export const MODEL_CATALOG: ModelProvider[] = [
         tier: "Auto",
         contextWindow: 128_000,
       },
+      {
+        id: "kus-ai/kus-code",
+        label: "Kus Code / AI 3",
+        tier: "Auto",
+        contextWindow: 256_000,
+      },
     ],
     agents: AGENT_OPTIONS,
   },
@@ -120,6 +126,18 @@ export function providerFromModel(modelId: string): ModelProvider {
   if (modelId.startsWith("kus-ai/")) return getProvider("kusai")!;
   if (modelId.startsWith("google/") || /gemini/i.test(modelId)) return getProvider("google")!;
   return getProvider("openrouter")!;
+}
+
+/** Check if a model is a Kus AI powered model. */
+export function isKusAiModel(modelId: string): boolean {
+  return modelId.startsWith("kus-ai/");
+}
+
+/** Get the appropriate backend model identifier for routing. */
+export function resolveBackendModel(modelId: string): string {
+  if (modelId === "kus-ai/kus-code") return "kus-code/ai-3";
+  if (modelId === "kus-ai/royal") return "kus-ai/royal";
+  return modelId;
 }
 
 export type HierarchicalSelection = {

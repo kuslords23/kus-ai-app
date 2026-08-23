@@ -78,6 +78,7 @@ export function ConnectorsWorkspace() {
   const [active, setActive] = useState<FilterId>("all");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState("");
   const [connectTarget, setConnectTarget] = useState<ConnectorView | null>(null);
   const [credValue, setCredValue] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -122,7 +123,17 @@ export function ConnectorsWorkspace() {
   }, []);
 
   const allViews = useMemo(() => flattenCatalog(catalog), [catalog]);
-  const list = active === "all" ? allViews : catalog[active] ?? [];
+  const categoryList = active === "all" ? allViews : catalog[active] ?? [];
+  const list = useMemo(() =>
+    searchQuery.trim()
+      ? categoryList.filter((v) =>
+          v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          v.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          v.category.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : categoryList,
+    [categoryList, searchQuery]
+  );
   const total = allViews.length;
   const connectedCount = useMemo(
     () => Object.values(statuses).filter((s) => s.status === "connected").length,
@@ -188,13 +199,36 @@ export function ConnectorsWorkspace() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-4 pb-32 pt-4">
+      <div className="mx-auto max-w-3xl px-4 pb-32 pt-4 h-full flex flex-col">
         <section className="rounded-2xl border border-gold/25 bg-gold/5 p-3 text-xs text-muted">
           <p className="font-medium text-gold">Service toggles</p>
           <p className="mt-1">Flip any tool ON to start the inline connect flow. Statuses refresh live.</p>
         </section>
 
-        <div className="mt-4 flex gap-1.5 overflow-x-auto pb-1">
+        <div className="mt-4 flex items-center gap-3">
+          <div className="relative flex-1">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-xs">🔎</span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search connectors by name, description, or category…"
+              className="w-full rounded-xl border border-border bg-background/60 pl-8 pr-3 py-2 text-xs text-foreground outline-none focus:border-gold focus:bg-background/80"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted hover:text-gold"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <p className="shrink-0 text-[10px] text-muted">{list.length} result{list.length !== 1 ? "s" : ""}</p>
+        </div>
+
+        <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
           {CATEGORIES.map((c) => (
             <button
               key={c.id}
@@ -208,7 +242,7 @@ export function ConnectorsWorkspace() {
           ))}
         </div>
 
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-2 overflow-y-auto max-h-[calc(100vh-300px)] pr-1 scrollbar-thin">
           {loading && <p className="py-10 text-center text-xs text-muted">Loading connectors…</p>}
           {!loading && list.length === 0 && <p className="py-10 text-center text-xs text-muted">No tools found.</p>}
           {list.map((c) => {
