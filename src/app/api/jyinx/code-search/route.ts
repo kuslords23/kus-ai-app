@@ -63,7 +63,7 @@ async function searchGitHub(query: string, limit = 6): Promise<CodeSearchSource[
         const ext = item.name.split(".").pop() ?? "";
         const langMap: Record<string, string> = {
           ts: "typescript", tsx: "tsx", js: "javascript", jsx: "jsx",
-          py: "python", rs: "rust", go: "go", rs: "rust",
+          py: "python", rs: "rust", go: "go",
           css: "css", html: "html", json: "json", yaml: "yaml",
           sql: "sql", md: "markdown", sh: "shell", dockerfile: "dockerfile",
         };
@@ -85,7 +85,7 @@ async function searchGitHub(query: string, limit = 6): Promise<CodeSearchSource[
       }
     });
     const snippets = await Promise.all(snippetPromises);
-    return snippets.filter((s): s is CodeSearchSource => s !== null);
+return snippets.filter((s): boolean => s !== null) as CodeSearchSource[];
   } catch {
     return [];
   }
