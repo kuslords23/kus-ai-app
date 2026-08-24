@@ -1,5 +1,14 @@
 import { createClient as createSupabaseClient } from "@/lib/supabase/server";
 
+// SERVER-ONLY: this module talks to Supabase via cookies() (next/headers) and
+// must never be imported from a Client Component. Guard against accidental
+// leaks into the client bundle.
+if (typeof window !== "undefined") {
+  throw new Error(
+    "src/lib/jyinx/blog-engine.ts is server-only — do not import it from Client Components."
+  );
+}
+
 /**
  * Jyinx Blog Engine & headless CMS.
  *

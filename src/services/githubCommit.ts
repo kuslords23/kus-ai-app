@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/server";
 
 const API_VERSION = "2022-11-28";
 const MAX_FILE_SIZE = 1_000_000;
@@ -57,9 +57,11 @@ function assertScopeAllowed(response: Response, data: unknown): void {
   throw classifyCommitError(response.status, message);
 }
 
-/** Retrieves the active session's `provider_token` from Supabase. */
+/** Retrieves the active session's `provider_token` from Supabase (server
+ *  cookies — this module is server-only and runs in Route Handlers). */
 async function getProviderToken(): Promise<string> {
-  const { data, error } = await createClient().auth.getSession();
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.getSession();
   if (error) throw new GitHubCommitError(401, error.message, true);
   const token = data.session?.provider_token;
   if (!token) {

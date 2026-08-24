@@ -1,5 +1,14 @@
 import { pushToHost, type PushToHostResult } from "@/server/deploy/pushHost";
 
+// SERVER-ONLY: this module delegates to the server push-to-host service
+// (Supabase via cookies() + deploy hooks) and must never be imported from a
+// Client Component. Guard against accidental leaks into the client bundle.
+if (typeof window !== "undefined") {
+  throw new Error(
+    "src/lib/jyinx/git-deploy.ts is server-only — do not import it from Client Components. Use the /api/deploy route instead."
+  );
+}
+
 export interface GitDeployResult {
   success: boolean;
   commitSha?: string;
