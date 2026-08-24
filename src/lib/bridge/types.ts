@@ -118,6 +118,7 @@ export type BridgeEventType =
   | "build-finished"
   | "file-saved"
   | "git-status-change"
+  | "deploy-finished"
   | "error"
   | "command";
 

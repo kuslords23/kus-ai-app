@@ -1,5 +1,6 @@
 import { commitFiles, GitHubCommitError } from "@/services/githubCommit";
 import { runSandboxPipeline, isSandboxConfigured } from "@/services/sandboxExecution";
+import { pushToHost } from "@/server/deploy/pushHost";
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -10,6 +11,8 @@ export type AgentExecutionEvent =
   | { type: "rejected"; file: string; reason: string }
   | { type: "whitespace"; message: string }
   | { type: "error"; message: string; connect?: boolean }
+  | { type: "deploying"; message: string }
+  | { type: "deployed"; url: string }
   | { type: "done"; summary: string };
 
 export type AgentEdit = { path: string; content: string };
@@ -140,6 +143,35 @@ export async function verifyEdits(files: AgentEdit[]): Promise<{ pass: boolean; 
 }
 
 const DEFAULT_REVIEW_MODEL = "openai/gpt-4.1-mini";
+
+/**
+ * Pushes an already-committed branch to the dedicated host platform(s) and
+ * emits deploying/deployed events. Non-fatal: if the push fails, the pipeline
+ * still reports the commit and lets the user retry in the IDE.
+ */
+async function* pushAfterCommit(opts: {
+  repository: string;
+  branch: string;
+  commitSha?: string;
+  commitMessage?: string;
+}): AsyncGenerator<AgentExecutionEvent, void, unknown> {
+  yield { type: "deploying", message: `Pushing ${opts.repository}#${opts.branch} to the host platform(s)…` };
+  try {
+    const pushed = await pushToHost({
+      repository: opts.repository,
+      branch: opts.branch,
+      commitSha: opts.commitSha,
+      commitMessage: opts.commitMessage,
+    });
+    if (pushed.ok && pushed.href) {
+      yield { type: "deployed", url: pushed.href };
+    } else {
+      yield { type: "error", message: pushed.error ?? "Push to the host platform returned no confirmation." };
+    }
+  } catch (cause) {
+    yield { type: "error", message: cause instanceof Error ? cause.message : "Push to the host platform failed." };
+  }
+}
 
 /**
  * Runs the full multi-agent execution flow: coder edits, structural + multi-agent
@@ -277,8 +309,14 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
       for (const log of sandboxLogs) yield log;
 
       if (sandbox.ok) {
-        if (sandbox.commitUrl) {
-          yield { type: "done", summary: `Committed ${workingEdits.length} file(s) → ${sandbox.commitUrl}` };
+        if (sandbox.committed && sandbox.commitUrl) {
+          yield { type: "log", message: `Committed ${workingEdits.length} file(s) → ${sandbox.commitUrl}` };
+          yield* pushAfterCommit({
+            repository: config.repository,
+            branch: config.branch,
+            commitSha: sandbox.commitSha,
+            commitMessage: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
+          });
           return;
         }
         yield { type: "log", message: "Cloud build, type-check, and tests passed. Continuing to commit…" };
@@ -312,6 +350,14 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
         message: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
         files: workingEdits,
         token: config.providerToken,
+      });
+      yield { type: "log", message: `Committed ${workingEdits.length} file(s) → ${commit.commitUrl}` };
+      // Push the committed repo/branch to the dedicated host platform(s).
+      yield* pushAfterCommit({
+        repository: config.repository,
+        branch: commit.branch,
+        commitSha: commit.commitSha,
+        commitMessage: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
       });
       yield { type: "done", summary: `Committed ${workingEdits.length} file(s) → ${commit.commitUrl}` };
       return;

@@ -28,7 +28,7 @@ export type SandboxPhase =
 export type SandboxStep = { phase: SandboxPhase; message: string; exitCode?: number; logs?: string[] };
 
 export type SandboxOutcome =
-  | { ok: true; commitUrl?: string; steps: SandboxStep[] }
+  | { ok: true; commitUrl?: string; commitSha?: string; committed?: boolean; steps: SandboxStep[] }
   | { ok: false; error: string; steps: SandboxStep[]; authorization?: boolean };
 
 type SandboxOptions = {
@@ -317,7 +317,7 @@ export async function runSandboxPipeline(
     const commit = await commitFiles({ repository, baseBranch: branch, message: commitMessage, files, token: providerToken });
     emit({ phase: "committing", message: `Committed ${files.length} file(s) → ${commit.commitUrl}` });
     emit({ phase: "done", message: "Autonomous sandbox pipeline completed." });
-    return { ok: true, steps };
+    return { ok: true, commitUrl: commit.commitUrl, commitSha: commit.commitSha, committed: true, steps };
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Sandbox execution failed.";
     emit({ phase: "error", message });
