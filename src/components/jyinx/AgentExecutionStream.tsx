@@ -19,8 +19,12 @@ type Props = {
   /** Optional externally-controlled prompt value. */
   prompt?: string;
   onPromptChange?: (value: string) => void;
-  /** Called with the agent's file edits so the IDE can apply them live. */
-  onEdits?: (files: Array<{ path: string; content: string }>) => void;
+  /**
+   * Called with the agent's file edits so the IDE can apply them live.
+   * Explicitly declared so TypeScript resolves the prop cleanly at every
+   * call site (desktop panel, drawer, mobile dashboard).
+   */
+  onEdits?: (edits: Array<{ path: string; content: string }>) => void;
 };
 
 type StreamItem =
