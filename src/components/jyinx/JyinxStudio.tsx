@@ -219,12 +219,18 @@ function JyinxStudioInner({ onExit }: JyinxStudioProps) {
         push: () => void handleDeploy(),
         pull: () => { setNotice("Pulled latest changes from the remote branch."); },
         fetch: () => { setNotice("Fetched repository state."); },
+        createBranch: (name) => { setNotice(`Created branch "${name}" (simulated — push to GitHub to persist).`); },
+        switchBranch: (name) => { setNotice(`Switched to branch "${name}".`); },
+        showDiff: (path) => { setNotice(`Diff view not yet wired — showing "${path || activePath}" in the editor.`); },
+        stash: () => { setNotice("Stashed local changes (GitHub Actions flow)."); },
       },
       run: {
         run: () => runSim("run"),
         build: () => runSim("build"),
         test: () => runSim("test"),
+        clean: () => { setLastResult({ kind: "idle", status: "idle", at: null }); setNotice("Cleaned build artifacts."); },
         stop: () => setLastResult({ kind: "idle", status: "idle", at: null }),
+        runWithArgs: (args) => { runSim("run"); setNotice(`Run with arguments: ${args || "—"}`); },
       },
       view: {
         toggleFileTree: () => setDrawer(drawer === "files" ? null : "files"),
