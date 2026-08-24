@@ -19,6 +19,8 @@ type Props = {
   /** Optional externally-controlled prompt value. */
   prompt?: string;
   onPromptChange?: (value: string) => void;
+  /** Called with the agent's file edits so the IDE can apply them live. */
+  onEdits?: (files: Array<{ path: string; content: string }>) => void;
 };
 
 type StreamItem =
@@ -30,9 +32,10 @@ type StreamItem =
   | { kind: "error"; message: string; connect?: boolean }
   | { kind: "deploying"; message: string }
   | { kind: "deployed"; url: string }
+  | { kind: "edit"; files: Array<{ path: string; content: string }> }
   | { kind: "done"; summary: string };
 
-export function AgentExecutionStream({ open, onClose, repository, branch, model, repositoryFiles = [], initialPrompt, onPromptChange }: Props) {
+export function AgentExecutionStream({ open, onClose, repository, branch, model, repositoryFiles = [], initialPrompt, onPromptChange, onEdits }: Props) {
   const [prompt, setPrompt] = useState("");
   const [running, setRunning] = useState(false);
   const [items, setItems] = useState<StreamItem[]>([]);
@@ -113,6 +116,11 @@ export function AgentExecutionStream({ open, onClose, repository, branch, model,
         case "whitespace": next.push({ kind: "whitespace", message: event.message }); break;
         case "deploying": next.push({ kind: "deploying", message: event.message }); break;
         case "deployed": next.push({ kind: "deployed", url: event.url }); break;
+        case "edit": {
+          next.push({ kind: "edit", files: event.files });
+          if (onEdits && event.files?.length) onEdits(event.files);
+          break;
+        }
         case "error": next.push({ kind: "error", message: event.message, connect: event.connect === true }); if (event.connect === true) setNeedConnect(true); break;
         case "done": next.push({ kind: "done", summary: event.summary }); break;
       }
@@ -186,6 +194,8 @@ function StreamRow({ item }: { item: StreamItem }) {
       return <div className="flex items-center gap-2 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-xs text-gold"><span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gold border-t-transparent" />{item.message}</div>;
     case "deployed":
       return <div className="rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">🚀 Deployed — <a href={item.url} target="_blank" rel="noreferrer" className="underline hover:text-success">{item.url}</a></div>;
+    case "edit":
+      return <div className="rounded-lg border border-purple/30 bg-purple/10 px-3 py-2 text-xs text-purple-400">✏️ {item.files.length} file(s) applied to the IDE workspace — review before committing.</div>;
     case "done":
       return <div className="rounded-2xl border border-success/30 bg-success/10 p-3 text-sm text-success">{item.summary}</div>;
     default:

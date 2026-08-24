@@ -13,6 +13,7 @@ export type AgentExecutionEvent =
   | { type: "error"; message: string; connect?: boolean }
   | { type: "deploying"; message: string }
   | { type: "deployed"; url: string }
+  | { type: "edit"; files: Array<{ path: string; content: string }> }
   | { type: "done"; summary: string };
 
 export type AgentEdit = { path: string; content: string };
@@ -228,6 +229,14 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
     const parsed = parseFileEdits(coder.content);
     workingEdits = parsed.edits;
     yield { type: "narration", message: parsed.narration || `Planned edits across ${workingEdits.length} file(s).`, detail: workingEdits.map((e) => `- ${e.path} (${e.content.length} chars)`).join("\n") };
+    // Stream the edits to the connected IDE so they appear live in the file
+    // tree + editor — the agent controls the IDE's workspace, not just the
+    // cloud sandbox. (The client applies them; the pipeline still verifies +
+    // reviews before committing.)
+    if (workingEdits.length) {
+      yield { type: "edit", files: workingEdits.map((e) => ({ path: e.path, content: e.content })) };
+    }
+    yield { type: "reasoning", message: `Received ${workingEdits.length} candidate file edit(s) — verifying before applying to the branch.` };
 
     if (workingEdits.length === 0) {
       lastError = "The coder produced no file edits. Please output explicit code blocks with full file content.";

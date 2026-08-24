@@ -25,21 +25,34 @@ import { PreviewLayout } from "@/components/jyinx/PreviewLayout";
 import { CreateProjectModal } from "@/components/CreateProjectModal";
 import { CostTracker } from "@/components/CostTracker";
 import { consumeNotebookHand } from "@/lib/jyinx/notebooks";
+import { IdeWorkspaceProvider, useIdeWorkspace } from "@/lib/ide/workspace";
+import { AgentIdeController } from "@/lib/ide/controller";
 
 type QueueState = { status: "ONLINE" | "OFFLINE" | "CONNECTING"; pendingItems: number; lastSync: string | null; total: number };
-const starterCode = `export function calculateRoyalScore(wins: number, goals: number) {
-  const formBonus = wins * 3;
-  return formBonus + goals;
-}`;
 
 type JyinxStudioProps = { onExit?: () => void };
 
+/** Wraps the IDE in the live in-IDE workspace store so Kus Code + agents can
+ *  drive the editor's files directly. */
 export function JyinxStudio({ onExit }: JyinxStudioProps) {
+  return (
+    <IdeWorkspaceProvider>
+      <JyinxStudioInner onExit={onExit} />
+    </IdeWorkspaceProvider>
+  );
+}
+
+function JyinxStudioInner({ onExit }: JyinxStudioProps) {
   const router = useRouter();
+  const ws = useIdeWorkspace();
   const { activeModel: sharedModel, setActiveModel: setSharedModel, setMode, selectedRepositoryId, selectedRepositoryName, setSelectedRepository: setSharedRepository } = useJyinxModelStore();
   const activeModel = sharedModel.id;
   const setActiveModel = (modelId: string) => setSharedModel(JYINX_MODELS.find((model) => model.id === modelId) ?? DEFAULT_JYINX_MODEL);
-  const [selectedFile, setSelectedFile] = useState("scratch.ts");
+  // The active file + content now live in the IDE workspace buffer store.
+  const activePath = ws.activeFile ?? "scratch.ts";
+  const activeBuf = ws.activeFile ? ws.files[ws.activeFile] : null;
+  const dirtyPaths = Object.values(ws.files).filter((f) => f.dirty).map((f) => f.path);
+  const uncommittedCount = dirtyPaths.length;
   const [drawer, setDrawer] = useState<"files" | "inspector" | "chat" | null>(null);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -48,9 +61,8 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
   const [customizeSidebarOpen, setCustomizeSidebarOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [previewOpen] = useState(true);
-  const [code, setCode] = useState(starterCode);
   const [selectedRepository, setSelectedRepositoryState] = useState<JyinxRepository | null>(selectedRepositoryId && selectedRepositoryName ? { id: selectedRepositoryId, name: selectedRepositoryName.split("/").pop() ?? selectedRepositoryName, fullName: selectedRepositoryName, isPrivate: false, defaultBranch: "main", updatedAt: "", url: "", owner: selectedRepositoryName.split("/")[0] ?? "" } : null);
-  const setSelectedRepository = (repository: JyinxRepository | null) => { setSelectedRepositoryState(repository); setSharedRepository(repository?.id ?? null, repository?.fullName ?? null); };
+  const setSelectedRepository = (repository: JyinxRepository | null) => { setSelectedRepositoryState(repository); setSharedRepository(repository?.id ?? null, repository?.fullName ?? null); if (repository) void ws.loadRepository(repository.fullName, repository.defaultBranch); };
   const [queue, setQueue] = useState<QueueState>({ status: "ONLINE", pendingItems: 0, lastSync: null, total: 0 });
   const [publishState, setPublishState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [publishMessage, setPublishMessage] = useState("");
@@ -60,8 +72,10 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
   const [notebookPrompt, setNotebookPrompt] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [lastResult, setLastResult] = useState<LastRunResult>({ kind: "idle", status: "idle", at: null });
-  const [uncommitted, setUncommitted] = useState(0);
-  const [dirtyFiles, setDirtyFiles] = useState<string[]>([]);
+
+  // In-IDE agent controller: applies the agent's streamed edits to the live
+  // workspace so the agent visibly "controls" the editor/file tree.
+  const controller = new AgentIdeController(ws);
 
   // "Open in Jyinx" hand-off from the Notebook view (also works in IDE mode):
   // consume the staged payload, merge it into the agent context, open chat.
@@ -96,7 +110,8 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
   const publishChange = async () => {
     // Non-blocking tips instead of hard errors: auto-select the last edited
     // file when none is open, and guide (rather than block) when no repo.
-    const target = selectedFile === "scratch.ts" && dirtyFiles.length ? dirtyFiles[dirtyFiles.length - 1] : selectedFile;
+    const target = activePath === "scratch.ts" && dirtyPaths.length ? dirtyPaths[dirtyPaths.length - 1] : activePath;
+    const content = activeBuf?.content ?? "";
     if (!selectedRepository) { setPublishState("idle"); setPublishMessage("Select a repository in Settings, then create a pull request when ready."); return; }
     if (!target) { setPublishState("idle"); setPublishMessage("Open a file first — or edit any file, and we'll pre-select it for the pull request."); return; }
     setPublishState("saving"); setPublishMessage("");
@@ -104,23 +119,31 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
       const { data } = await createClient().auth.getSession(); const token = data.session?.provider_token;
       if (!token) throw new Error("Reconnect GitHub before publishing.");
       const branch = `jyinx/${target.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now()}`;
-      const response = await fetch("/api/github/workspace", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ repository: selectedRepository.fullName, baseBranch: selectedRepository.defaultBranch, path: target, content: code, branchName: branch, message: `Jyinx update ${target}`, pullRequestTitle: `Jyinx: update ${target}`, pullRequestBody: `Created from Jyinx using ${activeModelInfo.label}. Review the change before merging.` }) });
+      const response = await fetch("/api/github/workspace", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ repository: selectedRepository.fullName, baseBranch: selectedRepository.defaultBranch, path: target, content, branchName: branch, message: `Jyinx update ${target}`, pullRequestTitle: `Jyinx: update ${target}`, pullRequestBody: `Created from Jyinx using ${activeModelInfo.label}. Review the change before merging.` }) });
       const result = await response.json() as { error?: string; pullRequest?: { url?: string }; message?: string }; if (!response.ok) throw new Error(result.error || "Unable to save change."); setPublishState("saved"); setPublishMessage(result.pullRequest?.url ? `Pull request created: ${result.pullRequest.url}` : result.message || "Saved to the Jyinx review branch.");
     } catch (cause) { setPublishState("error"); setPublishMessage(cause instanceof Error ? cause.message : "Unable to publish change."); }
   };
 
-  const commitToGitHub = async () => {
-    const target = selectedFile === "scratch.ts" && dirtyFiles.length ? dirtyFiles[dirtyFiles.length - 1] : selectedFile;
-    if (!selectedRepository || !target) { setCommitState("error"); setNotice("Open or edit a repository file first, then commit."); return; }
+  // Commits ALL dirty workspace buffers atomically (action "commit-files"),
+  // marks them clean, then offers to push the branch to the host platform.
+  const commitWorkspace = async (message = commitMessage) => {
+    const dirty = Object.values(ws.files).filter((f) => f.dirty);
+    if (!selectedRepository) { setCommitState("error"); setNotice("Select a repository, then commit."); return; }
+    if (dirty.length === 0) { setCommitState("idle"); setNotice("No unsaved changes to commit."); return; }
     setCommitState("committing");
     try {
       const { data } = await createClient().auth.getSession(); const token = data.session?.provider_token;
       if (!token) throw new Error("Reconnect GitHub before committing.");
-      const response = await fetch("/api/github/commit", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "edit", repository: selectedRepository.fullName, baseBranch: selectedRepository.defaultBranch, path: target, content: code, message: commitMessage.trim() || "Jyinx update" }) });
-      const result = await response.json() as { error?: string; commitUrl?: string; commitSha?: string }; if (!response.ok) throw new Error(result.error || "Unable to commit to GitHub.");
-      setCommitState("done"); setCommitMessage("Jyinx update"); setDirtyFiles([]); setUncommitted(0);
-    } catch { setCommitState("error"); }
+      const response = await fetch("/api/github/commit", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "commit-files", repository: selectedRepository.fullName, baseBranch: selectedRepository.defaultBranch, message: message.trim() || `Jyinx update · ${dirty.length} file(s)`, files: dirty.map((f) => ({ path: f.path, content: f.content })) }) });
+      const result = await response.json() as { error?: string; commitSha?: string; commitUrl?: string }; if (!response.ok) throw new Error(result.error || "Unable to commit to GitHub.");
+      ws.markClean(dirty.map((f) => f.path));
+      setCommitState("done"); setCommitMessage("Jyinx update");
+      setNotice(`Committed ${dirty.length} file(s) to GitHub.`);
+      void handleDeploy();
+    } catch { setCommitState("error"); setNotice("Commit failed — see GitHub."); }
   };
+
+  const commitToGitHub = (message?: string) => commitWorkspace(message);
 
   const handleDeploy = async () => {
     if (!selectedRepository) { setNotice("Select a repository, then push to a host platform."); return; }
@@ -131,7 +154,7 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
         body: JSON.stringify({
           repository: selectedRepository.fullName,
           branch: selectedRepository.defaultBranch,
-          commitMessage: `Jyinx push · ${selectedFile}`,
+          commitMessage: `Jyinx push · ${activePath}`,
         }),
       });
       const data = (await res.json().catch(() => null)) as { ok?: boolean; href?: string; error?: string } | null;
@@ -143,15 +166,17 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
   };
 
   const ideState: IdeState = buildIdeState({
-    activeFile: selectedFile,
+    activeFile: activePath,
+    openFiles: ws.openFiles,
     repository: selectedRepository?.fullName ?? null,
-    unsavedChanges: dirtyFiles.map((f) => ({ file: f, dirty: true })),
+    terminalLines: ws.terminalLines,
+    unsavedChanges: dirtyPaths.map((f) => ({ file: f, dirty: true })),
     git: {
       branch: selectedRepository?.defaultBranch ?? "main",
-      status: `${uncommitted} uncommitted change${uncommitted === 1 ? "" : "s"}`,
+      status: `${uncommittedCount} uncommitted change${uncommittedCount === 1 ? "" : "s"}`,
       ahead: 0,
       behind: 0,
-      uncommitted,
+      uncommitted: uncommittedCount,
     },
     lastResult,
   });
@@ -167,7 +192,7 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
     getState: () => ideState,
     handlers: {
       sc: {
-        commit: (message) => { if (message.trim()) setCommitMessage(message); void commitToGitHub(); },
+        commit: (message) => { if (message.trim()) setCommitMessage(message); void commitWorkspace(); },
         createPr: () => void publishChange(),
         push: () => void handleDeploy(),
         pull: () => { setNotice("Pulled latest changes from the remote branch."); },
@@ -190,9 +215,9 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
       },
       agent: {
         ask: (prompt) => { setNotebookPrompt(prompt || "Help me with the active file."); setDrawer("chat"); },
-        explain: () => { setNotebookPrompt(`Explain ${selectedFile}.`); setDrawer("chat"); },
-        fixError: () => { setNotebookPrompt(`Fix errors in ${selectedFile}.`); setDrawer("chat"); },
-        refactor: (path, goal) => { setNotebookPrompt(`Refactor ${path || selectedFile}${goal ? `: ${goal}` : ""}.`); setDrawer("chat"); },
+        explain: () => { setNotebookPrompt(`Explain ${activePath}.`); setDrawer("chat"); },
+        fixError: () => { setNotebookPrompt(`Fix errors in ${activePath}.`); setDrawer("chat"); },
+        refactor: (path, goal) => { setNotebookPrompt(`Refactor ${path || activePath}${goal ? `: ${goal}` : ""}.`); setDrawer("chat"); },
         generate: (prompt) => { setNotebookPrompt(prompt); setDrawer("chat"); },
       },
     },
@@ -203,6 +228,14 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
     bridge.executeSync(commandId);
   };
 
+  // The agent should process the IDE's live buffers (edits already in the
+  // workspace) plus the GitHub context — workspace wins on conflicts, so the
+  // agent edits exactly what the user sees in the editor, not stale cloud.
+  const ideContextFiles = [
+    ...Object.values(ws.files).map((f) => ({ path: f.path, content: f.content })),
+    ...repositoryContext.files.filter((f) => !ws.files[f.path]),
+  ].slice(0, 30);
+
   const selector = (
     <div className="max-w-56">
       <HierarchicalModelSelector
@@ -212,10 +245,10 @@ export function JyinxStudio({ onExit }: JyinxStudioProps) {
       />
     </div>
   );
-  const files = <aside className="flex h-full min-h-0 flex-col overflow-y-auto border-r border-border bg-surface/60 p-3"><JyinxGitHubRepos redirectPath="/jyinx" selectedRepositoryId={selectedRepository?.id} onSelectRepository={(repository) => setSelectedRepository(repository)} /><div className="mb-4 mt-4 px-1"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Workspace</p><p className="mt-1 text-sm font-medium">{selectedRepository?.fullName ?? "No repository selected"}</p><p className="mt-0.5 text-[10px] text-muted">{selectedRepository?.defaultBranch ?? "Connect GitHub above"}</p></div><JyinxWorkspaceFiles repository={selectedRepository} onOpenFile={(path, content) => { setSelectedFile(path); setCode(content); }} /><div className="mt-auto rounded-xl border border-border bg-background/50 p-3 text-[11px] text-muted"><p className="font-medium text-foreground">Review-first publishing</p><p className="mt-1">Changes become a branch and pull request.</p></div></aside>;
+  const files = <aside className="flex h-full min-h-0 flex-col overflow-y-auto border-r border-border bg-surface/60 p-3"><JyinxGitHubRepos redirectPath="/jyinx" selectedRepositoryId={selectedRepository?.id} onSelectRepository={(repository) => setSelectedRepository(repository)} /><div className="mb-2 mt-4 px-1"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Workspace</p><p className="mt-1 text-sm font-medium">{selectedRepository?.fullName ?? "No repository selected"}</p><p className="mt-0.5 text-[10px] text-muted">{selectedRepository?.defaultBranch ?? "Connect GitHub above"}</p></div>{dirtyPaths.length > 0 && <div className="mb-2 rounded-xl border border-gold/25 bg-gold/5 p-2"><p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gold">Local changes · {uncommittedCount}</p>{dirtyPaths.map((p) => <button key={p} type="button" onClick={() => ws.setActive(p)} className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-xs text-muted hover:bg-surface-hover hover:text-foreground"><span className="text-gold">●</span><span className="truncate">{p}</span></button>)}</div>}<JyinxWorkspaceFiles repository={selectedRepository} onOpenFile={(path, content) => ws.openFile(path, content)} /><div className="mt-auto rounded-xl border border-border bg-background/50 p-3 text-[11px] text-muted"><p className="font-medium text-foreground">Agent & IDE workspace</p><p className="mt-1">Kus Code edits land here live. Review, then commit all local changes.</p></div></aside>;
   const inspector = <aside className="flex h-full min-h-0 flex-col overflow-y-auto border-l border-border bg-surface/60 p-4"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Inspector</p><p className="mt-1 text-sm font-medium">Workspace diagnostics</p></div><button className="text-xs text-muted lg:hidden" onClick={() => setDrawer(null)}>Close</button></div><section className="rounded-2xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Connection</p><p className="mt-2 text-xs text-muted"><span className={queue.status === "ONLINE" ? "text-success" : "text-gold"}>●</span> {queue.status === "ONLINE" ? "Synced" : "Local only"} · {queue.pendingItems} queued</p></section><section className="mt-4 rounded-2xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Model controller</p><div className="mt-3">{selector}</div><p className="mt-2 text-[11px] text-muted">{activeModelInfo.contextWindow.toLocaleString()} token context</p></section><JyinxGitHubRepos selectedRepositoryId={selectedRepository?.id} onSelectRepository={(repository) => setSelectedRepository(repository)} /><section className="mt-4 rounded-xl border border-gold/25 bg-gold/5 p-3 text-xs text-muted"><p className="font-medium text-gold">Deploy flow</p><p className="mt-1">Merge the Jyinx pull request and your GitHub-connected Vercel project deploys it automatically.</p></section></aside>;
 
-  return <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground"><JyinxMenuBar commands={bridge.registry.list()} onRun={onRunCommand} onOpenPalette={() => setPaletteOpen(true)} /><div className="flex min-h-0 flex-1 overflow-hidden"><div className="hidden w-64 shrink-0 lg:block">{files}</div><main className="flex min-w-0 flex-1 flex-col"><header className="flex shrink-0 items-center gap-2 border-b border-border bg-background/90 px-3 py-3"><div className="flex min-w-0 items-center gap-2"><button className="rounded-lg border border-border p-2 text-muted lg:hidden" onClick={() => setDrawer("files")}>☰</button>{onExit ? <button type="button" onClick={() => { setMode("agent"); onExit(); }} className="shrink-0 rounded-lg border border-gold/30 bg-gold/10 px-2 py-2 text-xs font-medium text-gold hover:bg-gold/15">← Agent</button> : <Link href="/jyinx" onClick={() => setMode("agent")} className="shrink-0 rounded-lg border border-gold/30 bg-gold/10 px-2 py-2 text-xs font-medium text-gold hover:bg-gold/15">← Agent</Link>}<Link href="/" className="shrink-0 rounded-lg border border-border bg-surface/70 px-2 py-2 text-xs font-medium text-muted hover:border-gold/40 hover:text-gold">← Royal</Link><div><p className="text-sm font-semibold">Jyinx IDE</p><p className="text-[10px] text-muted">{selectedRepository?.fullName ?? "Developer workspace"}</p></div></div><div className="ml-auto flex items-center gap-2"><button type="button" onClick={() => setCustomizeSidebarOpen(true)} className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/15">⚙ Customize</button><HeaderMenu active={{ autonomous: agentPanelOpen }} onAction={(action: HeaderMenuAction) => { if (action === "new-project") setCreateOpen(true); else if (action === "chat") setDrawer("chat"); else if (action === "settings") setSettingsOpen(true); else if (action === "autonomous") setAgentPanelOpen((current) => !current); else if (action === "cost") setCostOpen(true); else if (action === "builder") router.push("/jyinx/builder"); else if (action === "blog") router.push("/jyinx/blog"); else if (action === "commit") void commitToGitHub(); else if (action === "back") router.push("/"); else if (action === "search") router.push("/jyinx/search"); else if (action === "code-library") router.push("/jyinx/code-library"); else if (action === "peer-chat") router.push("/jyinx/peer-chat"); }} /></div></header><div className="flex min-h-0 flex-1"><section className="flex min-w-0 flex-1 flex-col"><div className="flex items-center justify-between border-b border-border px-4 py-2 text-xs"><span className="truncate text-muted">{selectedFile}</span><div className="flex shrink-0 items-center gap-1.5"><button type="button" onClick={() => void handleDeploy()} disabled={!selectedRepository} className="rounded-lg border border-success/40 bg-success/10 px-2 py-1 text-success disabled:cursor-not-allowed disabled:opacity-50" title="Push the committed branch to a dedicated host platform">Push</button><button type="button" onClick={() => void publishChange()} disabled={publishState === "saving"} className="rounded-lg border border-gold/35 bg-gold/10 px-2 py-1 text-gold disabled:opacity-60">{publishState === "saving" ? "Publishing…" : "Create PR"}</button></div></div><textarea value={code} onChange={(event) => { setCode(event.target.value); setDirtyFiles((d) => d.includes(selectedFile) ? d : [...d, selectedFile]); setUncommitted((n) => n + 1); }} spellCheck={false} className="min-h-[180px] flex-1 resize-none bg-[#0d0917] p-4 font-mono text-xs leading-6 text-purple-soft outline-none md:text-sm" /><div className={`border-t border-border px-4 py-2 text-[11px] ${publishState === "error" ? "text-danger" : "text-muted"}`}>{publishMessage || (repositoryContext.loading ? "Loading repository context…" : "Local draft ready · publishing creates a review branch and pull request")}</div><div className="flex items-center gap-2 border-t border-border px-3 py-2"><span className="text-[11px] text-muted">Commit</span><input value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder="Commit message" className="min-w-0 flex-1 rounded-lg border border-border bg-[#0d0917] px-2 py-1.5 text-xs text-foreground outline-none focus:border-gold" /><button type="button" onClick={() => void commitToGitHub()} disabled={commitState === "committing"} className="rounded-lg border border-success/40 bg-success/10 px-3 py-1.5 text-xs font-medium text-success disabled:opacity-60">{commitState === "committing" ? "Committing…" : commitState === "done" ? "Committed ✓" : "Commit to GitHub"}</button></div><JyinxTerminalPanel repository={selectedRepository?.fullName} file={selectedFile} /></section>{previewOpen && <div className="hidden w-[min(44%,560px)] shrink-0 border-l border-border lg:block"><PreviewLayout src="/" title="Live preview" /></div>}<div className="hidden w-[min(42%,440px)] shrink-0 border-l border-border xl:block">{agentPanelOpen ? <AgentExecutionStream open repository={selectedRepository?.fullName ?? ""} branch={selectedRepository?.defaultBranch ?? "main"} model={activeModel} repositoryFiles={repositoryContext.files} /> : <JyinxChatPanel open model={activeModelInfo} code={code} file={selectedFile} repository={selectedRepository?.fullName} repositoryContext={`${repositoryContext.context}${notebookContext ? `\n\n${notebookContext}` : ""}`} pendingPrompt={notebookPrompt ?? undefined} workspaceId={selectedRepository?.fullName ?? "local"} autonomous={agentPanelOpen} boundFile={selectedFile === "scratch.ts" ? undefined : selectedFile} />}</div></div><nav className="flex shrink-0 items-center justify-around border-t border-border bg-surface/95 px-2 py-2 xl:hidden"><Link href="/" className="text-xs text-muted">Royal</Link><button onClick={() => setDrawer("files")} className="text-xs text-muted">Files</button><button onClick={() => setDrawer("chat")} className="text-xs text-gold">Chat</button><button onClick={() => setDrawer("inspector")} className="text-xs text-muted">Status</button></nav></main><div className="hidden w-72 shrink-0 lg:block">{inspector}</div>{drawer && <div className="fixed inset-0 z-50 bg-black/60 lg:hidden" onClick={() => setDrawer(null)}><div className={`absolute top-0 bottom-0 w-[min(92vw,420px)] bg-surface shadow-2xl ${drawer === "files" ? "left-0" : "right-0"}`} onClick={(event) => event.stopPropagation()}>{drawer === "files" ? files : drawer === "inspector" ? inspector : agentPanelOpen ? <AgentExecutionStream open onClose={() => setDrawer(null)} repository={selectedRepository?.fullName ?? ""} branch={selectedRepository?.defaultBranch ?? "main"} model={activeModel} repositoryFiles={repositoryContext.files} /> : <JyinxChatPanel open onClose={() => setDrawer(null)} model={activeModelInfo} code={code} file={selectedFile} repository={selectedRepository?.fullName} repositoryContext={`${repositoryContext.context}${notebookContext ? `\n\n${notebookContext}` : ""}`} pendingPrompt={notebookPrompt ?? undefined} workspaceId={selectedRepository?.fullName ?? "local"} autonomous={agentPanelOpen} boundFile={selectedFile === "scratch.ts" ? undefined : selectedFile} />}</div></div>}<JyinxSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} activeModel={activeModel} onModelChange={setActiveModel} selectedRepositoryId={selectedRepository?.id} onRepositoryChange={(repository) => { if (repository) setSelectedRepository(repository); }} redirectPath="/jyinx" />{createOpen && <CreateProjectModal open onClose={() => setCreateOpen(false)} onCreated={(repo) => { setCreateOpen(false); setNotice(`Project created: ${repo.fullName}`); }} />}{notice && <button type="button" onClick={() => setNotice(null)} className="fixed bottom-4 left-1/2 z-[80] -translate-x-1/2 rounded-xl border border-gold/30 bg-surface px-4 py-2 text-sm text-gold shadow-2xl">{notice}</button>}{costOpen && <div className="fixed inset-0 z-[70] bg-black/70 p-4 sm:p-6" onClick={() => setCostOpen(false)}><section className="mx-auto mt-8 h-full max-h-[70vh] max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}><header className="flex items-center justify-between border-b border-border pb-3"><p className="text-sm font-semibold">Cost & keys</p><button type="button" onClick={() => setCostOpen(false)} className="rounded-lg border border-border px-2 py-1 text-xs text-muted">Close</button></header><div className="py-4"><CostTracker /></div></section></div>}<CustomizeSidebar
+  return <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground"><JyinxMenuBar commands={bridge.registry.list()} onRun={onRunCommand} onOpenPalette={() => setPaletteOpen(true)} /><div className="flex min-h-0 flex-1 overflow-hidden"><div className="hidden w-64 shrink-0 lg:block">{files}</div><main className="flex min-w-0 flex-1 flex-col"><header className="flex shrink-0 items-center gap-2 border-b border-border bg-background/90 px-3 py-3"><div className="flex min-w-0 items-center gap-2"><button className="rounded-lg border border-border p-2 text-muted lg:hidden" onClick={() => setDrawer("files")}>☰</button>{onExit ? <button type="button" onClick={() => { setMode("agent"); onExit(); }} className="shrink-0 rounded-lg border border-gold/30 bg-gold/10 px-2 py-2 text-xs font-medium text-gold hover:bg-gold/15">← Agent</button> : <Link href="/jyinx" onClick={() => setMode("agent")} className="shrink-0 rounded-lg border border-gold/30 bg-gold/10 px-2 py-2 text-xs font-medium text-gold hover:bg-gold/15">← Agent</Link>}<Link href="/" className="shrink-0 rounded-lg border border-border bg-surface/70 px-2 py-2 text-xs font-medium text-muted hover:border-gold/40 hover:text-gold">← Royal</Link><div><p className="text-sm font-semibold">Jyinx IDE</p><p className="text-[10px] text-muted">{selectedRepository?.fullName ?? "Developer workspace"}</p></div></div><div className="ml-auto flex items-center gap-2"><button type="button" onClick={() => setCustomizeSidebarOpen(true)} className="rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/15">⚙ Customize</button><HeaderMenu active={{ autonomous: agentPanelOpen }} onAction={(action: HeaderMenuAction) => { if (action === "new-project") setCreateOpen(true); else if (action === "chat") setDrawer("chat"); else if (action === "settings") setSettingsOpen(true); else if (action === "autonomous") setAgentPanelOpen((current) => !current); else if (action === "cost") setCostOpen(true); else if (action === "builder") router.push("/jyinx/builder"); else if (action === "blog") router.push("/jyinx/blog"); else if (action === "commit") void commitToGitHub(); else if (action === "back") router.push("/"); else if (action === "search") router.push("/jyinx/search"); else if (action === "code-library") router.push("/jyinx/code-library"); else if (action === "peer-chat") router.push("/jyinx/peer-chat"); }} /></div></header><div className="flex min-h-0 flex-1"><section className="flex min-w-0 flex-1 flex-col">{ws.openFiles.length > 0 && <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border bg-background/40 px-2"><span className="mr-1 text-[9px] uppercase tracking-wider text-muted">Open</span>{ws.openFiles.map((p) => <button key={p} type="button" onClick={() => ws.setActive(p)} className={`shrink-0 cursor-pointer rounded-t-md border-b-2 px-2 py-1.5 text-[11px] ${p === activePath ? "border-gold text-gold" : "border-transparent text-muted hover:text-foreground"}`} title={p}>{p.split("/").pop()}{ws.files[p]?.dirty ? " ●" : ""}<span className="ml-1 text-muted/60" onClick={(e) => { e.stopPropagation(); ws.closeFile(p); }}>✕</span></button>)}</div>}<div className="flex items-center justify-between border-b border-border px-4 py-2 text-xs"><span className="truncate text-muted">{activePath}{activeBuf?.dirty ? " ●" : ""}</span><div className="flex shrink-0 items-center gap-1.5"><button type="button" onClick={() => void handleDeploy()} disabled={!selectedRepository} className="rounded-lg border border-success/40 bg-success/10 px-2 py-1 text-success disabled:cursor-not-allowed disabled:opacity-50" title="Push the committed branch to a dedicated host platform">Push</button><button type="button" onClick={() => void publishChange()} disabled={publishState === "saving"} className="rounded-lg border border-gold/35 bg-gold/10 px-2 py-1 text-gold disabled:opacity-60">{publishState === "saving" ? "Publishing…" : "Create PR"}</button></div></div><textarea value={activeBuf?.content ?? ""} onChange={(event) => { if (ws.activeFile) ws.writeFile(ws.activeFile, event.target.value); }} spellCheck={false} className="min-h-[180px] flex-1 resize-none bg-[#0d0917] p-4 font-mono text-xs leading-6 text-purple-soft outline-none md:text-sm" /><div className={`border-t border-border px-4 py-2 text-[11px] ${publishState === "error" ? "text-danger" : "text-muted"}`}>{publishMessage || (repositoryContext.loading ? "Loading repository context…" : "Local draft ready · publishing creates a review branch and pull request")}</div><div className="flex items-center gap-2 border-t border-border px-3 py-2"><span className="text-[11px] text-muted">Commit</span><input value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder="Commit message" className="min-w-0 flex-1 rounded-lg border border-border bg-[#0d0917] px-2 py-1.5 text-xs text-foreground outline-none focus:border-gold" /><button type="button" onClick={() => void commitToGitHub()} disabled={commitState === "committing"} className="rounded-lg border border-success/40 bg-success/10 px-3 py-1.5 text-xs font-medium text-success disabled:opacity-60">{commitState === "committing" ? "Committing…" : commitState === "done" ? "Committed ✓" : "Commit to GitHub"}</button></div><JyinxTerminalPanel repository={selectedRepository?.fullName} file={activePath} /></section>{previewOpen && <div className="hidden w-[min(44%,560px)] shrink-0 border-l border-border lg:block"><PreviewLayout src="/" title="Live preview" /></div>}<div className="hidden w-[min(42%,440px)] shrink-0 border-l border-border xl:block">{agentPanelOpen ? <AgentExecutionStream open repository={selectedRepository?.fullName ?? ""} branch={selectedRepository?.defaultBranch ?? "main"} model={activeModel} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} /> : <JyinxChatPanel open model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={`${repositoryContext.context}${notebookContext ? `\n\n${notebookContext}` : ""}`} pendingPrompt={notebookPrompt ?? undefined} workspaceId={selectedRepository?.fullName ?? "local"} autonomous={agentPanelOpen} boundFile={activePath === "scratch.ts" ? undefined : activePath} />}</div></div><nav className="flex shrink-0 items-center justify-around border-t border-border bg-surface/95 px-2 py-2 xl:hidden"><Link href="/" className="text-xs text-muted">Royal</Link><button onClick={() => setDrawer("files")} className="text-xs text-muted">Files</button><button onClick={() => setDrawer("chat")} className="text-xs text-gold">Chat</button><button onClick={() => setDrawer("inspector")} className="text-xs text-muted">Status</button></nav></main><div className="hidden w-72 shrink-0 lg:block">{inspector}</div>{drawer && <div className="fixed inset-0 z-50 bg-black/60 lg:hidden" onClick={() => setDrawer(null)}><div className={`absolute top-0 bottom-0 w-[min(92vw,420px)] bg-surface shadow-2xl ${drawer === "files" ? "left-0" : "right-0"}`} onClick={(event) => event.stopPropagation()}>{drawer === "files" ? files : drawer === "inspector" ? inspector : agentPanelOpen ? <AgentExecutionStream open onClose={() => setDrawer(null)} repository={selectedRepository?.fullName ?? ""} branch={selectedRepository?.defaultBranch ?? "main"} model={activeModel} repositoryFiles={repositoryContext.files} /> : <JyinxChatPanel open onClose={() => setDrawer(null)} model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={`${repositoryContext.context}${notebookContext ? `\n\n${notebookContext}` : ""}`} pendingPrompt={notebookPrompt ?? undefined} workspaceId={selectedRepository?.fullName ?? "local"} autonomous={agentPanelOpen} boundFile={activePath === "scratch.ts" ? undefined : activePath} />}</div></div>}<JyinxSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} activeModel={activeModel} onModelChange={setActiveModel} selectedRepositoryId={selectedRepository?.id} onRepositoryChange={(repository) => { if (repository) setSelectedRepository(repository); }} redirectPath="/jyinx" />{createOpen && <CreateProjectModal open onClose={() => setCreateOpen(false)} onCreated={(repo) => { setCreateOpen(false); setNotice(`Project created: ${repo.fullName}`); }} />}{notice && <button type="button" onClick={() => setNotice(null)} className="fixed bottom-4 left-1/2 z-[80] -translate-x-1/2 rounded-xl border border-gold/30 bg-surface px-4 py-2 text-sm text-gold shadow-2xl">{notice}</button>}{costOpen && <div className="fixed inset-0 z-[70] bg-black/70 p-4 sm:p-6" onClick={() => setCostOpen(false)}><section className="mx-auto mt-8 h-full max-h-[70vh] max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}><header className="flex items-center justify-between border-b border-border pb-3"><p className="text-sm font-semibold">Cost & keys</p><button type="button" onClick={() => setCostOpen(false)} className="rounded-lg border border-border px-2 py-1 text-xs text-muted">Close</button></header><div className="py-4"><CostTracker /></div></section></div>}<CustomizeSidebar
           open={customizeSidebarOpen}
           onClose={() => setCustomizeSidebarOpen(false)}
           queue={queue}
