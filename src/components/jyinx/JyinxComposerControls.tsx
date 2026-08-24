@@ -91,18 +91,19 @@ export function JyinxComposerControls({ activeModel, onModelChange, onAgentChang
     setManagerOpen(false);
   };
 
-  const isKusCodeModel = activeModel.id === "kus-ai/kus-code";
+  const isKusCodeModel = activeModel.id.startsWith("kus-ai/kus-code");
 
   return <div className={`relative z-20 rounded-xl border border-border bg-background/50 ${compact ? "p-2" : "p-3"}`}><div className="grid gap-2 sm:grid-cols-2"><label className="min-w-0"><span className="mb-1 block text-[10px] uppercase tracking-wider text-muted">Model</span>
         <div className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-xs focus-within:border-gold">
           <HierarchicalModelSelector
             value={selection}
             onChange={(sel) => {
+              const isKusAi = sel.model === "kus-ai/royal" || sel.model.startsWith("kus-ai/kus-code");
               const model: JyinxModel = {
                 id: sel.model,
                 label: sel.modelLabel,
-                tier: sel.model === "kus-ai/royal" || sel.model === "kus-ai/kus-code" || sel.model === "openrouter/free" ? "Free" : "Balanced",
-                contextWindow: sel.model === "kus-ai/kus-code" ? 256_000 : 128_000,
+                tier: isKusAi || sel.model === "openrouter/free" ? "Free" : "Balanced",
+                contextWindow: sel.model === "kus-ai/kus-code-3" ? 256_000 : sel.model === "kus-ai/kus-code-2" ? 128_000 : 128_000,
               };
               onModelChange(model);
               setAgentId("");

@@ -70,13 +70,25 @@ export const MODEL_CATALOG: ModelProvider[] = [
     models: [
       {
         id: "kus-ai/royal",
-        label: "Kus AI",
+        label: "Kus AI (Royal)",
         tier: "Auto",
         contextWindow: 128_000,
       },
       {
-        id: "kus-ai/kus-code",
-        label: "Kus Code / AI 3",
+        id: "kus-ai/kus-code-1",
+        label: "Kus Code 1.0",
+        tier: "Auto",
+        contextWindow: 64_000,
+      },
+      {
+        id: "kus-ai/kus-code-2",
+        label: "Kus Code 2.0",
+        tier: "Auto",
+        contextWindow: 128_000,
+      },
+      {
+        id: "kus-ai/kus-code-3",
+        label: "Kus Code 3.0",
         tier: "Auto",
         contextWindow: 256_000,
       },
@@ -133,9 +145,16 @@ export function isKusAiModel(modelId: string): boolean {
   return modelId.startsWith("kus-ai/");
 }
 
+/** Check if a model is one of the built-in Kus Code pipeline versions. */
+export function isKusCodeModel(modelId: string): boolean {
+  return modelId.startsWith("kus-ai/kus-code");
+}
+
 /** Get the appropriate backend model identifier for routing. */
 export function resolveBackendModel(modelId: string): string {
-  if (modelId === "kus-ai/kus-code") return "kus-code/ai-3";
+  if (modelId === "kus-ai/kus-code-1") return "kus-code/ai-1";
+  if (modelId === "kus-ai/kus-code-2") return "kus-code/ai-2";
+  if (modelId === "kus-ai/kus-code-3") return "kus-code/ai-3";
   if (modelId === "kus-ai/royal") return "kus-ai/royal";
   return modelId;
 }

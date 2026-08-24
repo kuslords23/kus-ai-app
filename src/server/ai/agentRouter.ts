@@ -75,7 +75,7 @@ const KUS_CODE_KEY = process.env.KUS_CODE_API_KEY ?? process.env.KUS_CODE_KEY ??
  * Falls back gracefully if the endpoint is not configured.
  */
 export async function routeToKusAgent(req: AgentRequest): Promise<AgentResult> {
-  const isKusCode = req.model === "kus-ai/kus-code";
+  const isKusCode = req.model.startsWith("kus-ai/kus-code");
   const apiKey = isKusCode ? KUS_CODE_KEY : KUS_AI_KEY;
   const endpoint = isKusCode ? KUS_CODE_ENDPOINT : KUS_AI_ENDPOINT;
 

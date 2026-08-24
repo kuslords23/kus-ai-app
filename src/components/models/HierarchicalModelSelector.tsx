@@ -231,8 +231,14 @@ export function HierarchicalModelSelector({
                           type="button"
                           onClick={() => {
                             setModelId(m.id);
-                            setAgentId(agentId ?? value?.agent ?? null);
-                            setStep("agent");
+                            selectAndClose({
+                              provider: provider.id,
+                              providerLabel: provider.label,
+                              model: m.id,
+                              modelLabel: m.label,
+                              agent: "auto",
+                              agentName: "Auto",
+                            });
                           }}
                           className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[11px] transition-colors ${
                             modelId === m.id
@@ -253,6 +259,42 @@ export function HierarchicalModelSelector({
                       ))}
                   </div>
                 ))}
+            </div>
+          </div>
+        )}
+
+        {step === "agent" && provider && model && (
+          <div>
+            {titleBar(`${model.label} → Agent`, () => setStep("model"))}
+            <div className="max-h-72 space-y-1 overflow-y-auto p-2">
+              {provider.agents.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() =>
+                    selectAndClose({
+                      provider: provider.id,
+                      providerLabel: provider.label,
+                      model: model.id,
+                      modelLabel: model.label,
+                      agent: a.id,
+                      agentName: a.name,
+                    })
+                  }
+                  className={`flex w-full cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                    agentId === a.id
+                      ? "border-gold/40 bg-gold/10"
+                      : "border-transparent hover:bg-surface"
+                  }`}
+                >
+                  <span className="text-sm">{a.icon}</span>
+                  <span className="min-w-0">
+                    <span className="block text-xs font-medium text-foreground">{a.name}</span>
+                    <span className="block text-[10px] text-muted">{a.tagline}</span>
+                  </span>
+                  {agentId === a.id && <span className="ml-auto text-gold">✓</span>}
+                </button>
+              ))}
             </div>
           </div>
         )}

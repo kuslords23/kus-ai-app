@@ -32,6 +32,17 @@ export interface ModelOption {
 
 const PROVIDERS: ProviderOption[] = [
   {
+    id: "kusai",
+    label: "Kus AI",
+    shortHint: "Royal · Kus Code 1.0 · 2.0 · 3.0",
+    modelList: [
+      { id: "kus-ai/royal", label: "Kus AI (Royal)", hint: "Everyday royal assistant", freeTier: true },
+      { id: "kus-ai/kus-code-1", label: "Kus Code 1.0", hint: "Legacy pipeline", freeTier: true },
+      { id: "kus-ai/kus-code-2", label: "Kus Code 2.0", hint: "Balanced pipeline", freeTier: true },
+      { id: "kus-ai/kus-code-3", label: "Kus Code 3.0", hint: "Flagship pipeline", freeTier: true },
+    ],
+  },
+  {
     id: "google",
     label: "Google Gemini",
     shortHint: "Gemini Flash · Pro · Nano",

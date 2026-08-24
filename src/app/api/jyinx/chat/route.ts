@@ -194,7 +194,7 @@ const commitActive = Boolean(githubToken && repository && repository !== "local"
   const apiKey = resolved.key as string;
   const endpoint = agentEndpoint === OPENROUTER_URL ? openRouterUrl() : agentEndpoint;
   const isKusAi = modelId.startsWith("kus-ai/");
-  const isKusCode = modelId === "kus-ai/kus-code";
+  const isKusCode = modelId.startsWith("kus-ai/kus-code");
 
   try {
     // Semantic cache: serve matching queries instantly at $0 cost. Skipped for
