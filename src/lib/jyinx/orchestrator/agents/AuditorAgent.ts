@@ -6,7 +6,7 @@
  */
 
 import type { CodeEdit } from "./CoderAgent";
-import { verifyEdits } from "@/services/agentPipeline";
+import { verifyEdits } from "@/lib/agent-edits";
 
 export type AuditCheck =
   | "structural"

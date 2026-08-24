@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { AgentExecutionEvent } from "@/services/agentPipeline";
+import type { AgentExecutionEvent } from "@/lib/agent-execution";
 import { gatewayFetch } from "@/lib/kusai/apiKeys";
 import { connectGitHub } from "@/lib/jyinx/github-connect";
 
