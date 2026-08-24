@@ -47,7 +47,7 @@ export function JyinxMenuBar({ commands, onRun, onOpenPalette }: JyinxMenuBarPro
     };
   }, [active, onOpenPalette]);
 
-const filteredCommands = useMemo(() => {
+  const filteredCommands = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return commands;
     return commands.filter(
@@ -67,7 +67,7 @@ const filteredCommands = useMemo(() => {
     [filteredCommands]
   );
 
-const menuDefs = useMemo<Array<{ id: string; label: string }>>(
+  const menuDefs = useMemo<Array<{ id: string; label: string }>>(
     () => [
       ...COMMAND_CATEGORIES.map((cat) => ({ id: cat.id, label: cat.label })),
       { id: "help", label: "Help" },

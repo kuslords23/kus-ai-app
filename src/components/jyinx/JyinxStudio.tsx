@@ -247,6 +247,13 @@ function JyinxStudioInner({ onExit }: JyinxStudioProps) {
         fixError: () => { setNotebookPrompt(`Fix errors in ${activePath}.`); setDrawer("chat"); },
         refactor: (path, goal) => { setNotebookPrompt(`Refactor ${path || activePath}${goal ? `: ${goal}` : ""}.`); setDrawer("chat"); },
         generate: (prompt) => { setNotebookPrompt(prompt); setDrawer("chat"); },
+        preview: (path) => { setNotebookPrompt(`Generate a live preview for ${path || activePath}.`); setDrawer("chat"); },
+      },
+      window: {
+        resetLayout: () => setNotice("Layout reset to defaults."),
+        saveLayout: () => setNotice("Layout saved for this project."),
+        split: () => setNotice("Split editor (not available in this view)."),
+        newWindow: () => setNotice("Move to a new window (not available)."),
       },
     },
   });
