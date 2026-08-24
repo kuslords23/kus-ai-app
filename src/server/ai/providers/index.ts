@@ -42,6 +42,8 @@ export const AI_PROVIDERS: Record<string, AIConfig> = {
     models: [
       "openrouter/free",
       "openrouter/auto",
+      "stealth/ox-alpha:free",
+      "stealth/ox-alpha",
       "openai/gpt-4o-mini",
       "anthropic/claude-3.5-haiku",
       "meta-llama/llama-3.1-8b-instruct:free",

@@ -24,6 +24,7 @@ export const JYINX_MODELS: JyinxModel[] = [
   { id: "qwen/qwen-2.5-coder-32b-instruct:free", label: "Qwen 2.5 Coder", tier: "Free", contextWindow: 32_768 },
   { id: "microsoft/phi-4-reasoning-plus:free", label: "Phi 4 Reasoning", tier: "Free", contextWindow: 32_768 },
   { id: "google/gemma-3-27b-it:free", label: "Gemma 3 27B", tier: "Free", contextWindow: 128_000 },
+  { id: "stealth/ox-alpha:free", label: "Ox Alpha (Free)", tier: "Free", contextWindow: 1_048_576 },
   { id: "openai/gpt-4.1-nano", label: "GPT-4.1 Nano", tier: "Fast", contextWindow: 1_000_000 },
   { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", tier: "Fast", contextWindow: 1_000_000 },
   { id: "mistralai/ministral-8b", label: "Ministral 8B", tier: "Fast", contextWindow: 128_000 },
@@ -37,6 +38,7 @@ export const JYINX_MODELS: JyinxModel[] = [
   { id: "openai/o3", label: "OpenAI o3", tier: "Flagship", contextWindow: 200_000 },
   { id: "openai/gpt-4.1", label: "GPT-4.1", tier: "Flagship", contextWindow: 1_000_000 },
   { id: "x-ai/grok-4", label: "Grok 4", tier: "Flagship", contextWindow: 256_000 },
+  { id: "stealth/ox-alpha", label: "Ox Alpha", tier: "Flagship", contextWindow: 1_048_576 },
 ];
 
 export const DEFAULT_JYINX_MODEL = JYINX_MODELS[0];

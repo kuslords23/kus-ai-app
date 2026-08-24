@@ -13,7 +13,10 @@ export class OpenRouterClient {
     'google/gemma-4-31b-it:free': { name: 'Gemma 4B', category: 'free' },
     'openai/gpt-oss-20b:free': { name: 'GPT-OSS', category: 'free' },
     // High-reliability free endpoints
-    'qwen/qwen3-coder:free': { name: 'Qwen 3-Coder', category: 'free' }
+    'qwen/qwen3-coder:free': { name: 'Qwen 3-Coder', category: 'free' },
+    // Ox Alpha (stealth, 1M ctx) — free preview + flagship
+    'stealth/ox-alpha:free': { name: 'Ox Alpha', category: 'free' },
+    'stealth/ox-alpha': { name: 'Ox Alpha', category: 'premium' }
   };
 
   async generate(prompt: string, modelName: string) {

@@ -57,8 +57,10 @@ const PROVIDERS: ProviderOption[] = [
     shortHint: "Multi-model free router",
     modelList: [
       { id: "openrouter/free", label: "OpenRouter Free (Auto)", hint: "Best available free model", freeTier: true },
+      { id: "stealth/ox-alpha:free", label: "Ox Alpha (Free)", hint: "1M ctx · via OpenRouter", freeTier: true },
       { id: "google/gemini-2.5-flash:free", label: "Gemini Flash (Free)", hint: "Via OpenRouter", freeTier: true },
       { id: "meta-llama/llama-3-8b-instruct:free", label: "Llama 3 8B (Free)", hint: "Via OpenRouter", freeTier: true },
+      { id: "stealth/ox-alpha", label: "Ox Alpha (Paid)", hint: "1M ctx · flagship", byok: true },
       { id: "openrouter/auto", label: "OpenRouter Auto (Paid)", hint: "Best paid model", byok: true },
     ],
   },
