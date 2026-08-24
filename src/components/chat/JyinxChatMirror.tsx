@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { NEXUS_CHAT_TABLE } from "@/server/chat/nexusBridge";
+import { NEXUS_CHAT_TABLE } from "@/lib/chat/nexus-constants";
 
 interface MirrorMessage {
   id: string;

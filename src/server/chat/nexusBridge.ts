@@ -9,11 +9,9 @@
  */
 
 import { createClient } from "@/lib/supabase/server";
+import { NEXUS_CHAT_TABLE, NEXUS_CHAT_CHANNEL } from "@/lib/chat/nexus-constants";
 
-/** The table both Nexus and Jyinx read/write for community chat. */
-export const NEXUS_CHAT_TABLE = "nexus_chat_messages";
-/** Realtime channel name reused across sub-apps. */
-export const NEXUS_CHAT_CHANNEL = "nexus-chat";
+export { NEXUS_CHAT_TABLE, NEXUS_CHAT_CHANNEL };
 
 export interface NexusMessage {
   id?: string;
