@@ -23,7 +23,7 @@ import type {
 /** Host-provided behaviors. Every handler is optional — a missing one yields
  *  a clear `{ ok: false, error }` instead of a silent no-op. */
 export interface IdeHandlers {
-  fileMetadata?: { open: (path: string) => void; save: (path: string) => void; close: (path: string) => void; rename: (from: string, to: string) => void; remove: (path: string) => void; mkdir: (path: string) => void; exportFile: (path: string) => void; share: (path: string) => void };
+  fileMetadata?: { open: (path: string) => void; save: (path: string) => void; close: (path: string) => void; rename: (from: string, to: string) => void; remove: (path: string) => void; mkdir: (path: string) => void; create: (path: string) => void; exportFile: (path: string) => void; share: (path: string) => void };
   edit?: { undo: () => void; redo: () => void; find: (query: string) => void; findInFiles: (query: string) => void; replace: (from: string, to: string, path?: string) => void; format: () => void; comment: () => void; moveLine: (dir: "up" | "down") => void };
   view?: { toggleFileTree: () => void; toggleTerminal: () => void; togglePreview: () => void; toggleAgent: () => void; toggleZen: () => void; zoom: (dir: 1 | -1) => void; setTheme: (theme: string) => void };
   run?: { run: () => void; build: () => void; test: () => void; clean: () => void; stop: () => void; runWithArgs: (args: string) => void };
@@ -98,7 +98,7 @@ export function createAgentBridge(
     let result: CommandResult;
 
     switch (commandId) {
-      case "file.newFile": result = { ok: false, error: "Command would create a new file; wire `file.mkdir/open` host action to create an in-memory buffer.", data: { commandId } }; break;
+      case "file.newFile": result = call(() => h.fileMetadata?.create?.(a.path ? String(a.path) : "untitled.ts")); break;
       case "file.open": result = call(() => h.fileMetadata?.open?.(String(a.path))); break;
       case "file.save": result = call(() => h.fileMetadata?.save?.(a.path ? String(a.path) : "")); break;
       case "file.saveAll": result = { ok: true, output: "Saved all dirty files." }; break;
@@ -225,6 +225,7 @@ export function createAgentBridge(
       case "file.rename": return Boolean(h.fileMetadata?.rename);
       case "file.delete": return Boolean(h.fileMetadata?.remove);
       case "file.newFolder": return Boolean(h.fileMetadata?.mkdir);
+      case "file.newFile": return Boolean(h.fileMetadata?.create);
       case "file.createPr":
       case "sc.createPr": return Boolean(h.sc?.createPr);
       case "edit.undo": return Boolean(h.edit?.undo);

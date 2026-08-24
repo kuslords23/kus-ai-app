@@ -58,7 +58,7 @@ export function StatusStrip({ state, onRun }: StatusStripProps) {
         {errorCount > 0 && <span className="shrink-0 text-danger">{errorCount} errors</span>}
         {warnCount > 0 && <span className="shrink-0 text-warning">{warnCount} warnings</span>}
 
-        <span className="ml-auto shrink-0">{expanded ? "▲" : "▲"}</span>
+        <span className="ml-auto shrink-0">{expanded ? "▼" : "▲"}</span>
       </button>
 
       {expanded && (

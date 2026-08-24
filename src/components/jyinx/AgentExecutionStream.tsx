@@ -110,6 +110,13 @@ export function AgentExecutionStream({ open, onClose, repository, branch, model,
   };
 
   const pushEvent = (event: AgentExecutionEvent) => {
+    // Side effects OUTSIDE the state updater (StrictMode double-fires updaters).
+    if (event.type === "edit" && onEdits && event.files?.length) {
+      onEdits(event.files);
+    }
+    if (event.type === "error" && event.connect === true) {
+      setNeedConnect(true);
+    }
     setItems((current) => {
       const next = [...current];
       switch (event.type) {
@@ -120,12 +127,8 @@ export function AgentExecutionStream({ open, onClose, repository, branch, model,
         case "whitespace": next.push({ kind: "whitespace", message: event.message }); break;
         case "deploying": next.push({ kind: "deploying", message: event.message }); break;
         case "deployed": next.push({ kind: "deployed", url: event.url }); break;
-        case "edit": {
-          next.push({ kind: "edit", files: event.files });
-          if (onEdits && event.files?.length) onEdits(event.files);
-          break;
-        }
-        case "error": next.push({ kind: "error", message: event.message, connect: event.connect === true }); if (event.connect === true) setNeedConnect(true); break;
+        case "edit": next.push({ kind: "edit", files: event.files }); break;
+        case "error": next.push({ kind: "error", message: event.message, connect: event.connect === true }); break;
         case "done": next.push({ kind: "done", summary: event.summary }); break;
       }
       return next;

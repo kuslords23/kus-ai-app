@@ -33,14 +33,20 @@ export interface AgentIdeSnapshot {
 const MAX_OPS = 500;
 
 export class AgentIdeController {
-  private ws: IdeWorkspace;
+  private getWs: () => IdeWorkspace;
   private operations: AgentIdeEvent[] = [];
   private touchedFiles: string[] = [];
   private statusLines: string[] = [];
   private terminalLines: string[] = [];
 
-  constructor(ws: IdeWorkspace) {
-    this.ws = ws;
+  /** `getWs` is a live accessor so the controller never captures a stale
+   *  workspace object (the context value changes on every file update). */
+  constructor(getWs: () => IdeWorkspace) {
+    this.getWs = getWs;
+  }
+
+  private get ws(): IdeWorkspace {
+    return this.getWs();
   }
 
   /** Applies one agent event to the live IDE workspace. */

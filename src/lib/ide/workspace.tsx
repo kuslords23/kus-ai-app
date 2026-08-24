@@ -80,7 +80,6 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const repoKey = `${repository ?? "local"}:${branch ?? "main"}`;
 
   // Persist the workspace per repo (best-effort; skip huge/private-but-fine).
   useEffect(() => {
@@ -92,33 +91,21 @@ export function IdeWorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [repository, branch, files]);
 
-  // Restore a previously-saved workspace for the active repo on mount.
-  useEffect(() => {
-    if (!repository || !branch) return;
-    try {
-      const raw = localStorage.getItem(storageKeyFor(repository, branch));
-      if (raw) setFiles(JSON.parse(raw) as Record<string, IdeFile>);
-    } catch {
-      /* ignore */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repository, branch]);
-
   const loadRepository = useCallback(async (repo: string, br: string) => {
     setRepository(repo);
     setBranch(br);
-    setLoading(true);
     setOpenFiles([]);
     setActiveFile(null);
-    setFiles((prev) => {
+    // Reset to the saved workspace for the NEW repo — never leak the previous
+    // repo's buffers when the new repo has no saved state.
+    setFiles(() => {
       try {
         const raw = localStorage.getItem(storageKeyFor(repo, br));
-        return raw ? (JSON.parse(raw) as Record<string, IdeFile>) : prev;
+        return raw ? (JSON.parse(raw) as Record<string, IdeFile>) : {};
       } catch {
-        return prev;
+        return {};
       }
     });
-    setLoading(false);
   }, []);
 
   const openFile = useCallback((path: string, content?: string) => {

@@ -119,7 +119,7 @@ const filteredCommands = useMemo(() => {
                         className="w-full rounded-md border border-border bg-background px-2 py-1 text-[11px] text-foreground outline-none focus:border-gold"
                       />
                     </div>
-                    {filteredCommands.map((cmd) => (
+                    {filteredCommands.filter((c) => c.category === menu.id).map((cmd) => (
                       <button
                         key={cmd.id}
                         type="button"
@@ -132,7 +132,7 @@ const filteredCommands = useMemo(() => {
                         {cmd.shortcut && <span className="text-[9px] text-muted">{cmd.shortcut}</span>}
                       </button>
                     ))}
-                    {filteredCommands.length === 0 && (
+                    {filteredCommands.filter((c) => c.category === menu.id).length === 0 && (
                       <p className="px-2 py-2 text-[10px] text-muted">No commands match “{search}”.</p>
                     )}
                   </>
