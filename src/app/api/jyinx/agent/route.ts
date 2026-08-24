@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { runAgentFlow, type AgentExecutionEvent } from "@/services/agentPipeline";
 import { resolveApiKey } from "@/lib/kusai/apiKeysServer";
 import { loadRepositoryContextFiles } from "@/server/github/context";
+import { resolveRoutableAgentModel } from "@/server/kus-code/live";
 
 export const runtime = "nodejs";
 
@@ -53,7 +54,11 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   const body = (await request.json().catch(() => null)) as AgentBody | null;
   const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-  const model = typeof body?.model === "string" && body.model ? body.model : "";
+  // Kus Code variants (kus-ai/kus-code-1/2/3) resolve to a real routable
+  // model for the autonomous pipeline — the raw variant id is not an
+  // OpenRouter model and would 404.
+  const model = typeof body?.model === "string" ? body.model : "";
+  const resolvedModel = resolveRoutableAgentModel(model);
   const endpoint = typeof body?.endpoint === "string" && body.endpoint.startsWith("https://") ? body.endpoint : undefined;
   const repository = typeof body?.repository === "string" && /^[\w.-]+\/[\w.-]+$/.test(body.repository) ? body.repository : null;
   const branch = typeof body?.branch === "string" && body.branch ? body.branch : "main";
@@ -105,7 +110,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         generator = runAgentFlow({
           apiKey,
           config: {
-            model,
+            model: resolvedModel,
             endpoint,
             repository,
             branch,

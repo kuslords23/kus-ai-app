@@ -5,6 +5,7 @@ import { resolveApiKey, openRouterUrl } from "@/lib/kusai/apiKeysServer";
 import { commitFiles, GitHubCommitError } from "@/services/githubCommit";
 import { parseFileEdits, verifyEdits } from "@/services/agentPipeline";
 import { loadRepositoryContextFiles, formatContextFiles, validRepositoryName } from "@/server/github/context";
+import { routeKusCode } from "@/server/kus-code/live";
 
 export const runtime = "nodejs";
 
@@ -133,8 +134,10 @@ const commitActive = Boolean(githubToken && repository && repository !== "local"
   // index the full file tree (src/, components/, app/, views/, ...) scoped to
   // the prompt's keywords so Jyinx — both the chat and the agent — can locate
   // the actual component/UI files rather than only top-level config files.
+  let scopedContextFiles: Array<{ path: string; content: string }> = [];
   if (commitActive && githubToken && validRepositoryName(repository)) {
     const scoped = await loadRepositoryContextFiles(repository, branch, githubToken, promptKeywords(prompt)).catch(() => []);
+    scopedContextFiles = scoped;
     if (scoped.length) {
       const extra = formatContextFiles(scoped);
       userContext = `${userContext}\n\n${extra}`.slice(0, 260_000);
@@ -211,10 +214,30 @@ const commitActive = Boolean(githubToken && repository && repository !== "local"
       }
     }
 
-    // Kus AI / Kus Code models → route through the internal RAG brain or dedicated
-    // Kus Code endpoint. Kus AI (Royal) uses the same runner as Royal "Kus AI".
-    // Kus Code / AI 3 uses a higher-context endpoint for general LLM tasks.
-    if (isKusAi) {
+    // Kus Code variants → LIVE routing to their engines (1.0 / 2.0 / 3.0).
+    // Royal keeps the app protocol: brain stays on the hub RAG.
+    if (isKusCode) {
+      const live = await routeKusCode(modelId, {
+        intent: prompt,
+        repository,
+        branch,
+        contextFiles: scopedContextFiles,
+        history,
+        providerToken: apiKey,
+      });
+      if (live.content) {
+        return NextResponse.json({ content: live.content, model: live.backendModel, engine: live.engine, usage: null });
+      }
+      if (live.error) {
+        // Fall through to the generic endpoint so a missing Kus Code key still
+        // produces an answer rather than a hard block.
+        return NextResponse.json({ error: live.error, engine: live.engine }, { status: 502 });
+      }
+    }
+
+    // Kus AI (Royal) → route through the internal RAG brain. Kus AI (Royal)
+    // uses the same runner as Royal "Kus AI".
+    if (isKusAi && !isKusCode) {
       const historyText = history.length
         ? history.map((turn) => `${turn.role === "user" ? "User" : "Jyinx"}: ${turn.content}`).join("\n")
         : "";

@@ -12,6 +12,8 @@
  * agent-specific routing (reviewer, coder, tester, or general).
  */
 
+import { resolveBackendModel } from "@/lib/models/catalog";
+
 export type KusAgentRole =
   | "general"
   | "coder"
@@ -121,7 +123,10 @@ export async function routeToKusAgent(req: AgentRequest): Promise<AgentResult> {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: isKusCode ? "kus-code/ai-3" : `kus-ai/${req.role}`,
+        // Per-version backend model id: kus-code/ai-1 | ai-2 | ai-3 (resolved
+        // from the selected variant) so each Kus Code version routes to its own
+        // backend model instead of all collapsing to kus-code/ai-3.
+        model: isKusCode ? resolveBackendModel(req.model ?? "") : `kus-ai/${req.role}`,
         messages,
         temperature: 0.3,
         max_tokens: isKusCode ? 8192 : 4096,
@@ -141,7 +146,7 @@ export async function routeToKusAgent(req: AgentRequest): Promise<AgentResult> {
     return {
       content: data?.choices?.[0]?.message?.content ?? "",
       role: req.role,
-      model: isKusCode ? "kus-code/ai-3" : "kus-ai",
+      model: isKusCode ? resolveBackendModel(req.model ?? "") : "kus-ai",
     };
   } catch (cause) {
     return { content: "", role: req.role, model: isKusCode ? "kus-code" : "kus-ai", error: cause instanceof Error ? cause.message : `${isKusCode ? "Kus Code" : "Kus AI"} request failed.` };
