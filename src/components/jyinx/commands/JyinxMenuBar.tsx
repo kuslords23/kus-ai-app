@@ -67,8 +67,11 @@ const filteredCommands = useMemo(() => {
     [filteredCommands]
   );
 
-  const menuDefs = useMemo<Array<{ id: string; label: string }>>(
-    () => COMMAND_CATEGORIES.map((cat) => ({ id: cat.id, label: cat.label })).concat([{ id: "help", label: "Help" }]),
+const menuDefs = useMemo<Array<{ id: string; label: string }>>(
+    () => [
+      ...COMMAND_CATEGORIES.map((cat) => ({ id: cat.id, label: cat.label })),
+      { id: "help", label: "Help" },
+    ],
     []
   );
 
