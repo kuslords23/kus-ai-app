@@ -1,3 +1,12 @@
+/**
+ * Supabase session refresh helper for the Next.js 16 Proxy (formerly
+ * Middleware) convention.
+ *
+ * This is NOT a convention file itself — it's a helper imported by
+ * `src/proxy.ts`. It creates a Supabase server client bound to the incoming
+ * request/response cookie stores (as required in proxy/middleware, where
+ * `next/headers` `cookies()` is not available).
+ */
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
