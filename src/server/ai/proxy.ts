@@ -29,7 +29,7 @@ export interface CreditGate {
   payload?: {
     code: "insufficient_credits";
     message: string;
-    action: "top_up" | "byok";
+    action: "top_up";
   };
 }
 
@@ -74,7 +74,7 @@ export async function meterProxyCtx(ctx: ProxyCallContext): Promise<{ cost: numb
 export async function billableCall<T>(
   execute: () => Promise<T>,
   ctx: ProxyCallContext
-): Promise<T | { ok: false; blocked: true; error: string; code: "insufficient_credits"; message: string; action: "top_up" | "byok" }> {
+): Promise<T | { ok: false; blocked: true; error: string; code: "insufficient_credits"; message: string; action: "top_up" }> {
   const gate = await assertCredits(ctx);
   if (!gate.allowed) {
     return {
