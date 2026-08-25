@@ -184,10 +184,12 @@ export function createAiGateway(
         served = attempt.value;
         break;
       }
-      if (!attempt.ok) {
-        lastError = attempt.error;
-      }
-    }
+
+if (!attempt.ok) {
+  lastError = (attempt as any).error;
+}
+
+
 
     const latencyMs = Date.now() - started;
     const usage = normalizeUsage(served?.usage);
