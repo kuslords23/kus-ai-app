@@ -184,12 +184,12 @@ export function createAiGateway(
         served = attempt.value;
         break;
       }
-
-if (!attempt.ok) {
-  lastError = (attempt as any).error;
-}
-
-
+      // After the break, TS cannot narrow the union type past the break
+      // statement, so we extract error via a non-narrowed accessor.
+      if (!attempt.ok) {
+        lastError = (attempt as { ok: false; error: string; status?: number }).error;
+      }
+    }
 
     const latencyMs = Date.now() - started;
     const usage = normalizeUsage(served?.usage);
@@ -323,7 +323,7 @@ if (!attempt.ok) {
         break;
       }
       if (!attempt.ok) {
-        lastError = attempt.error;
+        lastError = (attempt as { ok: false; error: string; status?: number }).error;
       }
     }
 
