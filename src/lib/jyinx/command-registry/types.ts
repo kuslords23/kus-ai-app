@@ -191,4 +191,4 @@ export interface PaletteItem {
   args?: Record<string, unknown>;
   /** Whether to open a sub-palette for argument input */
   requiresArgs?: boolean;
-}"
+}
