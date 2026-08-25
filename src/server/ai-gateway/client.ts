@@ -74,7 +74,7 @@ function normalizeUsage(raw: Usage | undefined | null): Usage {
     completion_tokens: raw.completion_tokens ?? 0,
     total_tokens: raw.total_tokens ?? (raw.prompt_tokens ?? 0) + (raw.completion_tokens ?? 0),
   };
-
+}
 
 function parseErrorBody(body: string, status: number): string {
   if (!body) return `HTTP ${status}`;
