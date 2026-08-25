@@ -318,7 +318,9 @@ export function createAiGateway(
         }
         break;
       }
-      lastError = attempt.error;
+      if (!attempt.ok) {
+        lastError = attempt.error;
+      }
     }
 
     const latencyMs = Date.now() - started;
