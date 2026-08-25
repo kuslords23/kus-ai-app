@@ -184,11 +184,9 @@ export function createAiGateway(
         served = attempt.value;
         break;
       }
-      // After the break, TS cannot narrow the union type past the break
-      // statement, so we extract error via a non-narrowed accessor.
-      if (!attempt.ok) {
-        lastError = (attempt as { ok: false; error: string; status?: number }).error;
-      }
+      // After the break above, TypeScript cannot narrow the union past the
+      // break statement. We use `as unknown as` to safely widen the type.
+      lastError = (attempt as unknown as { ok: false; error: string }).error;
     }
 
     const latencyMs = Date.now() - started;
@@ -322,9 +320,7 @@ export function createAiGateway(
         }
         break;
       }
-      if (!attempt.ok) {
-        lastError = (attempt as { ok: false; error: string; status?: number }).error;
-      }
+      lastError = (attempt as unknown as { ok: false; error: string }).error;
     }
 
     const latencyMs = Date.now() - started;
