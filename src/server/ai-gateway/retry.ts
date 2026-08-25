@@ -30,7 +30,7 @@ export function backoffMs(baseMs: number, attempt: number, capMs = 8000): number
   return Math.floor(Math.random() * window);
 }
 
-export interface RetryOutcome<T> {
+export type RetryOutcome<T> = {
   ok: true;
   value: T;
   retries: number;
