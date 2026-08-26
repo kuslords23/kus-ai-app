@@ -176,7 +176,20 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
       lastError ? `\nFeedback from the previous iteration to incorporate:\n${lastError}` : "",
     ].join("\n");
 
-    const coder = await callLLMOnce({ apiKey, endpoint, model, systemPrompt: coderSystem, userPrompt: coderPrompt });
+    let coder: { content: string } | null = null;
+    try {
+      coder = await callLLMOnce({ apiKey, endpoint, model, systemPrompt: coderSystem, userPrompt: coderPrompt });
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : "Coder agent request failed.";
+      yield { type: "error", message: `Coder agent failed: ${lastError}. Check that the model endpoint is configured and the API key is valid.` };
+      if (attempt < maxRetries) {
+        yield { type: "log", message: "Retrying coder agent after failure…" };
+        await delay(1000);
+        continue;
+      }
+      yield { type: "done", summary: "Coder agent could not complete after retries. Check your API key and model configuration." };
+      return;
+    }
     const parsed = parseFileEdits(coder.content);
     workingEdits = parsed.edits;
     yield { type: "narration", message: parsed.narration || `Planned edits across ${workingEdits.length} file(s).`, detail: workingEdits.map((e) => `- ${e.path} (${e.content.length} chars)`).join("\n") };

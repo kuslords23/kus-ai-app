@@ -25,6 +25,9 @@ type Props = {
    * call site (desktop panel, drawer, mobile dashboard).
    */
   onEdits?: (edits: Array<{ path: string; content: string }>) => void;
+  /** Unique session key for persisting history across panel toggles.
+   *  When provided, chat logs and execution state survive panel close/reopen. */
+  sessionKey?: string;
 };
 
 type StreamItem =
@@ -39,22 +42,48 @@ type StreamItem =
   | { kind: "edit"; files: Array<{ path: string; content: string }> }
   | { kind: "done"; summary: string };
 
-export function AgentExecutionStream({ open, onClose, repository, branch, model, repositoryFiles = [], initialPrompt, onPromptChange, onEdits }: Props) {
+export function AgentExecutionStream({ open, onClose, repository, branch, model, repositoryFiles = [], initialPrompt, onPromptChange, onEdits, sessionKey }: Props) {
+  // Persist session history to localStorage so the agent's memory survives
+  // panel close/reopen. The sessionKey (e.g. "repo:branch") scopes storage
+  // per workspace so switching repos restores the correct history.
+  const storageKey = `jyinx_agent_session:${sessionKey ?? `${repository}:${branch}`}`;
   const [prompt, setPrompt] = useState("");
   const [running, setRunning] = useState(false);
-  const [items, setItems] = useState<StreamItem[]>([]);
+  const [items, setItems] = useState<StreamItem[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved) as { items?: StreamItem[]; timestamp?: number };
+        if (parsed.items?.length) return parsed.items;
+      }
+    } catch { /* ignore */ }
+    return [];
+  });
   const [needConnect, setNeedConnect] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const runRef = useRef<(text?: string) => void | Promise<void>>(() => {});
   const startedRef = useRef(false);
 
+  // Persist items to localStorage whenever they change (debounced via the
+  // state update cycle).
+  useEffect(() => {
+    if (items.length === 0) return;
+    try {
+      const saved = { items, timestamp: Date.now() };
+      localStorage.setItem(storageKey, JSON.stringify(saved));
+    } catch { /* quota — ignore */ }
+  }, [items, storageKey]);
+
   const run = async (override?: string) => {
     const text = (override ?? prompt).trim();
     if (!text || running) return;
     onPromptChange?.("");
     setPrompt("");
-    setItems([]);
+    // Only clear items when the user explicitly types a new prompt (not on
+    // initialPrompt replay from persisted state, which would wipe history).
+    if (!override) setItems([]);
     setNeedConnect(false);
     setRunning(true);
     try {
