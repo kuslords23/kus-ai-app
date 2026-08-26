@@ -11,6 +11,7 @@ type CommitBody = {
   action?: unknown;
   path?: unknown;
   content?: unknown;
+  files?: unknown;
 };
 
 function getToken(request: NextRequest): string | null {
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       case "commit-files": {
-        const files = Array.isArray(body.content) ? (body.content as CommitChange[]) : null;
+        const files = Array.isArray(body.content) ? (body.content as CommitChange[]) : Array.isArray(body.files) ? (body.files as CommitChange[]) : null;
         if (!files || files.length === 0) {
           return NextResponse.json({ error: "files[] must be provided for a multi-file commit." }, { status: 400 });
         }

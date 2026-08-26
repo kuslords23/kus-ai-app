@@ -25,7 +25,8 @@ export const JYINX_MODELS: JyinxModel[] = [
   { id: "microsoft/phi-4-reasoning-plus:free", label: "Phi 4 Reasoning", tier: "Free", contextWindow: 32_768 },
   { id: "google/gemma-3-27b-it:free", label: "Gemma 3 27B", tier: "Free", contextWindow: 128_000 },
   { id: "stealth/ox-alpha:free", label: "Ox Alpha (Free)", tier: "Free", contextWindow: 1_048_576 },
-  { id: "openai/gpt-4.1-nano", label: "GPT-4.1 Nano", tier: "Fast", contextWindow: 1_000_000 },
+  { id: "deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash (Free)", tier: "Free", contextWindow: 1_300_000 },
+  { id: "openai/gpt-5.6-luna", label: "GPT-5.6 Luna", tier: "Fast", contextWindow: 1_100_000 },
   { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash", tier: "Fast", contextWindow: 1_000_000 },
   { id: "mistralai/ministral-8b", label: "Ministral 8B", tier: "Fast", contextWindow: 128_000 },
   { id: "qwen/qwen3-30b-a3b", label: "Qwen 3 30B", tier: "Fast", contextWindow: 32_768 },
@@ -34,11 +35,26 @@ export const JYINX_MODELS: JyinxModel[] = [
   { id: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4", tier: "Balanced", contextWindow: 200_000 },
   { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro", tier: "Balanced", contextWindow: 1_000_000 },
   { id: "deepseek/deepseek-chat-v3-0324", label: "DeepSeek V3", tier: "Balanced", contextWindow: 64_000 },
+  { id: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", tier: "Balanced", contextWindow: 1_000_000 },
+  { id: "deepseek/deepseek-v4-flash-0731", label: "DeepSeek V4 Flash 0731", tier: "Balanced", contextWindow: 1_300_000 },
+  { id: "anthropic/claude-sonnet-5", label: "Claude Sonnet 5", tier: "Balanced", contextWindow: 1_000_000 },
+  { id: "google/gemini-3.1-pro", label: "Gemini 3.1 Pro", tier: "Balanced", contextWindow: 1_000_000 },
+  { id: "openai/gpt-5.6-terra", label: "GPT-5.6 Terra", tier: "Balanced", contextWindow: 1_100_000 },
+  // ── Flagship models (Frontier) ──────────────────────────
   { id: "anthropic/claude-opus-4", label: "Claude Opus 4", tier: "Flagship", contextWindow: 200_000 },
-  { id: "openai/o3", label: "OpenAI o3", tier: "Flagship", contextWindow: 200_000 },
   { id: "openai/gpt-4.1", label: "GPT-4.1", tier: "Flagship", contextWindow: 1_000_000 },
   { id: "x-ai/grok-4", label: "Grok 4", tier: "Flagship", contextWindow: 256_000 },
   { id: "stealth/ox-alpha", label: "Ox Alpha", tier: "Flagship", contextWindow: 1_048_576 },
+  // ── Next-gen Frontier models ────────────────────────────
+  { id: "deepseek/deepseek-v4-pro", label: "DeepSeek V4 Pro", tier: "Flagship", contextWindow: 1_000_000 },
+  { id: "openai/gpt-5", label: "GPT-5", tier: "Flagship", contextWindow: 400_000 },
+  { id: "openai/gpt-5.6-sol", label: "GPT-5.6 Sol", tier: "Flagship", contextWindow: 1_100_000 },
+  { id: "openai/gpt-5.6-sol-pro", label: "GPT-5.6 Sol Pro", tier: "Flagship", contextWindow: 1_100_000 },
+  { id: "anthropic/claude-opus-5", label: "Claude Opus 5", tier: "Flagship", contextWindow: 1_000_000 },
+  { id: "anthropic/claude-opus-5-fast", label: "Claude Opus 5 (Fast)", tier: "Flagship", contextWindow: 1_000_000 },
+  { id: "anthropic/claude-fable-5", label: "Claude Fable 5", tier: "Flagship", contextWindow: 1_000_000 },
+  { id: "x-ai/grok-4.5", label: "Grok 4.5", tier: "Flagship", contextWindow: 500_000 },
+  { id: "google/gemini-3.5-flash", label: "Gemini 3.5 Flash", tier: "Flagship", contextWindow: 1_000_000 },
 ];
 
 export const DEFAULT_JYINX_MODEL = JYINX_MODELS[0];

@@ -85,8 +85,13 @@ export const FALLBACK_LADDER: Array<{ provider: string; model: string; tier: str
   { provider: "together-ai", model: "deepseek-ai/DeepSeek-R1-Distill-Llama-70B", tier: "budget" },
   { provider: "openrouter", model: "qwen/qwen-2.5-72b-instruct:free", tier: "budget" },
   { provider: "deepinfra", model: "deepseek-ai/DeepSeek-R1-Distill-Llama-70B", tier: "budget" },
+  { provider: "openrouter", model: "deepseek/deepseek-v4-flash", tier: "balanced" },
   { provider: "openrouter", model: "openai/gpt-4.1-mini", tier: "premium" },
   { provider: "openrouter", model: "google/gemini-2.5-flash", tier: "premium" },
+  { provider: "openrouter", model: "anthropic/claude-sonnet-5", tier: "premium" },
+  { provider: "openrouter", model: "openai/gpt-5.6-sol", tier: "flagship" },
+  { provider: "openrouter", model: "anthropic/claude-opus-5", tier: "flagship" },
+  { provider: "openrouter", model: "x-ai/grok-4.5", tier: "flagship" },
 ];
 
 /** Per-modality model pipelines in failover order. */

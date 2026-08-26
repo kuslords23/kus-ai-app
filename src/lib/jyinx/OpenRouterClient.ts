@@ -14,9 +14,22 @@ export class OpenRouterClient {
     'openai/gpt-oss-20b:free': { name: 'GPT-OSS', category: 'free' },
     // High-reliability free endpoints
     'qwen/qwen3-coder:free': { name: 'Qwen 3-Coder', category: 'free' },
+    // Frontier free models
+    'deepseek/deepseek-v4-flash:free': { name: 'DeepSeek V4 Flash', category: 'free' },
     // Ox Alpha (stealth, 1M ctx) — free preview + flagship
     'stealth/ox-alpha:free': { name: 'Ox Alpha', category: 'free' },
-    'stealth/ox-alpha': { name: 'Ox Alpha', category: 'premium' }
+    'stealth/ox-alpha': { name: 'Ox Alpha', category: 'premium' },
+    // Frontier paid models
+    'deepseek/deepseek-v4-flash': { name: 'DeepSeek V4 Flash', category: 'premium' },
+    'deepseek/deepseek-v4-pro': { name: 'DeepSeek V4 Pro', category: 'premium' },
+    'openai/gpt-5': { name: 'GPT-5', category: 'premium' },
+    'openai/gpt-5.6-sol': { name: 'GPT-5.6 Sol', category: 'premium' },
+    'openai/gpt-5.6-luna': { name: 'GPT-5.6 Luna', category: 'premium' },
+    'anthropic/claude-opus-5': { name: 'Claude Opus 5', category: 'premium' },
+    'anthropic/claude-fable-5': { name: 'Claude Fable 5', category: 'premium' },
+    'anthropic/claude-sonnet-5': { name: 'Claude Sonnet 5', category: 'premium' },
+    'x-ai/grok-4.5': { name: 'Grok 4.5', category: 'premium' },
+    'google/gemini-3.5-flash': { name: 'Gemini 3.5 Flash', category: 'premium' },
   };
 
   async generate(prompt: string, modelName: string) {
