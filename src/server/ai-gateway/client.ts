@@ -87,7 +87,7 @@ function parseErrorBody(body: string, status: number): string {
   } catch {
     return body.slice(0, 300);
   }
-
+}
 
 function errorOf(cause: unknown): { error: string; status?: number } {
   const message = cause instanceof Error ? cause.message : String(cause);
