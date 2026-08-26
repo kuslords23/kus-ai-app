@@ -159,6 +159,31 @@ function JyinxStudioInner({ onExit }: JyinxStudioProps) {
   const handleDeploy = async () => {
     if (!selectedRepository) { setNotice("Select a repository, then push to a host platform."); return; }
     try {
+      // First, commit any unsaved workspace changes
+      const dirty = Object.values(ws.files).filter((f) => f.dirty);
+      if (dirty.length > 0) {
+        setNotice("Committing workspace changes before pushing…");
+        const { data } = await createClient().auth.getSession();
+        const token = data.session?.provider_token;
+        if (token) {
+          const commitRes = await fetch("/api/github/commit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              action: "commit-files",
+              repository: selectedRepository.fullName,
+              baseBranch: selectedRepository.defaultBranch,
+              message: `Jyinx push · ${dirty.length} file(s)`,
+              files: dirty.map((f) => ({ path: f.path, content: f.content })),
+            }),
+          });
+          if (commitRes.ok) {
+            ws.markClean(dirty.map((f) => f.path));
+          }
+        }
+      }
+
+      // Now push to the host platform
       const res = await fetch("/api/deploy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -168,9 +193,17 @@ function JyinxStudioInner({ onExit }: JyinxStudioProps) {
           commitMessage: `Jyinx push · ${activePath}`,
         }),
       });
-      const data = (await res.json().catch(() => null)) as { ok?: boolean; href?: string; error?: string } | null;
-      if (!res.ok || !data?.ok) throw new Error(data?.error || "Push to host failed.");
-      setNotice(`🚀 Pushed — ${data.href}`);
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; href?: string; error?: string; deployment?: { deployUrl?: string } } | null;
+      if (!res.ok || !data?.ok) {
+        const msg = data?.error || "Push to host failed.";
+        // If no hooks configured, show the preview URL as a fallback
+        if (msg.includes("No external build hook")) {
+          setNotice(`📦 Push recorded. Deploy when a build hook is configured. ${data?.href ? `Preview: ${data.href}` : ""}`);
+          return;
+        }
+        throw new Error(msg);
+      }
+      setNotice(`🚀 Deployed — ${data.href || data?.deployment?.deployUrl || "see host dashboard"}`);
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : "Push to host failed.");
     }
