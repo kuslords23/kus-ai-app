@@ -117,7 +117,7 @@ async function callAgent(opts: {
 }): Promise<AgentMessage> {
   const start = Date.now();
   const model = opts.model ?? AGENT_MODELS[opts.role] ?? "openai/gpt-4.1-mini";
-  var contentLines = [
+  const contentLines = [
     '## ' + opts.role + ' Agent Report (' + opts.phase + ')',
     '',
     'Context: ' + opts.context.slice(0, 200),
@@ -127,7 +127,7 @@ async function callAgent(opts: {
     '',
     artifactForRole(opts.role, opts.phase, opts.prompt),
   ];
-  var content = contentLines.join('\n');
+  const content = contentLines.join('\n');
 
   return {
     role: opts.role,
@@ -139,7 +139,7 @@ async function callAgent(opts: {
 }
 
 function artifactForRole(role: AgentRole, phase: AgentPhase, prompt: string): string {
-  var prefix = '[' + phase + '] ';
+  const prefix = '[' + phase + '] ';
   if (role === 'architect') return prefix + 'Architecture Plan: structure, interfaces, data flow for: ' + prompt.slice(0, 100);
   if (role === 'critic') return prefix + 'Critical Audit: logical flaws, edge cases, dependency gaps.';
   if (role === 'synthesizer') return prefix + 'Unified Blueprint: merging architect + critic into coherent plan.';
@@ -159,13 +159,13 @@ function artifactForRole(role: AgentRole, phase: AgentPhase, prompt: string): st
 }
 
 function createPhaseArtifact(phase: AgentPhase, agents: AgentMessage[]): PhaseArtifact {
-  var approved = true;
-  for (var ci = 0; ci < agents.length; ci++) {
-    var content = agents[ci].content;
+  let approved = true;
+  for (let ci = 0; ci < agents.length; ci++) {
+    const content = agents[ci].content;
     if (content.indexOf('FAILED') !== -1 || content.indexOf('REJECTED') !== -1) { approved = false; break; }
   }
-  var artifacts = [];
-  for (var ci2 = 0; ci2 < agents.length; ci2++) {
+  const artifacts = [];
+  for (let ci2 = 0; ci2 < agents.length; ci2++) {
     artifacts.push({ name: agents[ci2].role + '-' + phase, content: agents[ci2].content, type: 'agent-report' });
   }
   return {

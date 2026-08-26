@@ -26,11 +26,11 @@ import { AgentIdeController } from "@/lib/ide/controller";
 
 type QueueState = { status: "ONLINE" | "OFFLINE" | "CONNECTING"; pendingItems: number; lastSync: string | null; total: number };
 
-type JyinxStudioProps = { onExit?: () => void };
+type JyinxStudioProps = Record<string, never>;
 
 /** Wraps the IDE in the live in-IDE workspace store so Kus Code + agents can
  *  drive the editor's files directly. */
-export function JyinxStudio({ onExit: _onExit }: JyinxStudioProps) {
+export function JyinxStudio(_props: JyinxStudioProps) {
   return (
     <IdeWorkspaceProvider>
       <JyinxStudioInner />
