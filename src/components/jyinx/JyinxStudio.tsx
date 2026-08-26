@@ -30,18 +30,18 @@ type JyinxStudioProps = { onExit?: () => void };
 
 /** Wraps the IDE in the live in-IDE workspace store so Kus Code + agents can
  *  drive the editor's files directly. */
-export function JyinxStudio({ onExit }: JyinxStudioProps) {
+export function JyinxStudio({ onExit: _onExit }: JyinxStudioProps) {
   return (
     <IdeWorkspaceProvider>
-      <JyinxStudioInner onExit={onExit} />
+      <JyinxStudioInner />
     </IdeWorkspaceProvider>
   );
 }
 
-function JyinxStudioInner({ onExit }: JyinxStudioProps) {
+function JyinxStudioInner() {
   const router = useRouter();
   const ws = useIdeWorkspace();
-  const { activeModel: sharedModel, setActiveModel: setSharedModel, setMode, selectedRepositoryId, selectedRepositoryName, setSelectedRepository: setSharedRepository } = useJyinxModelStore();
+  const { activeModel: sharedModel, setActiveModel: setSharedModel, selectedRepositoryId, selectedRepositoryName, setSelectedRepository: setSharedRepository } = useJyinxModelStore();
   const activeModel = sharedModel.id;
   const setActiveModel = (modelId: string) => setSharedModel(JYINX_MODELS.find((model) => model.id === modelId) ?? DEFAULT_JYINX_MODEL);
   // The active file + content now live in the IDE workspace buffer store.
@@ -67,8 +67,6 @@ function JyinxStudioInner({ onExit }: JyinxStudioProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [queue, setQueue] = useState<QueueState>({ status: "ONLINE", pendingItems: 0, lastSync: null, total: 0 });
-  const [publishState, setPublishState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [publishMessage, setPublishMessage] = useState("");
   const [commitState, setCommitState] = useState<"idle" | "committing" | "done" | "error">("idle");
   const [commitMessage, setCommitMessage] = useState("Jyinx update");
   const [notebookContext, setNotebookContext] = useState<string | null>(null);
@@ -115,20 +113,20 @@ function JyinxStudioInner({ onExit }: JyinxStudioProps) {
   useEffect(() => { let cancelled = false; const load = async () => { try { const response = await fetch("/api/jyinx/queue", { cache: "no-store" }); if (!response.ok) throw new Error(); const data = await response.json() as QueueState; if (!cancelled) setQueue(data); } catch { if (!cancelled) setQueue((current) => ({ ...current, status: "OFFLINE" })); } }; void load(); const timer = window.setInterval(() => void load(), 15_000); return () => { cancelled = true; window.clearInterval(timer); }; }, []);
 
   const publishChange = async () => {
-    // Non-blocking tips instead of hard errors: auto-select the last edited
-    // file when none is open, and guide (rather than block) when no repo.
     const target = activePath === "scratch.ts" && dirtyPaths.length ? dirtyPaths[dirtyPaths.length - 1] : activePath;
     const content = activeBuf?.content ?? "";
-    if (!selectedRepository) { setPublishState("idle"); setPublishMessage("Select a repository in Settings, then create a pull request when ready."); return; }
-    if (!target) { setPublishState("idle"); setPublishMessage("Open a file first — or edit any file, and we'll pre-select it for the pull request."); return; }
-    setPublishState("saving"); setPublishMessage("");
+    if (!selectedRepository) { setNotice("Select a repository in Settings, then create a pull request when ready."); return; }
+    if (!target) { setNotice("Open a file first — or edit any file, and we'll pre-select it for the pull request."); return; }
+    setCommitState("committing");
     try {
       const { data } = await createClient().auth.getSession(); const token = data.session?.provider_token;
       if (!token) throw new Error("Reconnect GitHub before publishing.");
       const branch = `jyinx/${target.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now()}`;
       const response = await fetch("/api/github/workspace", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ repository: selectedRepository.fullName, baseBranch: selectedRepository.defaultBranch, path: target, content, branchName: branch, message: `Jyinx update ${target}`, pullRequestTitle: `Jyinx: update ${target}`, pullRequestBody: `Created from Jyinx using ${activeModelInfo.label}. Review the change before merging.` }) });
-      const result = await response.json() as { error?: string; pullRequest?: { url?: string }; message?: string }; if (!response.ok) throw new Error(result.error || "Unable to save change."); setPublishState("saved"); setPublishMessage(result.pullRequest?.url ? `Pull request created: ${result.pullRequest.url}` : result.message || "Saved to the Jyinx review branch.");
-    } catch (cause) { setPublishState("error"); setPublishMessage(cause instanceof Error ? cause.message : "Unable to publish change."); }
+      const result = await response.json() as { error?: string; pullRequest?: { url?: string }; message?: string }; if (!response.ok) throw new Error(result.error || "Unable to save change.");
+      setCommitState("done");
+      setNotice(result.pullRequest?.url ? `Pull request created: ${result.pullRequest.url}` : result.message || "Saved to the Jyinx review branch.");
+    } catch (cause) { setCommitState("error"); setNotice(cause instanceof Error ? cause.message : "Unable to publish change."); }
   };
 
   // Commits ALL dirty workspace buffers atomically (action "commit-files"),
@@ -149,8 +147,6 @@ function JyinxStudioInner({ onExit }: JyinxStudioProps) {
       void handleDeploy();
     } catch { setCommitState("error"); setNotice("Commit failed — see GitHub."); }
   };
-
-  const commitToGitHub = (message?: string) => commitWorkspace(message);
 
   const handleDeploy = async () => {
     if (!selectedRepository) { setNotice("Select a repository, then push to a host platform."); return; }
