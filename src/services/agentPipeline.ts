@@ -1,6 +1,8 @@
 import { commitFiles, GitHubCommitError } from "@/services/githubCommit";
 import { runSandboxPipeline, isSandboxConfigured } from "@/services/sandboxExecution";
+import { runLocalSandbox, isLocalSandboxAvailable } from "@/services/localSandbox";
 import { pushToHost } from "@/server/deploy/pushHost";
+import { parseBuildOutput, formatErrorsForCoder } from "@/services/errorParser";
 import {
   parseFileEdits,
   verifyEdits,
@@ -285,9 +287,18 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
           yield { type: "done", summary: "Blocked by GitHub permissions. Reconnect GitHub with the repo scope, then retry." };
           return;
         }
-        yield { type: "log", message: `Sandbox logs:\n${sandbox.steps.map((s) => `- [${s.phase}] ${s.message}`).join("\n")}` };
+        // Parse the sandbox error logs into structured errors for targeted
+        // self-correction instead of dumping raw logs back to the coder.
+        const sandboxStderr = sandbox.steps.map((s) => (s.logs ?? []).join("\n")).filter(Boolean).join("\n");
+        if (sandboxStderr) {
+          const parsed = parseBuildOutput(sandboxStderr);
+          lastError = formatErrorsForCoder(parsed);
+        } else {
+          lastError = sandbox.error || "Sandbox verification failed.";
+        }
+        yield { type: "log", message: `Sandbox errors:\n${lastError}` };
         if (attempt < maxRetries) {
-          yield { type: "log", message: "Feeding sandbox error logs back to the coder for self-correction…" };
+          yield { type: "log", message: "Structured error feedback sent to the coder for self-correction…" };
           continue;
         }
         yield { type: "done", summary: "Cloud verification could not pass after retries. No commit was made." };
@@ -295,8 +306,68 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
       } else {
         yield { type: "reasoning", message: "E2B sandbox unavailable; falling back to the lightweight reviewer before commit." };
       }
+    } else if (isLocalSandboxAvailable()) {
+      // Local sandbox fallback when E2B is not configured — runs on the
+      // server's filesystem without any cloud dependency.
+      yield { type: "log", message: "Provisioning local sandbox to build, type-check, and test the change…" };
+      const sandboxLogs: Array<AgentExecutionEvent> = [];
+      const sandbox = await runLocalSandbox(
+        {
+          repository: config.repository,
+          branch: config.branch,
+          providerToken: config.providerToken,
+          files: workingEdits,
+          commitMessage: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
+        },
+        (step) => {
+          if (step.logs?.length) {
+            sandboxLogs.push({ type: "log", message: `[${step.phase}] ${step.message}` });
+            sandboxLogs.push({ type: "reasoning", message: step.logs.join("\n") });
+          } else {
+            sandboxLogs.push({ type: "log", message: `[${step.phase}] ${step.message}` });
+          }
+        }
+      );
+
+      for (const log of sandboxLogs) yield log;
+
+      if (sandbox.ok) {
+        if (sandbox.committed && sandbox.commitUrl) {
+          yield { type: "log", message: `Committed ${workingEdits.length} file(s) → ${sandbox.commitUrl}` };
+          yield* pushAfterCommit({
+            repository: config.repository,
+            branch: config.branch,
+            commitSha: sandbox.commitSha,
+            commitMessage: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
+          });
+          return;
+        }
+        yield { type: "log", message: "Local build, type-check, and tests passed. Continuing to commit…" };
+      } else if (!sandbox.ok) {
+        lastError = sandbox.error || "Local sandbox verification failed.";
+        yield { type: "error", message: `Local verification failed: ${lastError}`, connect: sandbox.authorization === true };
+        if (sandbox.authorization) {
+          yield { type: "done", summary: "Blocked by GitHub permissions. Reconnect GitHub with the repo scope, then retry." };
+          return;
+        }
+        // Parse sandbox errors into structured format for targeted fixes.
+        const sandboxStderr = sandbox.steps.map((s) => (s.logs ?? []).join("\n")).filter(Boolean).join("\n");
+        if (sandboxStderr) {
+          const parsed = parseBuildOutput(sandboxStderr);
+          lastError = formatErrorsForCoder(parsed);
+        } else {
+          lastError = sandbox.error || "Local sandbox verification failed.";
+        }
+        yield { type: "log", message: `Sandbox errors:\n${lastError}` };
+        if (attempt < maxRetries) {
+          yield { type: "log", message: "Structured error feedback sent to the coder for self-correction…" };
+          continue;
+        }
+        yield { type: "done", summary: "Local verification could not pass after retries. No commit was made." };
+        return;
+      }
     } else {
-      yield { type: "reasoning", message: "Cloud sandbox not configured; skipping cloud verification (lightweight review only)." };
+      yield { type: "reasoning", message: "No sandbox available (E2B not configured, local sandbox not available). Skipping cloud verification (lightweight review only)." };
     }
 
     // Commit via the GitHub engine (unless the sandbox already committed).

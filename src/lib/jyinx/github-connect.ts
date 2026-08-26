@@ -35,6 +35,44 @@ export async function getGitHubToken(): Promise<string | null> {
 }
 
 /**
+ * Attempts to resolve a GitHub App installation token for the given user and
+ * repository. Falls back to the Supabase OAuth provider_token.
+ */
+export async function getGitHubTokenForRepo(
+  userId: string,
+  repoFullName: string
+): Promise<string | null> {
+  try {
+    const response = await fetch(`/api/github-app?action=resolve-token&userId=${encodeURIComponent(userId)}&repo=${encodeURIComponent(repoFullName)}`, {
+      cache: "no-store",
+    });
+    if (response.ok) {
+      const data = (await response.json()) as { token?: string };
+      if (data.token) return data.token;
+    }
+  } catch {
+    // fall through to OAuth token
+  }
+  return getGitHubToken();
+}
+
+/**
+ * Returns the GitHub App install URL so the user can install the app.
+ */
+export async function getGitHubAppInstallUrl(state?: string): Promise<string> {
+  try {
+    const params = new URLSearchParams({ action: "install-url" });
+    if (state) params.set("state", state);
+    const response = await fetch(`/api/github-app?${params.toString()}`, { cache: "no-store" });
+    const data = (await response.json()) as { url?: string };
+    if (data.url) return data.url;
+  } catch {
+    // fall through
+  }
+  return "https://github.com/apps/jyinx-bot/installations/new";
+}
+
+/**
  * Verifies the active token has repo-write access by asking the backend to
  * probe GitHub (`/api/github/commit` with `action: "scope"`). Returns a label
  * the UI can render, plus whether a re-connect is required.
