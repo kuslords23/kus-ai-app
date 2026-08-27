@@ -5,11 +5,14 @@
  * project creation, workspace picker). Centralizes:
  *  - the OAuth redirect (always requests the `repo` scope),
  *  - the provider-token / session lookup,
+ *  - persistence of the GitHub token to localStorage so it survives
+ *    page refreshes and background API calls,
  *  - scope verification via the backend commit route (`x-scope-check` action).
  */
 
 export const GITHUB_CONNECT_PATH = "/auth/callback";
 export const GITHUB_SITE_ORIGIN = "https://kus-ai-app.vercel.app";
+const PERSISTED_TOKEN_KEY = "jyinx_persisted_github_token";
 
 export type GitHubConnectResult =
   | { ok: true; token: string; login?: string }
@@ -22,21 +25,66 @@ export async function connectGitHub(redirectPath = "/jyinx"): Promise<void> {
     provider: "github",
     options: {
       redirectTo: `${GITHUB_SITE_ORIGIN}/auth/callback?next=${encodeURIComponent(redirectPath)}`,
-      scopes: "repo",
+      scopes: "repo read:user user:email",
     },
   });
 }
 
-/** Returns the active session's `provider_token` (GitHub), or null. */
+/**
+ * Persist the GitHub token to localStorage so it survives page refreshes
+ * and background API calls (Supabase's provider_token is ephemeral).
+ * Also writes the token to the Supabase session via a custom event so
+ * in-memory hooks pick it up immediately.
+ */
+export function persistGitHubToken(token: string): void {
+  try {
+    localStorage.setItem(PERSISTED_TOKEN_KEY, token);
+    // Dispatch a custom event so the auth hook can pick it up
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("github-token-persisted", { detail: { token } }));
+    }
+  } catch {
+    /* quota — ignore */
+  }
+}
+
+/** Clear the persisted GitHub token (e.g. on sign-out). */
+export function clearPersistedGitHubToken(): void {
+  try {
+    localStorage.removeItem(PERSISTED_TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Returns the active session's `provider_token` (GitHub), falling back to the
+ * persisted token when the session token is unavailable. This ensures commits
+ * and pushes work reliably across page navigations.
+ */
 export async function getGitHubToken(): Promise<string | null> {
-  const supabase = (await import("@/lib/supabase/client")).createClient();
-  const { data } = await supabase.auth.getSession();
-  return data.session?.provider_token ?? null;
+  try {
+    const supabase = (await import("@/lib/supabase/client")).createClient();
+    const { data } = await supabase.auth.getSession();
+    const sessionToken = data.session?.provider_token ?? null;
+    if (sessionToken) {
+      persistGitHubToken(sessionToken);
+      return sessionToken;
+    }
+  } catch {
+    // fall through to persisted token
+  }
+  // Fallback to the persisted token when the session token is gone
+  try {
+    return localStorage.getItem(PERSISTED_TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Attempts to resolve a GitHub App installation token for the given user and
- * repository. Falls back to the Supabase OAuth provider_token.
+ * repository. Falls back to the OAuth token (session + persisted).
  */
 export async function getGitHubTokenForRepo(
   userId: string,

@@ -36,6 +36,10 @@ function AuthCallback() {
         const { data: sessionData } = await supabase.auth.getSession();
         const token = sessionData.session?.provider_token;
         if (token) {
+          // Persist the token to localStorage so it survives page refreshes
+          // and background API calls (Supabase's provider_token is ephemeral).
+          const { persistGitHubToken } = await import("@/lib/jyinx/github-connect");
+          persistGitHubToken(token);
           try {
             const check = await fetch("/api/github/commit", {
               method: "POST",

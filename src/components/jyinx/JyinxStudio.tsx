@@ -149,7 +149,7 @@ function JyinxStudioInner() {
   };
 
   const handleDeploy = async () => {
-    if (!selectedRepository) { setNotice("Select a repository, then push to a host platform."); return; }
+    if (!selectedRepository) { setNotice("Select a repository in Settings (gear icon), then push to a host platform."); return; }
     try {
       // First, commit any unsaved workspace changes
       const dirty = Object.values(ws.files).filter((f) => f.dirty);
