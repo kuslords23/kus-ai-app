@@ -1,0 +1,28 @@
+{
+  "name": "Kus-lords AI",
+  "short_name": "Kus AI",
+  "description": "Kus AI Companion - AI chat, Jyinx code workspace, Kus AI model gateway, token ledger, and the Sports Clan Nexus chat bridge.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0c0a14",
+  "theme_color": "#0c0a14",
+  "categories": ["productivity", "developer tools", "social"],
+  "lang": "en",
+  "dir": "ltr",
+  "prefer_related_applications": false,
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

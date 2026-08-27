@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/training-tick",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/swarm-tick",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

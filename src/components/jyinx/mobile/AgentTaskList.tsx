@@ -1,0 +1,12 @@
+"use client";
+
+import type { AgentTask, MobileFilters, Workspace } from "./types";
+
+type Props = { workspace: Workspace; tasks: AgentTask[]; filters: MobileFilters; onSelect: (task: AgentTask) => void };
+
+const statusText: Record<AgentTask["status"], string> = { working: "Working", attention: "Needs attention", review: "In review", merged: "Merged", draft: "Draft" };
+
+export function AgentTaskList({ workspace, tasks, filters, onSelect }: Props) {
+  const visible = tasks.filter((task) => task.workspaceId === workspace.id && (filters.statuses.length === 0 || filters.statuses.includes(task.status)));
+  return <section className="mt-6"><div className="mb-3 flex items-end justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Agent tasks</p><p className="mt-1 text-lg font-semibold">{workspace.name}</p></div><span className="text-xs text-muted">{visible.length} items</span></div><div className="space-y-3">{visible.map((task) => <button type="button" key={task.id} onClick={() => onSelect(task)} className="w-full rounded-2xl border border-border bg-surface/70 p-4 text-left transition hover:border-gold/30"><div className="flex items-start justify-between gap-3"><span className="min-w-0"><span className="block truncate text-sm font-medium">{task.title}</span><span className="mt-1 block text-xs text-muted">{statusText[task.status]}</span></span><span className={`shrink-0 rounded-full px-2 py-1 text-[10px] ${task.status === "working" ? "bg-success/15 text-success" : task.status === "attention" ? "bg-danger/15 text-danger" : "bg-gold/15 text-gold"}`}>●</span></div>{(filters.showBranch || filters.showDiff) && <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-muted">{filters.showBranch && <span className="rounded-md border border-border px-2 py-1">⌘ {task.branch}</span>}{filters.showDiff && <span className="rounded-md border border-border px-2 py-1 text-success">+{task.additions} <span className="text-danger">-{task.deletions}</span></span>}{task.status === "merged" && <span className="rounded-md border border-success/25 px-2 py-1 text-success">Merged</span>}</div>}{filters.showUpdated && <p className="mt-3 text-[10px] text-muted">Updated {new Date(task.updatedAt).toLocaleString()}</p>}</button>)}{visible.length === 0 && <div className="rounded-2xl border border-dashed border-border p-5 text-center text-xs text-muted">No tasks match these filters.</div>}</div></section>;
+}

@@ -1,0 +1,14 @@
+name: OpenRouter Config
+version: 1.0.0
+schema: v1
+
+models:
+  - name: DeepSeek V4 Flash
+    provider: openrouter
+    model: deepseek/deepseek-v4-flash
+    apiKey: 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
+    roles:
+      - chat
+      - edit
+      - apply
+      - summarize

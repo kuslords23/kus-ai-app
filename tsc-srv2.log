@@ -1,0 +1,3 @@
+﻿src/server/payments/index.ts(176,72): error TS2339: Property 'userId' does not exist on type '{}'.
+src/server/payments/index.ts(177,43): error TS2339: Property 'credits' does not exist on type '{}'.
+src/server/payments/index.ts(178,44): error TS2339: Property 'bundle_id' does not exist on type '{}'.
