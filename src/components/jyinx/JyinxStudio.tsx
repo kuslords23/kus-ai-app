@@ -259,7 +259,7 @@ function JyinxStudioInner() {
       },
       view: {
         toggleFileTree: () => setDrawer(drawer === "files" ? null : "files"),
-        toggleAgent: () => { setDrawer("chat"); setAgentPanelOpen(false); },
+        toggleAgent: () => setAgentPanelOpen((v) => !v),
         toggleTerminal: () => setAgentPanelOpen((v) => !v),
         togglePreview: () => setDrawer(drawer === "inspector" ? null : "inspector"),
         toggleZen: () => setNotice("Zen mode — panels hidden."),
@@ -328,6 +328,24 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
         <div className="flex items-center gap-1.5 shrink-0">
           {uncommittedCount > 0 && <button type="button" onClick={() => void commitWorkspace()} disabled={commitState === "committing"} className="rounded-md border border-border px-2 py-1 text-[10px] font-medium text-muted hover:text-foreground hover:border-gold/40 transition-colors disabled:opacity-50">{commitState === "committing" ? "…" : "Commit"}</button>}
           <button type="button" onClick={() => void handleDeploy()} disabled={!selectedRepository} className="rounded-md bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1 text-[10px] font-medium text-white transition-colors disabled:opacity-50">Push</button>
+          <span className="mx-1 h-4 w-px bg-border/60" />
+          <button
+            type="button"
+            onClick={() => { setAgentPanelOpen(false); setDrawer(drawer === "chat" ? null : "chat"); }}
+            className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${!agentPanelOpen && drawer === "chat" ? "bg-gold/15 text-gold border border-gold/30" : "text-muted hover:text-foreground border border-transparent hover:border-border"}`}
+            title="Chat"
+          >
+            💬
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAgentPanelOpen(true); setDrawer(null); }}
+            className={`rounded-md px-2 py-1 text-[10px] font-medium transition-colors ${agentPanelOpen ? "bg-gold/15 text-gold border border-gold/30" : "text-muted hover:text-foreground border border-transparent hover:border-border"}`}
+            title="Autonomous agent"
+          >
+            🤖
+          </button>
+          <span className="mx-1 h-4 w-px bg-border/60" />
           <button type="button" onClick={() => setCustomizeSidebarOpen(true)} className="rounded-md border border-border px-2 py-1 text-[10px] text-muted hover:text-foreground hover:border-gold/40 transition-colors" title="Settings">⚙</button>
         </div>
       </header>
@@ -342,7 +360,7 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
               <textarea value={activeBuf?.content ?? ""} onChange={(event) => { if (ws.activeFile) ws.writeFile(ws.activeFile, event.target.value); }} spellCheck={false} className="min-h-[180px] flex-1 resize-none bg-[#0d0917] p-4 font-mono text-xs leading-6 text-purple-soft outline-none md:text-sm" />
             </section>
             {previewOpen && <div className="hidden w-[min(44%,560px)] shrink-0 border-l border-border lg:block"><PreviewLayout src="/" title="Live preview" /></div>}
-            <div className="hidden w-[min(42%,440px)] shrink-0 border-l border-border xl:block">{agentPanelOpen ? <AgentExecutionStream open repository={selectedRepository?.fullName ?? ""} branch={selectedRepository?.defaultBranch ?? "main"} model={activeModel} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} /> : <JyinxChatPanel open model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={`${repositoryContext.context}${notebookContext ? `\n\n${notebookContext}` : ""}`} pendingPrompt={notebookPrompt ?? undefined} workspaceId={selectedRepository?.fullName ?? "local"} autonomous={agentPanelOpen} boundFile={activePath === "scratch.ts" ? undefined : activePath} />}</div>
+            <div className="hidden w-[min(42%,440px)] shrink-0 border-l border-border lg:block">{agentPanelOpen ? <AgentExecutionStream open repository={selectedRepository?.fullName ?? ""} branch={selectedRepository?.defaultBranch ?? "main"} model={activeModel} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} /> : <JyinxChatPanel open model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={`${repositoryContext.context}${notebookContext ? `\n\n${notebookContext}` : ""}`} pendingPrompt={notebookPrompt ?? undefined} workspaceId={selectedRepository?.fullName ?? "local"} autonomous={agentPanelOpen} boundFile={activePath === "scratch.ts" ? undefined : activePath} />}</div>
           </div>
           <JyinxTerminalPanel repository={selectedRepository?.fullName} file={activePath} />
         </main>
