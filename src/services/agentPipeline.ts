@@ -142,6 +142,9 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
   yield { type: "log", message: `Loaded ${repoFiles.length} repository file(s) into context.` };
   yield { type: "reasoning", message: repoFiles.length ? "Analyzing repository structure to shape a minimal, consistent change." : "No repository files preloaded; reasoning from the request only." };
 
+  let workingEdits: AgentEdit[] = [];
+  let lastError = "";
+
   // ── Scaffolding phase: detect if the request is a "build" or "create" request
   // and scaffold the initial project using generateWebApp before the coder loop.
   const scaffoldMatch = config.request.match(/(?:build|create|scaffold|make)\s+(?:a|an)?\s*(react|vite|html|blog|3d|web\s*app|game|site|page|blog|landing|app)\b/i);
@@ -188,9 +191,6 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
     "Inspect a code patch for syntax errors, missing imports, unhandled edge cases, and logical bugs against the repository.",
     "Reply with exactly one line: `APPROVED` or a specific, actionable issue to fix.",
   ].join("\n");
-
-  let workingEdits: AgentEdit[] = [];
-  let lastError = "";
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     yield {
