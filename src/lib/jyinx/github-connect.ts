@@ -12,7 +12,27 @@
 
 export const GITHUB_CONNECT_PATH = "/auth/callback";
 export const GITHUB_SITE_ORIGIN = "https://kus-ai-app.vercel.app";
-const PERSISTED_TOKEN_KEY = "jyinx_persisted_github_token";
+
+/**
+ * Returns a storage key scoped to the Supabase project ref so credentials
+ * don't bleed between different apps on the same domain. Uses the same
+ * ref derivation as the auth client in @/lib/supabase/client.
+ */
+function persistedTokenKey(): string {
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (url) {
+      const hostname = new URL(url).hostname;
+      const parts = hostname.split(".");
+      if (parts.length >= 2) {
+        return `kus-ai-github-token:${parts[0]}`;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return "kus-ai-github-token:default";
+}
 
 export type GitHubConnectResult =
   | { ok: true; token: string; login?: string }
@@ -38,7 +58,7 @@ export async function connectGitHub(redirectPath = "/jyinx"): Promise<void> {
  */
 export function persistGitHubToken(token: string): void {
   try {
-    localStorage.setItem(PERSISTED_TOKEN_KEY, token);
+    localStorage.setItem(persistedTokenKey(), token);
     // Dispatch a custom event so the auth hook can pick it up
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("github-token-persisted", { detail: { token } }));
@@ -51,7 +71,7 @@ export function persistGitHubToken(token: string): void {
 /** Clear the persisted GitHub token (e.g. on sign-out). */
 export function clearPersistedGitHubToken(): void {
   try {
-    localStorage.removeItem(PERSISTED_TOKEN_KEY);
+    localStorage.removeItem(persistedTokenKey());
   } catch {
     /* ignore */
   }
@@ -119,7 +139,7 @@ export async function getGitHubToken(): Promise<string | null> {
   }
   // Fallback to the persisted token when the session token is gone
   try {
-    return localStorage.getItem(PERSISTED_TOKEN_KEY);
+    return localStorage.getItem(persistedTokenKey());
   } catch {
     return null;
   }
