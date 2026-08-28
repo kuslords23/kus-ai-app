@@ -288,6 +288,14 @@ export function Sidebar({
                     <span className="text-xs">↗</span>
                   </Link>
                   <Link
+                    href="/jyinx/notebooks"
+                    onClick={onClose}
+                    className="flex items-center justify-between rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-400 hover:bg-amber-500/15"
+                  >
+                    <span>📓 Notebooks</span>
+                    <span className="text-xs">Notes, files, plans</span>
+                  </Link>
+                  <Link
                     href="/jyinx/peer-chat"
                     onClick={onClose}
                     className="flex items-center justify-between rounded-lg border border-blue-500/25 bg-blue-500/10 px-3 py-2 text-sm text-blue-400 hover:bg-blue-500/15"

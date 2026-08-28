@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ChatMessage, type ChatMessageData } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { SuggestionChips } from "./SuggestionChips";
@@ -779,8 +780,8 @@ export function ChatThreadView({
         upsertNotebook(notebook);
       }
       saveChatExchangeToNotebook(notebook.id, {
-        role: "assistant",
-        title: `Royal chat · ${new Date().toLocaleString()}`,
+        role: msg.role,
+        title: `${msg.role === "user" ? "You" : "Royal"} · ${new Date().toLocaleString()}`,
         content: msg.content,
       });
       notifySuccess("Saved to notebook");
@@ -906,7 +907,7 @@ export function ChatThreadView({
             onCopy={handleCopy}
             onEdit={msg.role === "user" ? handleEdit : undefined}
             onRetry={msg.role === "assistant" ? handleRetry : undefined}
-            onSave={msg.role === "assistant" ? handleSave : undefined}
+            onSave={handleSave}
             onReport={msg.role === "assistant" ? () => setReportMsg(msg) : undefined}
             editing={editingMsg?.id === msg.id}
           />
@@ -934,6 +935,40 @@ export function ChatThreadView({
                 : "Kus AI · Royal"}
             <span className="text-muted">☰</span>
           </button>
+          <Link
+            href="/jyinx/notebooks"
+            className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400 hover:bg-amber-500/15"
+            title="Open notebooks"
+          >
+            📓 Notebooks
+          </Link>
+          {thread && thread.messages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const notebooks = getNotebooks();
+                let notebook = notebooks[0];
+                if (!notebook) {
+                  notebook = createNotebook("Royal saved chats");
+                  upsertNotebook(notebook);
+                }
+                // Save the last few messages
+                const lastMsgs = thread.messages.slice(-6);
+                for (const msg of lastMsgs) {
+                  saveChatExchangeToNotebook(notebook.id, {
+                    role: msg.role,
+                    title: `${msg.role === "user" ? "You" : "Royal"} · ${new Date().toLocaleString()}`,
+                    content: msg.content.slice(0, 5000),
+                  });
+                }
+                notifySuccess(`Saved ${lastMsgs.length} messages to "${notebook.name}"`);
+              }}
+              className="inline-flex items-center gap-1 rounded-full border border-gold/30 bg-gold/10 px-2 py-0.5 text-[10px] font-medium text-gold hover:bg-gold/15"
+              title="Save this chat to a notebook"
+            >
+              💾 Save chat
+            </button>
+          )}
         </div>
 
         <SuggestionChips chips={chips} onSelect={onChip} />

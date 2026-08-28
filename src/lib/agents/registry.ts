@@ -11,7 +11,12 @@ export type AgentSkill =
   | "troubleshooting"
   | "voice"
   | "market"
-  | "action-execution";
+  | "action-execution"
+  | "planning"
+  | "research"
+  | "learning"
+  | "building"
+  | "questioning";
 
 export type AgentDefinition = {
   id: string;
@@ -111,6 +116,57 @@ export const AGENTS: AgentDefinition[] = [
     skills: ["app-knowledge", "navigation"],
     systemHint:
       "You are Fast mode — concise, direct answers. Max 3 short paragraphs unless user asks for depth.",
+  },
+  // ── Plan / Ask / Learn / Research / Build modes ─────────
+  {
+    id: "plan",
+    name: "Plan",
+    tagline: "Architect & design systems",
+    icon: "📋",
+    speed: "expert",
+    skills: ["planning", "context-awareness", "app-knowledge", "creative"],
+    systemHint:
+      "You are Plan mode — a strategic architect. Break down complex tasks into clear, actionable steps. Design system architecture, plan file layouts, define interfaces, and map data flow. Output structured plans with milestones, dependencies, and estimated effort. Do NOT write code unless asked. Focus on the blueprint.",
+  },
+  {
+    id: "ask",
+    name: "Ask",
+    tagline: "Deep research & Q&A",
+    icon: "❓",
+    speed: "expert",
+    skills: ["questioning", "research", "context-awareness", "app-knowledge"],
+    systemHint:
+      "You are Ask mode — a deep research and Q&A agent. Answer questions thoroughly with citations and reasoning. When you don't know something, say so clearly. Use the notebook context and conversation history to ground your answers. Provide detailed explanations, references, and follow-up questions to deepen understanding.",
+  },
+  {
+    id: "learn",
+    name: "Learn",
+    tagline: "Study & retain knowledge",
+    icon: "📚",
+    speed: "expert",
+    skills: ["learning", "context-awareness", "content-assistance", "questioning"],
+    systemHint:
+      "You are Learn mode — a patient tutor and study assistant. Break down complex topics into digestible lessons. Use analogies, examples, and spaced repetition to reinforce understanding. Quiz the user on key concepts. Save important insights to the notebook for future reference. Build a knowledge base over time.",
+  },
+  {
+    id: "research",
+    name: "Research",
+    tagline: "Analyze, investigate, discover",
+    icon: "🔬",
+    speed: "expert",
+    skills: ["research", "planning", "context-awareness", "app-knowledge", "learning"],
+    systemHint:
+      "You are Research mode — a systematic investigator. Gather information from multiple sources, cross-reference facts, identify patterns, and draw evidence-based conclusions. Structure findings into reports with methodology, data, analysis, and recommendations. Use the notebook to store findings for later reference.",
+  },
+  {
+    id: "build",
+    name: "Build",
+    tagline: "Scaffold & create projects",
+    icon: "🛠",
+    speed: "expert",
+    skills: ["building", "planning", "creative", "action-execution", "context-awareness"],
+    systemHint:
+      "You are Build mode — a project scaffolder and creator. Generate complete, runnable projects from specifications. Use the web app builder, code generator, and scaffolding tools. Output full file contents with proper structure. When a plan exists in the notebook, reference it and build to spec. Always verify your output compiles and works.",
   },
 ];
 

@@ -12,6 +12,7 @@ import { loadSettings, saveSettings, applyTheme, type AppSettings } from "@/lib/
 import { getAgent } from "@/lib/agents/registry";
 import type { ChatAttachment } from "@/lib/attachments/types";
 import { useVisualViewport } from "@/lib/hooks/useVisualViewport";
+import Link from "next/link";
 
 type View = "home" | "thread";
 
@@ -133,20 +134,30 @@ export function GrokShell() {
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            newThread();
-            setBootstrapQuery(null);
-            setBootstrapAttachments(null);
-            setView("home");
-          }}
-          className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted hover:text-gold"
-          aria-label="New chat"
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          <Link
+            href="/jyinx/notebooks"
+            className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted hover:text-gold"
+            aria-label="Notebooks"
+            title="Notebooks"
+          >
+            <span className="text-sm">📓</span>
+          </Link>
+          <button
+            onClick={() => {
+              newThread();
+              setBootstrapQuery(null);
+              setBootstrapAttachments(null);
+              setView("home");
+            }}
+            className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted hover:text-gold"
+            aria-label="New chat"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 min-h-0 overflow-hidden">
