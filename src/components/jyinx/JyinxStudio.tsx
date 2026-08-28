@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { getGitHubToken } from "@/lib/jyinx/github-connect";
 import { JyinxChatPanel } from "@/components/jyinx/JyinxChatPanel";
 import { JyinxGitHubRepos, type JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
 import { JyinxSettingsPanel } from "@/components/jyinx/JyinxSettingsPanel";
@@ -122,7 +122,7 @@ function JyinxStudioInner() {
     if (!target) { setNotice("Open a file first — or edit any file, and we'll pre-select it for the pull request."); return; }
     setCommitState("committing");
     try {
-      const { data } = await createClient().auth.getSession(); const token = data.session?.provider_token;
+      const token = await getGitHubToken();
       if (!token) throw new Error("Reconnect GitHub before publishing.");
       const branch = `jyinx/${target.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "")}-${Date.now()}`;
       const response = await fetch("/api/github/workspace", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ repository: selectedRepository.fullName, baseBranch: selectedRepository.defaultBranch, path: target, content, branchName: branch, message: `Jyinx update ${target}`, pullRequestTitle: `Jyinx: update ${target}`, pullRequestBody: `Created from Jyinx using ${activeModelInfo.label}. Review the change before merging.` }) });
@@ -140,7 +140,7 @@ function JyinxStudioInner() {
     if (dirty.length === 0) { setCommitState("idle"); setNotice("No unsaved changes to commit."); return; }
     setCommitState("committing");
     try {
-      const { data } = await createClient().auth.getSession(); const token = data.session?.provider_token;
+      const token = await getGitHubToken();
       if (!token) throw new Error("Reconnect GitHub before committing.");
       const response = await fetch("/api/github/commit", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "commit-files", repository: selectedRepository.fullName, baseBranch: selectedRepository.defaultBranch, message: message.trim() || `Jyinx update · ${dirty.length} file(s)`, files: dirty.map((f) => ({ path: f.path, content: f.content })) }) });
       const body = await response.text();
@@ -150,7 +150,6 @@ function JyinxStudioInner() {
       ws.markClean(dirty.map((f) => f.path));
       setCommitState("done"); setCommitMessage("Jyinx update");
       setNotice(`Committed ${dirty.length} file(s) to GitHub.`);
-      // Don't auto-deploy — the user can click Push when ready
     } catch (cause) { setCommitState("error"); setNotice(cause instanceof Error ? cause.message : "Commit failed."); }
   };
 
@@ -161,8 +160,7 @@ function JyinxStudioInner() {
       const dirty = Object.values(ws.files).filter((f) => f.dirty);
       if (dirty.length > 0) {
         setNotice("Committing workspace changes before pushing…");
-        const { data } = await createClient().auth.getSession();
-        const token = data.session?.provider_token;
+        const token = await getGitHubToken();
         if (token) {
           const commitRes = await fetch("/api/github/commit", {
             method: "POST",

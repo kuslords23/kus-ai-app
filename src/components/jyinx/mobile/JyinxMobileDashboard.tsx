@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { connectGitHub } from "@/lib/jyinx/github-connect";
+import { connectGitHub, getGitHubToken } from "@/lib/jyinx/github-connect";
 import { JyinxChatPanel } from "@/components/jyinx/JyinxChatPanel";
 import { JyinxStudio } from "@/components/jyinx/JyinxStudio";
 import type { JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
@@ -79,8 +79,7 @@ export function JyinxMobileDashboard() {
     let cancelled = false;
     const seed = async () => {
       try {
-        const { data } = await createClient().auth.getSession();
-        const token = data.session?.provider_token;
+        const token = await getGitHubToken();
         if (!token || cancelled) return;
         const response = await fetch("/api/github/repos", {
           headers: { Authorization: `Bearer ${token}` },
@@ -129,8 +128,8 @@ export function JyinxMobileDashboard() {
       return;
     }
     try {
-      const { data } = await createClient().auth.getSession();
-      if (!data.session?.provider_token) {
+      const token = await getGitHubToken();
+      if (!token) {
         setNotice("Your GitHub session expired. Reconnecting…");
         await connectGitHub("/jyinx");
         return;
