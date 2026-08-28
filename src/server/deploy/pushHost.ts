@@ -7,9 +7,12 @@
  * change is live.
  *
  * Host platforms are the git-aware build-hook / deploy-hook platforms the app
- * integrates with (Vercel, Netlify, or any custom hook). Each is configured by
- * an environment variable. Every push is recorded in the `jyinx_deployments`
- * table so the IDE + pipeline can surface deploy logs, status, and live URLs.
+ * integrates with (Vercel, Netlify, Railway, Custom). Hooks can be configured
+ * either through environment variables (VERCEL_DEPLOY_HOOK_URL, etc.) or via
+ * the Connectors Hub UI (stored in the `deploy_hooks` table). User-configured
+ * hooks take priority over env-var hooks. Every push is recorded in the
+ * `jyinx_deployments` table so the IDE + pipeline can surface deploy logs,
+ * status, and live URLs.
  *
  * This runs on the Node server (Vercel serverless) and deliberately does NOT
  * shell out to a `git` CLI — unreliable on serverless, and unnecessary:
@@ -17,6 +20,7 @@
  * the branch. No `child_process`, no browser crashes.
  */
 import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
+import { getActiveHooks } from "@/server/deploy-hooks/service";
 
 export type DeploymentStatus = "queued" | "deploying" | "live" | "failed";
 
@@ -166,6 +170,11 @@ async function triggerHook(url: string, payload: PushToHostInput): Promise<{ ok:
  *
  * Always at least records the deployment on this platform's preview domain so
  * the push is observable even when no external host is configured yet.
+ *
+ * Resolution order:
+ *   1. User-configured hooks from the `deploy_hooks` table (Connectors Hub UI)
+ *   2. Environment variable hooks (VERCEL_DEPLOY_HOOK_URL, etc.)
+ *   3. Preview URL fallback
  */
 export async function pushToHost(input: PushToHostInput): Promise<PushToHostResult> {
   const repository = input.repository;
@@ -174,10 +183,35 @@ export async function pushToHost(input: PushToHostInput): Promise<PushToHostResu
     return { ok: false, error: "repository and branch are required to push." };
   }
 
-  // Nothing configured yet: record a queued deployment pointing at the app's
-  // own preview URL so the push is still tracked and observable.
-  const configured = HOST_HOOKS.filter((h) => Boolean(h.url));
-  if (configured.length === 0) {
+  // 1. Resolve hooks from the database (user-configured via Connectors Hub)
+  const dbHooks = input.owner ? await getActiveHooks(input.owner).catch(() => []) : [];
+
+  // 2. Resolve hooks from environment variables (legacy/admin fallback)
+  const envHooks = HOST_HOOKS.filter((h) => Boolean(h.url)).map((h) => ({
+    id: null as string | null,
+    host: h.host,
+    url: h.url!,
+    label: null as string | null,
+  }));
+
+  // 3. Merge: DB hooks take priority over env hooks
+  const seenHosts = new Set<string>();
+  const allHooks: Array<{ id: string | null; host: string; url: string; label: string | null }> = [];
+
+  for (const hook of dbHooks) {
+    if (!seenHosts.has(hook.host)) {
+      allHooks.push({ id: hook.id, host: hook.host, url: hook.hookUrl, label: hook.label });
+      seenHosts.add(hook.host);
+    }
+  }
+  for (const hook of envHooks) {
+    if (!seenHosts.has(hook.host)) {
+      allHooks.push(hook);
+      seenHosts.add(hook.host);
+    }
+  }
+
+  if (allHooks.length === 0) {
     const fallback = await upsertDeployment({
       repository,
       branch,
@@ -187,7 +221,7 @@ export async function pushToHost(input: PushToHostInput): Promise<PushToHostResu
       commitMessage: input.commitMessage,
       deployUrl: previewUrl(input.origin, repository, branch),
       owner: input.owner,
-      log: "No external build hook configured (set VERCEL_DEPLOY_HOOK_URL / NETLIFY_BUILD_HOOK). Push recorded to the platform preview.",
+      log: "No deploy hook configured. Add one in Settings → Connectors → Hosting.",
     });
     return {
       ok: true,
@@ -198,26 +232,26 @@ export async function pushToHost(input: PushToHostInput): Promise<PushToHostResu
 
   const results: Array<{ host: string; ok: boolean; location?: string | null }> = [];
   const logs: string[] = [];
-  for (const { host, url } of configured) {
+  for (const hook of allHooks) {
     const start = await upsertDeployment({
       repository,
       branch,
-      host,
+      host: hook.host,
       status: "deploying",
       commitSha: input.commitSha,
       commitMessage: input.commitMessage,
       owner: input.owner,
-      log: `Pushing ${repository}#${branch} to ${host}…`,
+      log: `Pushing ${repository}#${branch} to ${hook.host}${hook.label ? ` (${hook.label})` : ""}…`,
     });
-    const triggered = url ? await triggerHook(url, input) : { ok: false, location: null as string | null, status: 0 };
-    results.push({ host, ok: triggered.ok, location: triggered.location });
-    logs.push(`${host}: ${triggered.ok ? "triggered" : `failed (${triggered.status})`}`);
+    const triggered = await triggerHook(hook.url, input);
+    results.push({ host: hook.host, ok: triggered.ok, location: triggered.location });
+    logs.push(`${hook.host}: ${triggered.ok ? "triggered" : `failed (${triggered.status})`}`);
 
     const href = triggered.location ?? previewUrl(input.origin, repository, branch);
     await upsertDeployment({
       repository,
       branch,
-      host,
+      host: hook.host,
       status: triggered.ok ? "live" : "failed",
       commitSha: input.commitSha,
       commitMessage: input.commitMessage,
@@ -226,6 +260,12 @@ export async function pushToHost(input: PushToHostInput): Promise<PushToHostResu
       log: logs[logs.length - 1],
     });
     void start;
+
+    // Touch the DB hook so we know when it was last used
+    if (hook.id) {
+      const { touchDeployHook } = await import("@/server/deploy-hooks/service");
+      void touchDeployHook(hook.id);
+    }
   }
 
   const firstLive = results.find((r) => r.ok);
