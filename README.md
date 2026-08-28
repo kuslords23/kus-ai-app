@@ -26,3 +26,4 @@ NEXT_PUBLIC_SITE_URL=https://kus-ai-app.vercel.app
 npm install
 npm run dev
 ```
+
