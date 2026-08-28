@@ -4,10 +4,43 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+/**
+ * Clears stale Supabase PKCE code verifier + auth keys from localStorage.
+ * PKCE verifier conflicts happen when the OAuth flow is opened in a new tab
+ * or the localStorage state gets out of sync between sessions.
+ */
+function clearStaleAuthKeys() {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (
+        key.includes("supabase") ||
+        key.includes("oauth") ||
+        key.includes("pkce") ||
+        key.includes("code-verifier") ||
+        key.includes("auth-token")
+      ) {
+        keysToRemove.push(key);
+      }
+    }
+    // Only clear the stale PKCE keys, not the main session
+    for (const key of keysToRemove) {
+      if (key.includes("code-verifier") || key.includes("pkce")) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function AuthCallback() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     const code = searchParams.get("code");
@@ -22,14 +55,56 @@ function AuthCallback() {
       return;
     }
 
-    const exchange = async () => {
+    if (!code) {
+      setError("No authorization code received from GitHub.");
+      return;
+    }
+
+    const exchange = async (isRetry = false) => {
       try {
+        // Clear stale PKCE verifiers before attempting the exchange
+        clearStaleAuthKeys();
+
         const supabase = createClient();
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code ?? "");
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
         if (exchangeError) {
-          setError(exchangeError.message);
-          return;
+          // PKCE code verifier error — try once more after clearing storage
+          if (
+            !isRetry &&
+            (exchangeError.message?.toLowerCase().includes("code verifier") ||
+             exchangeError.message?.toLowerCase().includes("pkce") ||
+             exchangeError.message?.toLowerCase().includes("invalid code"))
+          ) {
+            setRetrying(true);
+            // Clear more aggressively and retry
+            try {
+              const keysToRemove: string[] = [];
+              for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.includes("supabase") || key.includes("pkce") || key.includes("code-verifier") || key.includes("auth"))) {
+                  keysToRemove.push(key);
+                }
+              }
+              for (const key of keysToRemove) {
+                localStorage.removeItem(key);
+              }
+            } catch {
+              /* ignore */
+            }
+            // Retry the exchange
+            const supabaseRetry = createClient();
+            const { error: retryError } = await supabaseRetry.auth.exchangeCodeForSession(code);
+            if (retryError) {
+              setError(retryError.message);
+              return;
+            }
+          } else {
+            setError(exchangeError.message);
+            return;
+          }
         }
+
         // Verify the token actually carries the `repo` scope. If the OAuth
         // handshake granted a token without write access, send the user back to
         // Jyinx's reconnect flow instead of letting commits fail later.
@@ -58,7 +133,7 @@ function AuthCallback() {
               return;
             }
           } catch {
-            // Post-exhange scope check is best-effort; proceed.
+            // Post-exchange scope check is best-effort; proceed.
           }
         }
         const params = new URLSearchParams(searchParams.toString());
@@ -73,9 +148,47 @@ function AuthCallback() {
     void exchange();
   }, [router, searchParams]);
 
-  return <main className="flex min-h-dvh items-center justify-center bg-background p-6 text-foreground"><div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 text-center">{error ? <><p className="text-sm font-medium text-danger">Login could not be completed</p><p className="mt-2 text-xs leading-relaxed text-muted">{error}</p><button type="button" onClick={() => window.location.replace("/jyinx")} className="mt-4 rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-xs text-gold">Return to Jyinx</button></> : <p className="text-sm text-muted">Completing sign-in…</p>}</div></main>;
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-background p-6 text-foreground">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 text-center">
+        {error ? (
+          <>
+            <p className="text-sm font-medium text-danger">Login could not be completed</p>
+            <p className="mt-2 text-xs leading-relaxed text-muted">{error}</p>
+            {retrying && <p className="mt-2 text-xs text-gold">Retried with fresh session — still failed.</p>}
+            <button
+              type="button"
+              onClick={() => {
+                // Clear all stale auth keys and redirect to reconnect
+                try {
+                  for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && (key.includes("supabase") || key.includes("pkce") || key.includes("auth") || key.includes("oauth"))) {
+                      localStorage.removeItem(key);
+                    }
+                  }
+                } catch {
+                  /* ignore */
+                }
+                window.location.replace("/jyinx");
+              }}
+              className="mt-4 rounded-lg border border-gold/30 bg-gold/10 px-3 py-2 text-xs text-gold"
+            >
+              Clear auth &amp; retry
+            </button>
+          </>
+        ) : (
+          <p className="text-sm text-muted">{retrying ? "Retrying with fresh session…" : "Completing sign-in…"}</p>
+        )}
+      </div>
+    </main>
+  );
 }
 
 export default function AuthCallbackPage() {
-  return <Suspense fallback={<main className="flex min-h-dvh items-center justify-center bg-background text-foreground"><p className="text-sm text-muted">Completing sign-in…</p></main>}><AuthCallback /></Suspense>;
+  return (
+    <Suspense fallback={<main className="flex min-h-dvh items-center justify-center bg-background text-foreground"><p className="text-sm text-muted">Completing sign-in…</p></main>}>
+      <AuthCallback />
+    </Suspense>
+  );
 }

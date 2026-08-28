@@ -58,6 +58,35 @@ export function clearPersistedGitHubToken(): void {
 }
 
 /**
+ * Clear all stale Supabase auth keys from localStorage that can cause PKCE
+ * code verifier conflicts. Call this when the user gets a "code verifier"
+ * error during OAuth login.
+ */
+export function clearStaleAuthKeys(): void {
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (
+        key.includes("pkce") ||
+        key.includes("code-verifier") ||
+        key.includes("code_verifier") ||
+        key.includes("sb-") ||
+        (key.includes("supabase") && key.includes("auth"))
+      ) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
  * Returns the active session's `provider_token` (GitHub), falling back to the
  * persisted token when the session token is unavailable. This ensures commits
  * and pushes work reliably across page navigations.
