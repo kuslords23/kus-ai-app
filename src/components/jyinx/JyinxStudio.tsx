@@ -140,12 +140,15 @@ function JyinxStudioInner() {
       const { data } = await createClient().auth.getSession(); const token = data.session?.provider_token;
       if (!token) throw new Error("Reconnect GitHub before committing.");
       const response = await fetch("/api/github/commit", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "commit-files", repository: selectedRepository.fullName, baseBranch: selectedRepository.defaultBranch, message: message.trim() || `Jyinx update · ${dirty.length} file(s)`, files: dirty.map((f) => ({ path: f.path, content: f.content })) }) });
-      const result = await response.json() as { error?: string; commitSha?: string; commitUrl?: string }; if (!response.ok) throw new Error(result.error || "Unable to commit to GitHub.");
+      const body = await response.text();
+      let result: { error?: string; commitSha?: string; commitUrl?: string } = {};
+      try { result = JSON.parse(body); } catch { /* ignore parse errors */ }
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}: ${body.slice(0, 200)}`);
       ws.markClean(dirty.map((f) => f.path));
       setCommitState("done"); setCommitMessage("Jyinx update");
       setNotice(`Committed ${dirty.length} file(s) to GitHub.`);
-      void handleDeploy();
-    } catch { setCommitState("error"); setNotice("Commit failed — see GitHub."); }
+      // Don't auto-deploy — the user can click Push when ready
+    } catch (cause) { setCommitState("error"); setNotice(cause instanceof Error ? cause.message : "Commit failed."); }
   };
 
   const handleDeploy = async () => {
@@ -188,9 +191,9 @@ function JyinxStudioInner() {
       const data = (await res.json().catch(() => null)) as { ok?: boolean; href?: string; error?: string; deployment?: { deployUrl?: string } } | null;
       if (!res.ok || !data?.ok) {
         const msg = data?.error || "Push to host failed.";
-        // If no hooks configured, show the preview URL as a fallback
         if (msg.includes("No external build hook")) {
-          setNotice(`📦 Push recorded. Deploy when a build hook is configured. ${data?.href ? `Preview: ${data.href}` : ""}`);
+          // Silent fail — no hooks configured, this is expected
+          setNotice(`✅ Committed to GitHub. Set a deploy hook (VERCEL_DEPLOY_HOOK_URL) to auto-deploy on push.`);
           return;
         }
         throw new Error(msg);
