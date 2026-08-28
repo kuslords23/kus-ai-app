@@ -134,7 +134,8 @@ ${appJs}`;
   }
 
   if (stack === "3d") {
-    return { stack, title, html: threeJsHtml, files: { "index.html": threeJsHtml } };
+    const html = buildThreeJsHtml(escapeHtml(title), escapeHtml(cleaned || "3D Scene — drag to rotate, scroll to zoom"));
+    return { stack, title, html, files: { "index.html": html } };
   }
 
   // blog
@@ -157,13 +158,13 @@ ${appJs}`;
   return { stack, title, html, files: { "blog.md": `# ${title}\n\n${cleaned}` } };
 }
 
-// 3D Game / Scene stack — uses Three.js via CDN for a full 3D scene
-const threeJsHtml = `<!doctype html>
+function buildThreeJsHtml(escapedTitle: string, escapedPrompt: string): string {
+  return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${escapeHtml(title)}</title>
+<title>${escapedTitle}</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #0d0917; overflow: hidden; font-family: ui-sans-serif, system-ui, sans-serif; }
@@ -172,7 +173,7 @@ canvas { display: block; }
 </style>
 </head>
 <body>
-<div id="info">${escapeHtml(cleaned || "3D Scene — drag to rotate, scroll to zoom")}</div>
+<div id="info">${escapedPrompt}</div>
 <script type="importmap">
 {
   "imports": {
@@ -274,3 +275,4 @@ window.addEventListener('resize', () => {
 </script>
 </body>
 </html>`;
+}
