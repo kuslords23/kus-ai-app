@@ -279,7 +279,7 @@ export async function pushToHost(input: PushToHostInput): Promise<PushToHostResu
   return {
     ok: false,
     href: previewUrl(input.origin, repository, branch),
-    error: `Push triggered to ${configured.length} host platform(s) but none confirmed. Logs: ${logs.join(" | ")}`,
+    error: `Push triggered to ${allHooks.length} host platform(s) but none confirmed. Logs: ${logs.join(" | ")}`,
   };
 }
 
