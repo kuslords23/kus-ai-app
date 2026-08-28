@@ -61,12 +61,26 @@ export function clearPersistedGitHubToken(): void {
  * Returns the active session's `provider_token` (GitHub), falling back to the
  * persisted token when the session token is unavailable. This ensures commits
  * and pushes work reliably across page navigations.
+ *
+ * Also attempts to refresh the session if the token is missing, since Supabase
+ * may have the session alive but lost the provider_token.
  */
 export async function getGitHubToken(): Promise<string | null> {
   try {
     const supabase = (await import("@/lib/supabase/client")).createClient();
     const { data } = await supabase.auth.getSession();
-    const sessionToken = data.session?.provider_token ?? null;
+    let sessionToken = data.session?.provider_token ?? null;
+
+    // If the session exists but the provider_token is missing, try to refresh
+    if (!sessionToken && data.session) {
+      try {
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        sessionToken = refreshed.session?.provider_token ?? null;
+      } catch {
+        // refresh failed, fall through
+      }
+    }
+
     if (sessionToken) {
       persistGitHubToken(sessionToken);
       return sessionToken;

@@ -144,9 +144,15 @@ function JyinxStudioInner() {
       if (!token) throw new Error("Reconnect GitHub before committing.");
       const response = await fetch("/api/github/commit", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "commit-files", repository: selectedRepository.fullName, baseBranch: selectedRepository.defaultBranch, message: message.trim() || `Jyinx update · ${dirty.length} file(s)`, files: dirty.map((f) => ({ path: f.path, content: f.content })) }) });
       const body = await response.text();
-      let result: { error?: string; commitSha?: string; commitUrl?: string } = {};
+      let result: { error?: string; commitSha?: string; commitUrl?: string; authorization?: boolean } = {};
       try { result = JSON.parse(body); } catch { /* ignore parse errors */ }
-      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}: ${body.slice(0, 200)}`);
+      if (!response.ok) {
+        const msg = result.error || `HTTP ${response.status}: ${body.slice(0, 200)}`;
+        if (result.authorization || response.status === 401 || response.status === 403 || response.status === 404) {
+          throw new Error("GitHub connection expired or missing write access. Connect GitHub again.");
+        }
+        throw new Error(msg);
+      }
       ws.markClean(dirty.map((f) => f.path));
       setCommitState("done"); setCommitMessage("Jyinx update");
       setNotice(`Committed ${dirty.length} file(s) to GitHub.`);

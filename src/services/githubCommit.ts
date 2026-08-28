@@ -39,6 +39,7 @@ const SCOPE_UNAUTHORIZED_MARKERS = [
   "archived so is read-only",
   "required authentication",
   "bad credentials",
+  "not found",
 ];
 
 function classifyCommitError(status: number, message: string): GitHubCommitError {
@@ -46,6 +47,7 @@ function classifyCommitError(status: number, message: string): GitHubCommitError
   const authorization =
     status === 401 ||
     status === 403 ||
+    status === 404 ||
     SCOPE_UNAUTHORIZED_MARKERS.some((marker) => lowered.includes(marker));
   return new GitHubCommitError(status, message, authorization);
 }
