@@ -3,6 +3,7 @@ import { runSandboxPipeline, isSandboxConfigured } from "@/services/sandboxExecu
 import { runLocalSandbox, isLocalSandboxAvailable } from "@/services/localSandbox";
 import { pushToHost } from "@/server/deploy/pushHost";
 import { parseBuildOutput, formatErrorsForCoder } from "@/services/errorParser";
+import { generateWebApp, WEB_STACK_LABELS, type WebStack } from "@/lib/jyinx/web-app-generator";
 import {
   parseFileEdits,
   verifyEdits,
@@ -140,6 +141,37 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
   yield { type: "narration", message: `Planning: ${config.request}`, detail: "Reading the active workspace and building an execution plan…" };
   yield { type: "log", message: `Loaded ${repoFiles.length} repository file(s) into context.` };
   yield { type: "reasoning", message: repoFiles.length ? "Analyzing repository structure to shape a minimal, consistent change." : "No repository files preloaded; reasoning from the request only." };
+
+  // ── Scaffolding phase: detect if the request is a "build" or "create" request
+  // and scaffold the initial project using generateWebApp before the coder loop.
+  const scaffoldMatch = config.request.match(/(?:build|create|scaffold|make)\s+(?:a|an)?\s*(react|vite|html|blog|3d|web\s*app|game|site|page|blog|landing|app)\b/i);
+  if (scaffoldMatch) {
+    yield { type: "log", message: "Detected a build request — scaffolding project before coder loop…" };
+    const rawStack = scaffoldMatch[1].toLowerCase();
+    const stackMap: Record<string, WebStack> = {
+      react: "react", vite: "vite", html: "html", blog: "blog", "3d": "3d",
+      "web app": "react", game: "3d", site: "html", page: "html", landing: "html", app: "react",
+    };
+    const stack = stackMap[rawStack] ?? "html";
+    try {
+      const project = generateWebApp(stack, config.request, `Jyinx: ${config.request.slice(0, 60)}`);
+      if (project.html) {
+        workingEdits = [{ path: "index.html", content: project.html }];
+        workingEdits.push(...Object.entries(project.files)
+          .filter(([p]) => p !== "index.html")
+          .map(([path, content]) => ({ path, content })));
+        yield { type: "narration", message: `Scaffolded ${WEB_STACK_LABELS[stack]} project with ${workingEdits.length} file(s).`, detail: workingEdits.map((e) => `- ${e.path} (${e.content.length} chars)`).join("\n") };
+        if (workingEdits.length) {
+          yield { type: "edit", files: workingEdits.map((e) => ({ path: e.path, content: e.content })) };
+        }
+        yield { type: "reasoning", message: "Scaffold complete. The coder agent will now iterate on the generated files." };
+      }
+    } catch (cause) {
+      yield { type: "log", message: `Scaffolding failed (${cause instanceof Error ? cause.message : "unknown"}) — falling through to the coder agent.` };
+    }
+  } else {
+    yield { type: "reasoning", message: "No scaffold request detected — proceeding directly to the coder loop." };
+  }
 
   const coderSystem = [
     "You are Jyinx Coder, an autonomous agent that edits files in a GitHub repository.",

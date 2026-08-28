@@ -53,6 +53,7 @@ function JyinxStudioInner() {
   const [drawer, setDrawer] = useState<"files" | "inspector" | "chat" | null>(null);
   const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [builderAgentPrompt, setBuilderAgentPrompt] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [costOpen, setCostOpen] = useState(false);
@@ -293,6 +294,14 @@ function JyinxStudioInner() {
     bridge.executeSync(commandId);
   };
 
+  // Builder → agent bridge: when the builder panel launches the autonomous
+  // agent, seed the agent prompt and open the agent panel.
+  const handleLaunchAgent = (prompt: string) => {
+    setBuilderAgentPrompt(prompt);
+    setBuilderOpen(false);
+    setAgentPanelOpen(true);
+  };
+
   // The agent should process the IDE's live buffers (edits already in the
   // workspace) plus the GitHub context — workspace wins on conflicts, so the
   // agent edits exactly what the user sees in the editor, not stale cloud.
@@ -375,9 +384,9 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
             {previewOpen && <div className="hidden w-[min(44%,560px)] shrink-0 border-l border-border lg:block"><PreviewLayout src="/" title="Live preview" /></div>}
             <div className="hidden w-[min(42%,440px)] shrink-0 border-l border-border lg:block">
             {builderOpen ? (
-              <BuilderPanel onClose={() => setBuilderOpen(false)} />
+              <BuilderPanel onClose={() => setBuilderOpen(false)} onLaunchAgent={handleLaunchAgent} />
             ) : agentPanelOpen ? (
-              <AgentExecutionStream open repository={selectedRepository?.fullName ?? ""} branch={selectedRepository?.defaultBranch ?? "main"} model={activeModel} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} />
+              <AgentExecutionStream open repository={selectedRepository?.fullName ?? ""} branch={selectedRepository?.defaultBranch ?? "main"} model={activeModel} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} initialPrompt={builderAgentPrompt ?? undefined} onPromptChange={() => setBuilderAgentPrompt(null)} />
             ) : (
               <JyinxChatPanel open model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={`${repositoryContext.context}${notebookContext ? `\n\n${notebookContext}` : ""}`} pendingPrompt={notebookPrompt ?? undefined} workspaceId={selectedRepository?.fullName ?? "local"} autonomous={agentPanelOpen} boundFile={activePath === "scratch.ts" ? undefined : activePath} />
             )}
@@ -397,7 +406,7 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
       </nav>
 
       {/* Drawer overlays (mobile) */}
-      {drawer && <div className="fixed inset-0 z-50 bg-black/60 lg:hidden" onClick={() => setDrawer(null)}><div className={`absolute top-0 bottom-0 w-[min(92vw,420px)] bg-surface shadow-2xl ${drawer === "files" ? "left-0" : "right-0"}`} onClick={(event) => event.stopPropagation()}>{drawer === "files" ? filesPanel : drawer === "inspector" ? inspectorPanel : builderOpen ? <BuilderPanel onClose={() => { setDrawer(null); setBuilderOpen(false); }} /> : agentPanelOpen ? <AgentExecutionStream open onClose={() => setDrawer(null)} repository={selectedRepository?.fullName ?? ""} branch={selectedRepository?.defaultBranch ?? "main"} model={activeModel} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} /> : <JyinxChatPanel open onClose={() => setDrawer(null)} model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={`${repositoryContext.context}${notebookContext ? `\n\n${notebookContext}` : ""}`} pendingPrompt={notebookPrompt ?? undefined} workspaceId={selectedRepository?.fullName ?? "local"} autonomous={agentPanelOpen} boundFile={activePath === "scratch.ts" ? undefined : activePath} />}</div></div>}
+      {drawer && <div className="fixed inset-0 z-50 bg-black/60 lg:hidden" onClick={() => setDrawer(null)}><div className={`absolute top-0 bottom-0 w-[min(92vw,420px)] bg-surface shadow-2xl ${drawer === "files" ? "left-0" : "right-0"}`} onClick={(event) => event.stopPropagation()}>{drawer === "files" ? filesPanel : drawer === "inspector" ? inspectorPanel : builderOpen ? <BuilderPanel onClose={() => { setDrawer(null); setBuilderOpen(false); }} onLaunchAgent={handleLaunchAgent} /> : agentPanelOpen ? <AgentExecutionStream open onClose={() => setDrawer(null)} repository={selectedRepository?.fullName ?? ""} branch={selectedRepository?.defaultBranch ?? "main"} model={activeModel} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} initialPrompt={builderAgentPrompt ?? undefined} onPromptChange={() => setBuilderAgentPrompt(null)} /> : <JyinxChatPanel open onClose={() => setDrawer(null)} model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={`${repositoryContext.context}${notebookContext ? `\n\n${notebookContext}` : ""}`} pendingPrompt={notebookPrompt ?? undefined} workspaceId={selectedRepository?.fullName ?? "local"} autonomous={agentPanelOpen} boundFile={activePath === "scratch.ts" ? undefined : activePath} />}</div></div>}
 
       {/* Modals */}
       <JyinxSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} activeModel={activeModel} onModelChange={setActiveModel} selectedRepositoryId={selectedRepository?.id} onRepositoryChange={(repository) => { if (repository) setSelectedRepository(repository); }} redirectPath="/jyinx" />

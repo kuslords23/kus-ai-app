@@ -16,6 +16,7 @@
 
 import type { StateNode } from "@/lib/jyinx/orchestrator/StateNode";
 import { timeTravelEngine } from "@/lib/jyinx/orchestrator/TimeTravelEngine";
+import { generateWebApp, WEB_STACK_LABELS, type WebStack } from "@/lib/jyinx/web-app-generator";
 
 // ── Types ────────────────────────────────────────────────
 
@@ -307,6 +308,47 @@ tools.set("getTimeline", {
       };
     } catch (cause) {
       return { success: false, error: cause instanceof Error ? cause.message : "getTimeline failed." };
+    }
+  },
+});
+
+// ── generateWebApp ──
+tools.set("generateWebApp", {
+  name: "generateWebApp",
+  description: "Scaffold a complete web app, blog post, or 3D game scene. Returns the full HTML document. Use this to build a project from scratch.",
+  parameters: {
+    type: "object",
+    properties: {
+      stack: {
+        type: "string",
+        description: "Stack to use: react (React app), vite (Vite-style), html (HTML/CSS/JS), blog (Blog post), 3d (3D game scene with Three.js)",
+        enum: ["react", "vite", "html", "blog", "3d"],
+        required: true,
+      },
+      title: { type: "string", description: "Title of the app, blog post, or game", required: true },
+      prompt: { type: "string", description: "Description or prompt for what to build", required: true },
+    },
+    required: ["stack", "title", "prompt"],
+  },
+  permissions: ["write"],
+  handler: async (args) => {
+    const stack = String(args.stack ?? "html") as WebStack;
+    const title = String(args.title ?? "Jyinx App");
+    const prompt = String(args.prompt ?? "");
+    try {
+      const project = generateWebApp(stack, prompt, title);
+      return {
+        success: true,
+        data: {
+          html: project.html,
+          stack,
+          title,
+          files: project.files,
+          stackLabel: WEB_STACK_LABELS[stack] ?? stack,
+        },
+      };
+    } catch (cause) {
+      return { success: false, error: cause instanceof Error ? cause.message : "generateWebApp failed." };
     }
   },
 });

@@ -12,6 +12,8 @@ import { generateWebApp } from "@/lib/jyinx/web-app-generator";
 
 interface BuilderPanelProps {
   onClose: () => void;
+  /** When provided, clicking "Build with Agent" will launch the autonomous pipeline. */
+  onLaunchAgent?: (prompt: string) => void;
 }
 
 type BuilderStep = "choose" | "configure" | "preview";
@@ -24,7 +26,7 @@ const BUILD_OPTIONS: Array<{ stack: WebStack; icon: string; description: string;
   { stack: "3d", icon: "🎮", description: "3D game / scene (Three.js)", color: "border-cyan-500/30 bg-cyan-500/10" },
 ];
 
-export function BuilderPanel({ onClose }: BuilderPanelProps) {
+export function BuilderPanel({ onClose, onLaunchAgent }: BuilderPanelProps) {
   const router = useRouter();
   const [step, setStep] = useState<BuilderStep>("choose");
   const [selectedStack, setSelectedStack] = useState<WebStack>("react");
@@ -118,6 +120,22 @@ export function BuilderPanel({ onClose }: BuilderPanelProps) {
             className="w-full rounded-xl bg-gold px-4 py-2.5 text-sm font-semibold text-background hover:bg-gold/90 disabled:opacity-50 transition-colors"
           >
             {generating ? "Generating…" : `Generate ${WEB_STACK_LABELS[selectedStack]}`}
+          </button>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+            <div className="relative flex justify-center text-xs"><span className="bg-surface px-2 text-muted">or</span></div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const promptText = `Build a ${WEB_STACK_LABELS[selectedStack]} titled "${title}". ${prompt ? `Description: ${prompt}` : ""}`;
+              // Store the prompt in sessionStorage for the agent to pick up
+              try { sessionStorage.setItem("jyinx_agent_prompt", promptText); } catch {}
+              onLaunchAgent?.(promptText);
+            }}
+            className="w-full rounded-xl border border-gold/40 bg-gold/5 px-4 py-2.5 text-sm font-medium text-gold hover:bg-gold/10 transition-colors"
+          >
+            🤖 Build with Autonomous Agent
           </button>
         </div>
       </section>
