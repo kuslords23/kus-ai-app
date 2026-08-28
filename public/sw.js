@@ -1,5 +1,5 @@
-/* kus-ai service worker — build local-1787952004177 */
-const BUILD_ID = "local-1787952004177";
+/* kus-ai service worker — build local-1787953316869 */
+const BUILD_ID = "local-1787953316869";
 const CACHE = `kus-ai-${BUILD_ID}`;
 
 self.addEventListener("install", () => {
