@@ -34,6 +34,8 @@ export function BuilderPanel({ onClose, onLaunchAgent }: BuilderPanelProps) {
   const [title, setTitle] = useState("My Jyinx App");
   const [generatedHtml, setGeneratedHtml] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishNotice, setPublishNotice] = useState<string | null>(null);
 
   const handleGenerate = useCallback(() => {
     setGenerating(true);
@@ -60,6 +62,35 @@ export function BuilderPanel({ onClose, onLaunchAgent }: BuilderPanelProps) {
     router.push("/jyinx/preview");
   }, [router]);
 
+  const publishToMarketplace = useCallback(async () => {
+    if (!generatedHtml) return;
+    setPublishing(true);
+    setPublishNotice(null);
+    try {
+      const res = await fetch("/api/marketplace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "publish-app",
+          name: title,
+          description: `${WEB_STACK_LABELS[selectedStack]} — ${prompt || "Built with Jyinx"}`,
+          assetClass: "app",
+          priceCredits: 0,
+          tags: [selectedStack, "app", "jyinx"],
+          htmlContent: generatedHtml,
+          stack: selectedStack,
+        }),
+      });
+      const data = (await res.json()) as { listing?: { id?: string }; error?: string };
+      if (!res.ok || !data.listing) throw new Error(data.error || "Publishing failed");
+      setPublishNotice(`Published! ID: ${data.listing.id}`);
+    } catch (cause) {
+      setPublishNotice(cause instanceof Error ? cause.message : "Publishing failed");
+    } finally {
+      setPublishing(false);
+    }
+  }, [generatedHtml, title, selectedStack, prompt]);
+
   if (step === "choose") {
     return (
       <section className="flex h-full min-h-0 flex-col bg-surface">
@@ -69,7 +100,20 @@ export function BuilderPanel({ onClose, onLaunchAgent }: BuilderPanelProps) {
         </header>
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
           {BUILD_OPTIONS.map((opt) => (
-            <button
+        <button
+          type="button"
+          onClick={() => void publishToMarketplace()}
+          disabled={publishing}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-3 text-sm font-medium text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-50"
+        >
+          <span>🏪</span> {publishing ? "Publishing…" : "Publish to Marketplace"}
+        </button>
+
+        {publishNotice && (
+          <p className="rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-xs text-gold text-center">{publishNotice}</p>
+        )}
+
+        <button
               key={opt.stack}
               type="button"
               onClick={() => { setSelectedStack(opt.stack); setStep("configure"); }}

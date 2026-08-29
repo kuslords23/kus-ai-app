@@ -3,24 +3,45 @@
 import { useEffect, useState } from "react";
 import type { MarketplaceListing, MarketplaceAssetClass } from "@/lib/jyinx/marketplace/storefront";
 
-const CLASSES: Array<{ id: MarketplaceAssetClass | "all"; label: string }> = [
+const CLASSES: Array<{ id: MarketplaceAssetClass | "all" | "my-apps"; label: string }> = [
   { id: "all", label: "All" },
   { id: "app", label: "Apps" },
   { id: "agent", label: "Agents" },
   { id: "model", label: "Models" },
   { id: "skill", label: "Skills" },
+  { id: "my-apps", label: "My Apps" },
 ];
 
 export function MarketplaceStorefront() {
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
-  const [assetClass, setAssetClass] = useState<MarketplaceAssetClass | "all">("all");
+  const [assetClass, setAssetClass] = useState<MarketplaceAssetClass | "all" | "my-apps">("all");
   const [q, setQ] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Load user ID on mount
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.user?.id) setUserId(data.session.user.id);
+      } catch {
+        /* ignore */
+      }
+    };
+    void init();
+  }, []);
 
   const load = async () => {
     const params = new URLSearchParams();
-    if (assetClass !== "all") params.set("class", assetClass);
+    if (assetClass === "my-apps" && userId) {
+      params.set("userId", userId);
+    } else if (assetClass !== "all") {
+      params.set("class", assetClass as MarketplaceAssetClass);
+    }
     if (q.trim()) params.set("q", q.trim());
     const res = await fetch(`/api/marketplace?${params.toString()}`);
     const data = await res.json();
@@ -132,6 +153,18 @@ export function MarketplaceStorefront() {
               >
                 Pay with Hubtel
               </button>
+              {listing.htmlContent && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    try { sessionStorage.setItem("jyinx_preview_html", listing.htmlContent!); sessionStorage.setItem("jyinx_preview_title", listing.name); } catch {}
+                    window.open("/jyinx/preview", "_blank");
+                  }}
+                  className="rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-400 hover:bg-cyan-500/20"
+                >
+                  👁 Preview
+                </button>
+              )}
             </div>
           </article>
         ))}

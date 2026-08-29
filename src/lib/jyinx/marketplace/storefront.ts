@@ -1,6 +1,7 @@
 /**
  * Unified Marketplace — Apps, Agents, Fine-Tuned Models, Private Skills (listed metadata only).
  * Micro-transaction hooks via Hubtel with creator revenue share.
+ * Built apps from Jyinx Builder are stored here with their full HTML content.
  */
 
 export type MarketplaceAssetClass = "app" | "agent" | "model" | "skill";
@@ -18,6 +19,10 @@ export type MarketplaceListing = {
   installs: number;
   isActive: boolean;
   createdAt: string;
+  /** HTML content for built apps — only populated for app-type listings. */
+  htmlContent?: string;
+  /** Stack used to build the app (react, vite, html, blog, 3d). */
+  stack?: string;
 };
 
 export type PurchaseResult = {
@@ -112,7 +117,8 @@ export function getListing(id: string): MarketplaceListing | undefined {
   return MEMORY.find((r) => r.id === id);
 }
 
-export function publishListing(listing: Omit<MarketplaceListing, "rating" | "installs" | "createdAt" | "isActive">): MarketplaceListing {
+/** Publish a new listing — supports apps with HTML content. */
+export function publishListing(listing: Omit<MarketplaceListing, "rating" | "installs" | "createdAt" | "isActive"> & { htmlContent?: string; stack?: string }): MarketplaceListing {
   const row: MarketplaceListing = {
     ...listing,
     rating: 0,
@@ -122,6 +128,11 @@ export function publishListing(listing: Omit<MarketplaceListing, "rating" | "ins
   };
   MEMORY.unshift(row);
   return row;
+}
+
+/** Get all listings created by a specific user. */
+export function getUserListings(creatorId: string): MarketplaceListing[] {
+  return MEMORY.filter((r) => r.creatorId === creatorId && r.isActive);
 }
 
 export function splitRevenue(priceCredits: number): { creatorShare: number; platformShare: number } {

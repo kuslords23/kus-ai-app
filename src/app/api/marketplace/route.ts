@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listMarketplace, purchaseListing, publishListing, type MarketplaceAssetClass } from "@/lib/jyinx/marketplace/storefront";
+import { listMarketplace, purchaseListing, publishListing, getUserListings, type MarketplaceAssetClass } from "@/lib/jyinx/marketplace/storefront";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(req: Request) {
@@ -7,6 +7,14 @@ export async function GET(req: Request) {
   const assetClass = searchParams.get("class") as MarketplaceAssetClass | null;
   const department = searchParams.get("department") ?? undefined;
   const q = searchParams.get("q") ?? undefined;
+  const userId = searchParams.get("userId") ?? undefined;
+
+  // If userId is provided, return that user's listings (for "My Apps")
+  if (userId) {
+    return NextResponse.json({
+      listings: getUserListings(userId),
+    });
+  }
 
   return NextResponse.json({
     listings: listMarketplace({
@@ -38,18 +46,26 @@ export async function POST(req: Request) {
     return NextResponse.json(result, { status: result.ok ? 200 : 402 });
   }
 
-  if (action === "publish") {
+  if (action === "publish" || action === "publish-app") {
     const listing = publishListing({
       id: `lst_${Date.now().toString(36)}`,
-      assetClass: body.assetClass,
+      assetClass: body.assetClass || "app",
       name: String(body.name ?? "").slice(0, 120),
       description: String(body.description ?? "").slice(0, 2000),
       creatorId: user.id,
-      priceCredits: Math.max(1, Number(body.priceCredits ?? 10)),
+      priceCredits: Math.max(0, Number(body.priceCredits ?? 0)),
       department: body.department,
       tags: Array.isArray(body.tags) ? body.tags.slice(0, 12).map(String) : [],
+      htmlContent: typeof body.htmlContent === "string" ? body.htmlContent : undefined,
+      stack: typeof body.stack === "string" ? body.stack : undefined,
     });
     return NextResponse.json({ listing });
+  }
+
+  if (action === "my-apps") {
+    return NextResponse.json({
+      listings: getUserListings(user.id),
+    });
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
