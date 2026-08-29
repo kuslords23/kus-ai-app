@@ -77,13 +77,14 @@ export async function billableCall<T>(
 ): Promise<T | { ok: false; blocked: true; error: string; code: "insufficient_credits"; message: string; action: "top_up" }> {
   const gate = await assertCredits(ctx);
   if (!gate.allowed) {
+    const action: "top_up" = gate.payload?.action ?? "top_up";
     return {
       ok: false,
       blocked: true,
       error: gate.payload?.message ?? "Insufficient credits.",
       code: "insufficient_credits",
       message: gate.payload?.message ?? "",
-      action: gate.payload?.action ?? "top_up",
+      action,
     };
   }
 

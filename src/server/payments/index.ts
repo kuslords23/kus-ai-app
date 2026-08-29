@@ -72,11 +72,11 @@ export async function createCheckoutSession(opts: { userId: string; bundleId: st
 export async function creditUser(userId: string, credits: number, source: string, meta?: Record<string, unknown>, txId?: string): Promise<void> {
   try {
     const client = await createClient();
-    const existing = await client
+    const existing = (await client
       .from(CREDITS_TABLE)
       .select("balance")
       .eq("user_id", userId)
-      .maybeSingle();
+      .maybeSingle()) as unknown as { data: { balance: number } | null; error: unknown };
     const balance = (existing.data?.balance as number | undefined) ?? 0;
     const next = balance + credits;
     await client.from(CREDITS_TABLE).upsert(
@@ -101,11 +101,11 @@ export async function creditUser(userId: string, credits: number, source: string
 export async function debitUser(userId: string, credits: number, source: string, meta?: Record<string, unknown>): Promise<{ ok: boolean; balance: number }> {
   try {
     const client = await createClient();
-    const existing = await client
+    const existing = (await client
       .from(CREDITS_TABLE)
       .select("balance")
       .eq("user_id", userId)
-      .maybeSingle();
+      .maybeSingle()) as unknown as { data: { balance: number } | null; error: unknown };
     const balance = (existing.data?.balance as number | undefined) ?? 0;
     if (balance < credits) return { ok: false, balance };
 
@@ -134,7 +134,7 @@ export async function debitUser(userId: string, credits: number, source: string,
 export async function getBalance(userId: string): Promise<number> {
   try {
     const client = await createClient();
-    const { data } = await client.from(CREDITS_TABLE).select("balance").eq("user_id", userId).maybeSingle();
+    const { data } = (await client.from(CREDITS_TABLE).select("balance").eq("user_id", userId).maybeSingle()) as unknown as { data: { balance: number } | null; error: unknown };
     return (data?.balance as number | undefined) ?? 0;
   } catch {
     return 0;
@@ -144,12 +144,12 @@ export async function getBalance(userId: string): Promise<number> {
 export async function loadTransactionHistory(userId: string, limit = 25): Promise<Array<Record<string, unknown>>> {
   try {
     const client = await createClient();
-    const { data } = await client
+    const { data } = (await client
       .from(TRANSACTIONS_TABLE)
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
-      .limit(limit);
+      .limit(limit)) as unknown as { data: Array<Record<string, unknown>> | null; error: unknown };
     return data ?? [];
   } catch {
     return [];
@@ -172,14 +172,16 @@ export async function handleStripeWebhook(rawBody: string, signature?: string | 
   } catch {
     return { ok: false, error: "Invalid JSON payload." };
   }
-  const object = event?.data?.object ?? {};
-  const metadata = (object.metadata ?? {}) as Record<string, unknown>;
+  if (!event) return { ok: false, error: "Invalid event payload." };
+
+  const object: Record<string, unknown> = event.data?.object ?? {};
+  const metadata: Record<string, unknown> = (object.metadata ?? {}) as Record<string, unknown>;
   const userId = String(object.client_reference_id ?? metadata.userId ?? "");
   const credits = Number(metadata.credits ?? 0);
   const bundleId = String(metadata.bundle_id ?? "");
 
   if (!userId || !credits) return { ok: false, error: "Missing user or credits in payload." };
-  const eventType = event?.type ?? "";
+  const eventType = event.type ?? "";
   if (eventType === "checkout.session.completed" || eventType === "invoice.paid" || eventType === "payment_intent.succeeded") {
     await creditUser(userId, credits, "stripe-checkout", { bundleId, amountPaidCents: object.amount_total ?? object.amount_paid ?? 0, sessionId: object.id });
     return { ok: true };
