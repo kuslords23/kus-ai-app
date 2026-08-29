@@ -94,7 +94,9 @@ export function AgentExecutionStream({ open, onClose, repository, branch, model,
       }
       const response = await gatewayFetch("/api/jyinx/agent", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        // Use x-github-token so the Authorization header stays free for the
+        // AI gateway's BYOK key resolution. The server reads x-github-token.
+        headers: { "Content-Type": "application/json", "x-github-token": `Bearer ${token}` },
         body: JSON.stringify({
           prompt: text,
           model,

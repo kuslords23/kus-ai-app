@@ -45,6 +45,10 @@ export async function POST(request: NextRequest): Promise<Response> {
   const apiKey = resolved.key as string;
 
   const token = (() => {
+    // Read from x-github-token first (set by AgentExecutionStream client),
+    // then fall back to Authorization header (for backwards compat).
+    const githubHeader = request.headers.get("x-github-token");
+    if (githubHeader?.startsWith("Bearer ")) return githubHeader.slice("Bearer ".length).trim();
     const auth = request.headers.get("authorization");
     return auth?.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : null;
   })();
