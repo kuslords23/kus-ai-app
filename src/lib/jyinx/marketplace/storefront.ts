@@ -1,8 +1,10 @@
 /**
- * Unified Marketplace — Apps, Agents, Fine-Tuned Models, Private Skills (listed metadata only).
- * Micro-transaction hooks via Hubtel with creator revenue share.
- * Built apps from Jyinx Builder are stored here with their full HTML content.
+ * Unified Marketplace — Supabase-backed.
+ * Apps, Agents, Fine-Tuned Models, Private Skills.
+ * Built apps from Jyinx Builder stored permanently with full HTML content.
  */
+
+import { createClient as createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type MarketplaceAssetClass = "app" | "agent" | "model" | "skill";
 
@@ -13,16 +15,14 @@ export type MarketplaceListing = {
   description: string;
   creatorId: string;
   priceCredits: number;
-  department?: "security" | "qa" | "uiux" | "optimization" | "general";
+  department?: string | null;
   tags: string[];
   rating: number;
   installs: number;
   isActive: boolean;
+  htmlContent?: string | null;
+  stack?: string | null;
   createdAt: string;
-  /** HTML content for built apps — only populated for app-type listings. */
-  htmlContent?: string;
-  /** Stack used to build the app (react, vite, html, blog, 3d). */
-  stack?: string;
 };
 
 export type PurchaseResult = {
@@ -35,104 +35,116 @@ export type PurchaseResult = {
   error?: string;
 };
 
-/** Creator receives 70%, platform 30% of listing price in credits. */
 export const CREATOR_REVENUE_SHARE = 0.7;
+const TABLE = "marketplace_listings";
 
-const MEMORY: MarketplaceListing[] = [
-  {
-    id: "agent-sec-auditor",
-    assetClass: "agent",
-    name: "Security Auditor Dept",
-    description: "Defensive static audit agent with patch briefs for the Coder.",
-    creatorId: "system",
-    priceCredits: 25,
-    department: "security",
-    tags: ["security", "qa"],
-    rating: 4.6,
-    installs: 120,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "agent-uiux",
-    assetClass: "agent",
-    name: "UI/UX Layout Agent",
-    description: "Layout and design-system agent for Website/Blog Builder tabs.",
-    creatorId: "system",
-    priceCredits: 20,
-    department: "uiux",
-    tags: ["layout", "design"],
-    rating: 4.4,
-    installs: 88,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "model-code-lite",
-    assetClass: "model",
-    name: "Code Lite (open-weight)",
-    description: "Domain-tuned coding model rented per task via micro credits.",
-    creatorId: "system",
-    priceCredits: 15,
-    department: "optimization",
-    tags: ["model", "code"],
-    rating: 4.2,
-    installs: 210,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "app-blog-kit",
-    assetClass: "app",
-    name: "Blog Starter Kit",
-    description: "Scaffolded blog app template publishable from Jyinx.",
-    creatorId: "system",
-    priceCredits: 40,
-    tags: ["app", "blog"],
-    rating: 4.5,
-    installs: 54,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  },
-];
+async function db() {
+  return createSupabaseServerClient();
+}
 
-export function listMarketplace(filters?: {
+function mapRow(row: Record<string, unknown>): MarketplaceListing {
+  return {
+    id: String(row.id),
+    assetClass: row.asset_class as MarketplaceAssetClass,
+    name: String(row.name),
+    description: String(row.description ?? ""),
+    creatorId: String(row.creator_id),
+    priceCredits: Number(row.price_credits ?? 0),
+    department: row.department ? String(row.department) : null,
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+    rating: Number(row.rating ?? 0),
+    installs: Number(row.installs ?? 0),
+    isActive: row.is_active !== false,
+    htmlContent: row.html_content ? String(row.html_content) : null,
+    stack: row.stack ? String(row.stack) : null,
+    createdAt: String(row.created_at),
+  };
+}
+
+export async function listMarketplace(filters?: {
   assetClass?: MarketplaceAssetClass;
   department?: string;
   q?: string;
-}): MarketplaceListing[] {
-  let rows = MEMORY.filter((r) => r.isActive);
-  if (filters?.assetClass) rows = rows.filter((r) => r.assetClass === filters.assetClass);
-  if (filters?.department) rows = rows.filter((r) => r.department === filters.department);
-  if (filters?.q) {
-    const q = filters.q.toLowerCase();
-    rows = rows.filter(
-      (r) => r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q) || r.tags.some((t) => t.includes(q))
-    );
+  creatorId?: string;
+}): Promise<MarketplaceListing[]> {
+  try {
+    const supabase = await db();
+    let query = supabase
+      .from(TABLE)
+      .select("*")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+
+    if (filters?.creatorId) query = query.eq("creator_id", filters.creatorId);
+    if (filters?.assetClass) query = query.eq("asset_class", filters.assetClass);
+    if (filters?.department) query = query.eq("department", filters.department);
+
+    const { data, error } = await query.limit(100);
+    if (error || !data) return [];
+    const results = (data as unknown as Record<string, unknown>[]).map(mapRow);
+
+    if (filters?.q) {
+      const q = filters.q.toLowerCase();
+      return results.filter(
+        (r) => r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q) || r.tags.some((t) => t.includes(q))
+      );
+    }
+    return results;
+  } catch {
+    return [];
   }
-  return rows;
 }
 
-export function getListing(id: string): MarketplaceListing | undefined {
-  return MEMORY.find((r) => r.id === id);
+export async function getListing(id: string): Promise<MarketplaceListing | null> {
+  try {
+    const supabase = await db();
+    const { data, error } = await supabase.from(TABLE).select("*").eq("id", id).maybeSingle();
+    if (error || !data) return null;
+    return mapRow(data as unknown as Record<string, unknown>);
+  } catch {
+    return null;
+  }
 }
 
-/** Publish a new listing — supports apps with HTML content. */
-export function publishListing(listing: Omit<MarketplaceListing, "rating" | "installs" | "createdAt" | "isActive"> & { htmlContent?: string; stack?: string }): MarketplaceListing {
-  const row: MarketplaceListing = {
-    ...listing,
-    rating: 0,
-    installs: 0,
-    isActive: true,
-    createdAt: new Date().toISOString(),
-  };
-  MEMORY.unshift(row);
-  return row;
+export async function publishListing(
+  listing: Omit<MarketplaceListing, "rating" | "installs" | "isActive" | "createdAt">
+): Promise<MarketplaceListing | null> {
+  try {
+    const supabase = await db();
+    const { data, error } = await supabase
+      .from(TABLE)
+      .insert({
+        id: listing.id,
+        asset_class: listing.assetClass,
+        name: listing.name,
+        description: listing.description,
+        creator_id: listing.creatorId,
+        price_credits: listing.priceCredits,
+        department: listing.department ?? null,
+        tags: listing.tags,
+        html_content: listing.htmlContent ?? null,
+        stack: listing.stack ?? null,
+      })
+      .select("*")
+      .maybeSingle();
+    if (error || !data) return null;
+    return mapRow(data as unknown as Record<string, unknown>);
+  } catch {
+    return null;
+  }
 }
 
-/** Get all listings created by a specific user. */
-export function getUserListings(creatorId: string): MarketplaceListing[] {
-  return MEMORY.filter((r) => r.creatorId === creatorId && r.isActive);
+export async function getUserListings(creatorId: string): Promise<MarketplaceListing[]> {
+  return listMarketplace({ creatorId });
+}
+
+export async function recordInstall(listingId: string): Promise<void> {
+  try {
+    const supabase = await db();
+    await supabase.rpc("increment_marketplace_installs", { p_listing_id: listingId });
+  } catch {
+    // best-effort
+  }
 }
 
 export function splitRevenue(priceCredits: number): { creatorShare: number; platformShare: number } {
@@ -141,9 +153,6 @@ export function splitRevenue(priceCredits: number): { creatorShare: number; plat
   return { creatorShare, platformShare };
 }
 
-/**
- * Purchase with credits, or return a Hubtel checkout URL for mobile-money top-up then purchase.
- */
 export async function purchaseListing(params: {
   listingId: string;
   buyerId: string;
@@ -151,7 +160,7 @@ export async function purchaseListing(params: {
   preferHubtelTopUp?: boolean;
   returnUrl?: string;
 }): Promise<PurchaseResult> {
-  const listing = getListing(params.listingId);
+  const listing = await getListing(params.listingId);
   if (!listing) return { ok: false, error: "Listing not found" };
 
   if (params.creditBalance < listing.priceCredits || params.preferHubtelTopUp) {
@@ -164,10 +173,7 @@ export async function purchaseListing(params: {
         metadata: { marketplaceListingId: listing.id, purpose: "marketplace_purchase" },
       });
       if (!checkout.ok) {
-        return {
-          ok: false,
-          error: checkout.error ?? "Insufficient credits and Hubtel checkout unavailable",
-        };
+        return { ok: false, error: checkout.error ?? "Insufficient credits and Hubtel checkout unavailable" };
       }
       return { ok: false, checkoutUrl: checkout.url, error: "Top up via Hubtel to complete purchase" };
     } catch {
@@ -176,7 +182,7 @@ export async function purchaseListing(params: {
   }
 
   const { creatorShare, platformShare } = splitRevenue(listing.priceCredits);
-  listing.installs += 1;
+  await recordInstall(params.listingId);
 
   return {
     ok: true,
