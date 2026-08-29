@@ -31,31 +31,31 @@ function AuthCallback() {
         // onAuthStateChange. We wait for a short tick to let that happen.
         await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // Try getSession() with a retry — the hash processing might be async
-        let sessionData: { session?: { provider_token?: string } | null } | null = null;
+// Try getSession() with a retry — the hash processing might be async
+        let providerToken: string | null = null;
         for (let i = 0; i < 3; i++) {
           const { data: attempt } = await supabase.auth.getSession();
           if (attempt.session?.provider_token != null) {
-            sessionData = attempt;
+            providerToken = attempt.session.provider_token;
             break;
           }
           await new Promise((resolve) => setTimeout(resolve, 400));
         }
-        if (!sessionData) {
+        if (!providerToken) {
           const { data: final } = await supabase.auth.getSession();
-          sessionData = final;
+          providerToken = final.session?.provider_token ?? null;
         }
 
-        if (sessionData.session?.provider_token != null) {
+        if (providerToken) {
           // Persist the GitHub token to localStorage
           const { persistGitHubToken } = await import("@/lib/jyinx/github-connect");
-          persistGitHubToken(sessionData.session.provider_token);
+          persistGitHubToken(providerToken);
 
           // Verify the token has repo scope
           try {
             const check = await fetch("/api/github/commit", {
               method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionData.session.provider_token}` },
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${providerToken}` },
               body: JSON.stringify({ action: "scope" }),
               cache: "no-store",
             });
