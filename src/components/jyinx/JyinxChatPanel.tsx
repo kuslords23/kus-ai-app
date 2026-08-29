@@ -211,7 +211,7 @@ export function JyinxChatPanel({ open, onClose, model, code, file, workspaceId =
 
       {/* Composer */}
       <div className="shrink-0 border-t border-border bg-background/60 px-4 pb-2 pt-2">
-        {attachments.chips.length > 0 && <AttachmentChips chips={attachments.chips} onRemove={attachments.removeAttachment} />}
+        {attachments.attachments.length > 0 && <AttachmentChips attachments={attachments.attachments} onRemove={attachments.removeAttachment} />}
         <div className="flex items-end gap-2">
           <AttachButton onAttach={attachments.addAttachment} disabled={sending} />
           <textarea
