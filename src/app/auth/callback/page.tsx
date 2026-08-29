@@ -34,16 +34,16 @@ function AuthCallback() {
         // Try getSession() with a retry — the hash processing might be async
         let sessionData: { session?: { provider_token?: string } | null } | null = null;
         for (let i = 0; i < 3; i++) {
-          const { data } = await supabase.auth.getSession();
-          if (data.session?.provider_token) {
-            sessionData = data;
+          const { data: attempt } = await supabase.auth.getSession();
+          if (attempt.session?.provider_token) {
+            sessionData = attempt;
             break;
           }
           await new Promise((resolve) => setTimeout(resolve, 400));
         }
         if (!sessionData) {
-          const { data } = await supabase.auth.getSession();
-          sessionData = data;
+          const { data: final } = await supabase.auth.getSession();
+          sessionData = final;
         }
 
         if (sessionData.session?.provider_token) {
