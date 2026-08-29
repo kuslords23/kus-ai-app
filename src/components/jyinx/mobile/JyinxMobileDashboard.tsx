@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { connectGitHub, getGitHubToken } from "@/lib/jyinx/github-connect";
-import { JyinxChatPanel } from "@/components/jyinx/JyinxChatPanel";
+import { JyinxAgentChat } from "@/components/jyinx/JyinxAgentChat";
 import { JyinxStudio } from "@/components/jyinx/JyinxStudio";
 import type { JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
 import { JYINX_MODELS } from "@/lib/jyinx/model-registry";
@@ -14,7 +14,6 @@ import { JyinxComposerControls } from "@/components/jyinx/JyinxComposerControls"
 import { AgentTaskList } from "./AgentTaskList";
 import { CustomizeDrawer } from "./CustomizeDrawer";
 import { MobilePromptBar } from "./MobilePromptBar";
-import { AgentExecutionStream } from "@/components/jyinx/AgentExecutionStream";
 import { TaskDetail } from "./TaskDetail";
 import { WorkspaceDirectory } from "./WorkspaceDirectory";
 import type { AgentTask, MobileFilters, Workspace } from "./types";
@@ -42,7 +41,6 @@ export function JyinxMobileDashboard() {
   const [chatOpen, setChatOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [executionOpen, setExecutionOpen] = useState(false);
-  const [executionPrompt, setExecutionPrompt] = useState("");
   const [queueStatus, setQueueStatus] = useState<"ONLINE" | "OFFLINE" | "CONNECTING">("CONNECTING");
   const [pendingItems, setPendingItems] = useState(0);
   const { activeModel, setActiveModel, customAgents, addCustomAgent, selectedRepositoryId, setSelectedRepository, mode, setMode } = useJyinxModelStore();
@@ -134,7 +132,6 @@ export function JyinxMobileDashboard() {
         await connectGitHub("/jyinx");
         return;
       }
-      setExecutionPrompt(prompt);
       setExecutionOpen(true);
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : "Unable to start the autonomous agent. Check the GitHub connection.");
@@ -238,7 +235,7 @@ if (ideOpen) return <div className="min-h-dvh"><JyinxStudio /></div>;
       {chatOpen && (
         <div className="fixed inset-0 z-[60] bg-black/70 p-3 sm:p-6" onClick={() => setChatOpen(false)}>
           <section className="mx-auto h-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-surface" onClick={(e) => e.stopPropagation()}>
-            <JyinxChatPanel open onClose={() => setChatOpen(false)} model={activeModel} code="" file="mobile-workspace" repository={workspace?.name} repositoryContext={`${repositoryContext.context}${notebookContext ? `\n\n${notebookContext}` : ""}`} agent={customAgent} workspaceId={workspace?.name ?? "local"} />
+            <JyinxAgentChat open onClose={() => setChatOpen(false)} model={activeModel} code="" file="mobile-workspace" repository={workspace?.name} repositoryContext={repositoryContext.context} repositoryFiles={repositoryContext.files} sessionKey={workspace?.name ?? "mobile"} />
           </section>
         </div>
       )}
@@ -246,7 +243,7 @@ if (ideOpen) return <div className="min-h-dvh"><JyinxStudio /></div>;
       {executionOpen && (
         <div className="fixed inset-0 z-[60] bg-black/70 p-3 sm:p-6" onClick={() => setExecutionOpen(false)}>
           <section className="mx-auto h-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-surface" onClick={(e) => e.stopPropagation()}>
-            <AgentExecutionStream open onClose={() => setExecutionOpen(false)} repository={workspace?.name ?? (selectedRepository ? selectedRepository.fullName : "")} branch={workspace?.branch ?? "main"} model={activeModel.id} repositoryFiles={repositoryContext.files} initialPrompt={executionPrompt} onPromptChange={setExecutionPrompt} sessionKey={workspace?.name ?? selectedRepository?.fullName ?? "mobile"} />
+            <JyinxAgentChat open onClose={() => setExecutionOpen(false)} model={activeModel} code="" file="mobile-workspace" repository={workspace?.name} repositoryContext={repositoryContext.context} repositoryFiles={repositoryContext.files} sessionKey={workspace?.name ?? "mobile"} defaultMode="autonomous" />
           </section>
         </div>
       )}
