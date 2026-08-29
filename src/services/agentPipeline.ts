@@ -26,6 +26,8 @@ export type AgentPipelineConfig = {
   request: string;
   repositoryFiles?: Array<{ path: string; content: string }>;
   maxRetries?: number;
+  /** Conversation history from prior chat mode discussion. */
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
 };
 
 type AgentRun = {
@@ -206,6 +208,7 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
       "",
       `Loaded repository files:\n${repoFiles.length ? repoFiles.map((f) => `### ${f.path}\n${f.content}`).join("\n\n") : "(none)"}`,
       lastError ? `\nFeedback from the previous iteration to incorporate:\n${lastError}` : "",
+      config.history?.length ? `\nConversation history:\n${config.history.map((h) => `${h.role === "user" ? "User" : "Jyinx"}: ${h.content}`).join("\n")}` : "",
     ].join("\n");
 
     let coder: { content: string } | null = null;

@@ -174,10 +174,16 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
         setMessages((current) => [...current, { id: `connect-${Date.now()}`, role: "assistant", content: "Connect GitHub to commit changes to the repository.", connectGithub: true }]);
         return;
       }
+      // Send full conversation history so the autonomous pipeline has context
+      // from any plan/ask discussion that happened in chat mode.
+      const history = messages
+        .filter((m) => m.id !== "welcome" && !m.connectGithub && m.role !== "system")
+        .slice(-20)
+        .map((m) => ({ role: m.role === "user" ? "user" as const : "assistant" as const, content: m.content }));
       const response = await gatewayFetch("/api/jyinx/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-github-token": `Bearer ${token}` },
-        body: JSON.stringify({ prompt: text, model: model.id, repository: repository ?? "", branch: "main", repositoryFiles }),
+        body: JSON.stringify({ prompt: text, model: model.id, repository: repository ?? "", branch: "main", repositoryFiles, history }),
       });
       if (!response.ok || !response.body) {
         const data = (await response.json().catch(() => null)) as { error?: string } | null;

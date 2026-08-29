@@ -15,6 +15,7 @@ type AgentBody = {
   repository?: unknown;
   branch?: unknown;
   repositoryFiles?: unknown;
+  history?: unknown;
 };
 
 // Stop words that would produce useless repository searches when deriving the
@@ -73,6 +74,13 @@ export async function POST(request: NextRequest): Promise<Response> {
             Boolean(f) && typeof f === "object" && typeof (f as { path?: unknown }).path === "string" && typeof (f as { content?: unknown }).content === "string"
         )
       : [];
+  const history =
+    Array.isArray(body?.history)
+      ? body.history.filter(
+          (h): h is { role: "user" | "assistant"; content: string } =>
+            Boolean(h) && typeof h === "object" && (h as { role?: unknown }).role && (h as { content?: unknown }).content
+        ).slice(-20)
+      : [];
 
   if (!prompt) return Response.json({ error: "A prompt is required." }, { status: 400 });
   if (!model) return Response.json({ error: "A model is required." }, { status: 400 });
@@ -121,6 +129,7 @@ export async function POST(request: NextRequest): Promise<Response> {
             providerToken: token,
             request: prompt,
             repositoryFiles: mergedFiles,
+            history,
           },
         });
         for await (const event of generator) {
