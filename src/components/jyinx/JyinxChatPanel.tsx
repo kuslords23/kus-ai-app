@@ -228,7 +228,7 @@ export function JyinxChatPanel({ open, onClose, model, code, file, workspaceId =
         </div>
       </div>
 
-      {reportMsg && <ReportModal message={reportMsg.content} onClose={() => setReportMsg(null)} />}
+      <ReportModal open={reportMsg !== null} onClose={() => setReportMsg(null)} messageId={reportMsg?.id} snippet={reportMsg?.content} />
     </section>
   );
 }
