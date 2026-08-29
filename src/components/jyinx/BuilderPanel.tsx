@@ -23,7 +23,7 @@ const BUILD_OPTIONS: Array<{ stack: WebStack; icon: string; description: string;
   { stack: "vite", icon: "⚡", description: "Vite-style ES module app", color: "border-yellow-500/30 bg-yellow-500/10" },
   { stack: "html", icon: "🌐", description: "HTML / CSS / JS page", color: "border-emerald-500/30 bg-emerald-500/10" },
   { stack: "blog", icon: "📝", description: "Blog post with markdown", color: "border-purple-500/30 bg-purple-500/10" },
-   stack: "3d", icon: "🎮", description: "3D game / scene (Three.js)", color: "border-cyan-500/30 bg-cyan-500/10" },
+  { stack: "3d", icon: "🎮", description: "3D game / scene (Three.js)", color: "border-cyan-500/30 bg-cyan-500/10" },
 ];
 
 export function BuilderPanel({ onClose, onLaunchAgent }: BuilderPanelProps) {
