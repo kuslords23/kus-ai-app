@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { InlineCard } from "./InlineCard";
 import { sanitizeAssistantContent } from "@/lib/sanitizeAssistant";
 import { renderMessageText } from "./MessageRenderer";
+import { StreamingText } from "@/components/ui/StreamingText";
 
 export interface ChatMessageData {
   id: string;
@@ -118,8 +119,10 @@ export function ChatMessage({
         <div className="whitespace-pre-wrap text-[13.5px] leading-relaxed">
           {isUser && editing && visibleContent.length > 60
             ? `${visibleContent.slice(0, 60)}…`
-            : renderMessageText(visibleContent)}
-          {isStreaming && (
+            : isStreaming && !isUser
+              ? <StreamingText text={visibleContent} />
+              : renderMessageText(visibleContent)}
+          {isStreaming && !isUser && (
             <span className="inline-block w-1.5 h-3.5 bg-gold ml-0.5 align-middle animate-pulse rounded-sm" />
           )}
         </div>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatMessage, type ChatMessageData } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { SuggestionChips } from "./SuggestionChips";
+import { StreamingText } from "@/components/ui/StreamingText";
 import { streamRag, type RagAction } from "@/lib/rag/client";
 import { getSuggestionChips, WELCOME_TEXT } from "@/lib/rag/chips";
 import {

@@ -10,6 +10,8 @@ import { renderMessageText } from "@/components/chat/MessageRenderer";
 import { ReportModal } from "@/components/legal/ReportModal";
 import { AGENTS } from "@/lib/agents/registry";
 import type { AgentExecutionEvent } from "@/lib/agent-execution";
+import { StreamingText } from "@/components/ui/StreamingText";
+import { ExpandableThoughtProcess, type ThoughtStep } from "@/components/ui/ExpandableThoughtProcess";
 
 type Message = { id: string; role: "user" | "assistant" | "system"; content: string; connectGithub?: boolean; kind?: "narration" | "reasoning" | "rejected" | "error" | "deploying" | "deployed" | "edit" | "done" | "log"; detail?: string; files?: Array<{ path: string; content: string }>; url?: string; summary?: string };
 type ChatAgent = { modelId: string; endpoint: string; systemPrompt: string; tag: string };
@@ -108,6 +110,7 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
   const attachments = useChatAttachments();
   const consumedPrompt = useRef(false);
   const startedRef = useRef(false);
+  const [thoughtSteps, setThoughtSteps] = useState<ThoughtStep[]>([]);
 
   // Persist history to localStorage
   useEffect(() => {
@@ -167,6 +170,7 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
   // ── Autonomous mode send ──
   const sendAutonomous = async (text: string) => {
     setMessages((current) => [...current, { id: `user-${Date.now()}`, role: "user", content: text }]);
+    setThoughtSteps([]);
     setSending(true);
     try {
       const token = await getGitHubToken();
@@ -220,22 +224,44 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
     if (event.type === "edit" && onEdits && event.files?.length) {
       onEdits(event.files);
     }
-    setMessages((current) => {
-      const m: Message = { id: `event-${Date.now()}-${current.length}`, role: "system", content: "", kind: event.type };
-      switch (event.type) {
-        case "narration": m.content = event.message; m.detail = event.detail; break;
-        case "log": m.content = `• ${event.message}`; break;
-        case "reasoning": m.content = event.message; break;
-        case "rejected": m.content = event.reason; break;
-        case "whitespace": m.content = event.message; break;
-        case "error": m.content = event.message; m.connectGithub = event.connect === true; break;
-        case "deploying": m.content = event.message; break;
-        case "deployed": m.content = `Deployed: ${event.url}`; m.url = event.url; break;
-        case "edit": m.content = `✏️ ${event.files.length} file(s) applied`; m.files = event.files; break;
-        case "done": m.content = event.summary; m.summary = event.summary; break;
-      }
-      return [...current, m];
-    });
+
+    // Collect thought steps for the expandable thought process
+    const step = (icon: string, label: string, detail?: string, status: "pending" | "active" | "done" = "done"): ThoughtStep => ({ icon, label, detail, status });
+
+    switch (event.type) {
+      case "narration":
+        setThoughtSteps((prev) => [...prev, step("📋", "Planning", event.detail ?? event.message)]);
+        break;
+      case "reasoning":
+        setThoughtSteps((prev) => [...prev, step("⟳", "Reasoning", event.message)]);
+        break;
+      case "log":
+        setThoughtSteps((prev) => [...prev, step("•", event.message)]);
+        break;
+      case "rejected":
+        setThoughtSteps((prev) => [...prev, step("❌", "Review rejected", event.reason)]);
+        setMessages((current) => [...current, { id: `rejected-${Date.now()}`, role: "system", content: `Review flagged: ${event.reason}`, kind: "rejected" }]);
+        break;
+      case "edit":
+        setThoughtSteps((prev) => [...prev, step("✏️", "Editing files", `${event.files.length} file(s) modified`)]);
+        break;
+      case "whitespace":
+        setThoughtSteps((prev) => [...prev, step("📄", "Whitespace changes", event.message)]);
+        break;
+      case "deploying":
+        setThoughtSteps((prev) => [...prev, step("🚀", "Deploying", event.message, "active")]);
+        break;
+      case "deployed":
+        setThoughtSteps((prev) => [...prev, step("✅", "Deployed", `Live at ${event.url}`)]);
+        break;
+      case "error":
+        setThoughtSteps((prev) => [...prev, step("❌", "Error", event.message, "done")]);
+        setMessages((current) => [...current, { id: `error-${Date.now()}`, role: "system", content: event.message, connectGithub: event.connect === true }]);
+        break;
+      case "done":
+        setMessages((current) => [...current, { id: `done-${Date.now()}`, role: "system", content: event.summary, kind: "done", summary: event.summary }]);
+        break;
+    }
   };
 
   const send = () => {
@@ -309,14 +335,27 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
           <p className="text-sm text-muted self-start">Describe an autonomous change. Jyinx will draft edits, review them, and commit them to GitHub.</p>
         )}
 
-        {messages.map((message) => (
-          message.kind ? (
-            <AutonomousRow key={message.id} message={message} />
+        {/* Expandable thought process for autonomous mode */}
+        {mode === "autonomous" && thoughtSteps.length > 0 && (
+          <ExpandableThoughtProcess steps={thoughtSteps} />
+        )}
+
+        {messages.map((message, idx) => (
+          message.kind === "done" ? (
+            <article key={message.id} className="self-start w-full rounded-2xl border border-success/30 bg-success/10 p-3 text-sm text-success">
+              {message.summary || message.content}
+            </article>
+          ) : message.kind === "rejected" || message.kind === "error" ? (
+            <article key={message.id} className="self-start w-full rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+              {message.content}
+            </article>
           ) : (
             <article key={message.id} className={"max-w-[85%] w-fit box-border rounded-2xl border p-3 text-sm leading-relaxed " + (message.role === "user" ? "self-end border-gold/30 bg-gold/10" : "self-start border-border bg-background/65")}>
               <p className="mb-1 text-[10px] uppercase tracking-wider text-muted">{message.role === "user" ? "You" : "Jyinx"}</p>
               {message.role === "user" ? (
                 <p className="whitespace-pre-wrap">{message.content}</p>
+              ) : sending && idx === messages.length - 1 ? (
+                <div className="whitespace-pre-wrap"><StreamingText text={message.content} /></div>
               ) : (
                 <div className="whitespace-pre-wrap">{renderMessageText(message.content)}</div>
               )}
@@ -371,33 +410,4 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
       {reportMsg && <ReportModal open={reportMsg !== null} onClose={() => setReportMsg(null)} messageId={reportMsg?.id} snippet={reportMsg?.content} />}
     </section>
   );
-}
-
-function AutonomousRow({ message }: { message: Message }) {
-  switch (message.kind) {
-    case "narration":
-      return (
-        <article className="self-start w-full max-w-[85%] rounded-2xl border border-gold/30 bg-gold/5 p-3">
-          <p className="text-[10px] uppercase tracking-wider text-gold">Plan</p>
-          <p className="mt-1 text-sm text-foreground">{message.content}</p>
-          {message.detail && <pre className="mt-2 whitespace-pre-wrap rounded-lg bg-background/60 p-2 text-[11px] text-purple-soft">{message.detail}</pre>}
-        </article>
-      );
-    case "reasoning":
-      return <div className="self-start w-full flex items-start gap-2 rounded-lg border border-border bg-background/50 px-3 py-2 text-xs text-muted"><span className="mt-0.5 text-gold">⟳</span><span>{message.content}</span></div>;
-    case "rejected":
-      return <div className="self-start w-full rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">Review flagged: {message.content}</div>;
-    case "error":
-      return <div className="self-start w-full rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-400">{message.content}</div>;
-    case "deploying":
-      return <div className="self-start w-full flex items-center gap-2 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-xs text-gold"><span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gold border-t-transparent" />{message.content}</div>;
-    case "deployed":
-      return <div className="self-start w-full rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">🚀 {message.url ? <a href={message.url} target="_blank" rel="noreferrer" className="underline hover:text-success">{message.content}</a> : message.content}</div>;
-    case "edit":
-      return <div className="self-start w-full rounded-lg border border-purple/30 bg-purple/10 px-3 py-2 text-xs text-purple-400">{message.content}</div>;
-    case "done":
-      return <div className="self-start w-full rounded-2xl border border-success/30 bg-success/10 p-3 text-sm text-success">{message.summary || message.content}</div>;
-    default:
-      return <div className="self-start w-full px-1 py-1 text-xs text-muted">{message.content}</div>;
-  }
 }
