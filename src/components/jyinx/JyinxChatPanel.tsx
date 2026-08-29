@@ -213,7 +213,7 @@ export function JyinxChatPanel({ open, onClose, model, code, file, workspaceId =
       <div className="shrink-0 border-t border-border bg-background/60 px-4 pb-2 pt-2">
         {attachments.attachments.length > 0 && <AttachmentChips attachments={attachments.attachments} onRemove={attachments.removeAttachment} />}
         <div className="flex items-end gap-2">
-          <AttachButton onAttach={attachments.addAttachment} disabled={sending} />
+          <AttachButton onClick={attachments.addAttachment} disabled={sending} />
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
