@@ -138,8 +138,12 @@ export async function getGitHubToken(): Promise<string | null> {
     // fall through to persisted token
   }
   // Fallback to the persisted token when the session token is gone
+  // Try the new scoped key first, then the old legacy key for migration
   try {
-    return localStorage.getItem(persistedTokenKey());
+    const token = localStorage.getItem(persistedTokenKey());
+    if (token) return token;
+    // Legacy fallback for users who logged in before the scoped key change
+    return localStorage.getItem("jyinx_persisted_github_token");
   } catch {
     return null;
   }

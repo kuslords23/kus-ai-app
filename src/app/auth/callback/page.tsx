@@ -24,9 +24,27 @@ function AuthCallback() {
       try {
         // With implicit flow, the session is detected from the URL hash
         // automatically by createBrowserClient with detectSessionInUrl: true.
-        // We just need to initialize the client once to trigger the detection.
         const supabase = createClient();
-        const { data: sessionData } = await supabase.auth.getSession();
+
+        // Wait for the auth state to be processed. The implicit flow stores
+        // the token in the URL hash, and createBrowserClient picks it up via
+        // onAuthStateChange. We wait for a short tick to let that happen.
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Try getSession() with a retry — the hash processing might be async
+        let sessionData: { session?: { provider_token?: string } | null } | null = null;
+        for (let i = 0; i < 3; i++) {
+          const { data } = await supabase.auth.getSession();
+          if (data.session?.provider_token) {
+            sessionData = data;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+        if (!sessionData) {
+          const { data } = await supabase.auth.getSession();
+          sessionData = data;
+        }
 
         if (sessionData.session?.provider_token) {
           // Persist the GitHub token to localStorage

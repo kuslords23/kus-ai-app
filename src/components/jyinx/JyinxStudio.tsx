@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getGitHubToken, clearStaleAuthKeys, connectGitHub } from "@/lib/jyinx/github-connect";
+import { getGitHubToken, clearStaleAuthKeys, clearPersistedGitHubToken, connectGitHub } from "@/lib/jyinx/github-connect";
 import { JyinxChatPanel } from "@/components/jyinx/JyinxChatPanel";
 import { JyinxGitHubRepos, type JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
 import { JyinxSettingsPanel } from "@/components/jyinx/JyinxSettingsPanel";
@@ -429,6 +429,7 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
               type="button"
               onClick={() => {
                 clearStaleAuthKeys();
+                clearPersistedGitHubToken();
                 setNotice(null);
                 void connectGitHub("/jyinx");
               }}
