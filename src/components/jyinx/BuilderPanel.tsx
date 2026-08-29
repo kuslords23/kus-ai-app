@@ -37,6 +37,9 @@ export function BuilderPanel({ onClose, onLaunchAgent }: BuilderPanelProps) {
   const [publishing, setPublishing] = useState(false);
   const [publishNotice, setPublishNotice] = useState<string | null>(null);
 
+  // Working array for tracking pending file edits across the build flow
+  let workingEdits: Array<{ path: string; content: string }> = [];
+
   const handleGenerate = useCallback(() => {
     setGenerating(true);
     try {
@@ -99,21 +102,21 @@ export function BuilderPanel({ onClose, onLaunchAgent }: BuilderPanelProps) {
           <button type="button" onClick={onClose} className="rounded-lg border border-border px-2 py-1 text-xs text-muted hover:text-gold">Close</button>
         </header>
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
+          <button
+            type="button"
+            onClick={() => void publishToMarketplace()}
+            disabled={publishing}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-3 text-sm font-medium text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-50"
+          >
+            <span>🏪</span> {publishing ? "Publishing…" : "Publish to Marketplace"}
+          </button>
+
+          {publishNotice && (
+            <p className="rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-xs text-gold text-center">{publishNotice}</p>
+          )}
+
           {BUILD_OPTIONS.map((opt) => (
-        <button
-          type="button"
-          onClick={() => void publishToMarketplace()}
-          disabled={publishing}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-3 text-sm font-medium text-purple-400 hover:bg-purple-500/20 transition-colors disabled:opacity-50"
-        >
-          <span>🏪</span> {publishing ? "Publishing…" : "Publish to Marketplace"}
-        </button>
-
-        {publishNotice && (
-          <p className="rounded-lg border border-gold/25 bg-gold/5 px-3 py-2 text-xs text-gold text-center">{publishNotice}</p>
-        )}
-
-        <button
+            <button
               key={opt.stack}
               type="button"
               onClick={() => { setSelectedStack(opt.stack); setStep("configure"); }}
