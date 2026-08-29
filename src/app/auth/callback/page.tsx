@@ -35,7 +35,7 @@ function AuthCallback() {
         let sessionData: { session?: { provider_token?: string } | null } | null = null;
         for (let i = 0; i < 3; i++) {
           const { data: attempt } = await supabase.auth.getSession();
-          if (attempt.session?.provider_token) {
+          if (attempt.session?.provider_token != null) {
             sessionData = attempt;
             break;
           }
@@ -46,7 +46,7 @@ function AuthCallback() {
           sessionData = final;
         }
 
-        if (sessionData.session?.provider_token) {
+        if (sessionData.session?.provider_token != null) {
           // Persist the GitHub token to localStorage
           const { persistGitHubToken } = await import("@/lib/jyinx/github-connect");
           persistGitHubToken(sessionData.session.provider_token);
