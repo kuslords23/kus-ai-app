@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import type { AgentExecutionEvent } from "@/lib/agent-execution";
 import { gatewayFetch } from "@/lib/kusai/apiKeys";
-import { connectGitHub } from "@/lib/jyinx/github-connect";
+import { connectGitHub, getGitHubToken } from "@/lib/jyinx/github-connect";
 
 type Props = {
   open: boolean;
@@ -87,8 +86,7 @@ export function AgentExecutionStream({ open, onClose, repository, branch, model,
     setNeedConnect(false);
     setRunning(true);
     try {
-      const { data } = await createClient().auth.getSession();
-      const token = data.session?.provider_token;
+      const token = await getGitHubToken();
       if (!token) {
         setItems([{ kind: "error", message: "Connect GitHub to commit changes to the repository." }]);
         setNeedConnect(true);

@@ -198,7 +198,7 @@ function JyinxStudioInner() {
       const data = (await res.json().catch(() => null)) as { ok?: boolean; href?: string; error?: string; deployment?: { deployUrl?: string } } | null;
       if (!res.ok || !data?.ok) {
         const msg = data?.error || "Push to host failed.";
-        if (msg.includes("No external build hook")) {
+        if (msg.includes("No deploy hook configured") || msg.includes("No external build hook")) {
           // Silent fail — no hooks configured, this is expected
           setNotice(`✅ Committed to GitHub. Set a deploy hook (VERCEL_DEPLOY_HOOK_URL) to auto-deploy on push.`);
           return;

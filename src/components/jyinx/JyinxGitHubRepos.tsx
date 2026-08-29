@@ -39,7 +39,7 @@ export function JyinxGitHubRepos({
     setError(null);
     try {
       const supabase = createClient();
-      const siteOrigin = "https://kus-ai-app.vercel.app";
+      const siteOrigin = typeof window !== "undefined" ? window.location.origin : "https://kus-ai-app.vercel.app";
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: "github",
         options: {

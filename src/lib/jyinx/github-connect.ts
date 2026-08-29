@@ -13,7 +13,18 @@
  */
 
 export const GITHUB_CONNECT_PATH = "/auth/callback";
-export const GITHUB_SITE_ORIGIN = "https://kus-ai-app.vercel.app";
+
+/**
+ * Returns the app's base URL at call time using the actual browser origin.
+ * This ensures GitHub OAuth redirects work wherever the app is deployed.
+ */
+function appBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    // Use the full origin so the OAuth callback works on any domain
+    return window.location.origin;
+  }
+  return process.env.NEXT_PUBLIC_SITE_URL ?? "https://kus-ai-app.vercel.app";
+}
 
 const LOCALSTORAGE_KEY = "kus-ai-github-token";
 
@@ -193,10 +204,11 @@ export type GitHubConnectResult =
 /** Starts the GitHub OAuth flow requesting the `repo` scope. */
 export async function connectGitHub(redirectPath = "/jyinx"): Promise<void> {
   const supabase = (await import("@/lib/supabase/client")).createClient();
+  const base = appBaseUrl();
   await supabase.auth.signInWithOAuth({
     provider: "github",
     options: {
-      redirectTo: `${GITHUB_SITE_ORIGIN}/auth/callback?next=${encodeURIComponent(redirectPath)}`,
+      redirectTo: `${base}/auth/callback?next=${encodeURIComponent(redirectPath)}`,
       scopes: "repo read:user user:email",
     },
   });
