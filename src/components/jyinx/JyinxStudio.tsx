@@ -402,10 +402,13 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
       </div>
 
       {/* 3. Clean Bottom Tab Bar (Mobile) */}
-      <nav className="grid shrink-0 grid-cols-4 border-t border-border bg-surface/95 text-[11px] text-center text-muted xl:hidden">
+      <nav className="grid shrink-0 grid-cols-7 border-t border-border bg-surface/95 text-[10px] text-center text-muted xl:hidden">
         <button onClick={() => setDrawer("files")} className="py-2 hover:text-foreground transition-colors">Files</button>
         <button onClick={() => setDrawer("chat")} className="py-2 text-gold hover:text-gold/80 transition-colors">Chat</button>
+        <button onClick={() => setCreateOpen(true)} className="py-2 hover:text-foreground transition-colors">Create</button>
+        <button onClick={() => setCostOpen(true)} className="py-2 hover:text-foreground transition-colors">Cost</button>
         <button onClick={() => setDrawer("inspector")} className="py-2 hover:text-foreground transition-colors">Status</button>
+        <button onClick={() => setCustomizeSidebarOpen(true)} className="py-2 hover:text-foreground transition-colors">Settings</button>
         <button onClick={() => router.push("/")} className="py-2 hover:text-foreground transition-colors">Royal</button>
       </nav>
 
