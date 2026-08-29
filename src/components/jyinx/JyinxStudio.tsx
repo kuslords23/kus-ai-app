@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getGitHubToken } from "@/lib/jyinx/github-connect";
+import { getGitHubToken, clearStaleAuthKeys, connectGitHub } from "@/lib/jyinx/github-connect";
 import { JyinxChatPanel } from "@/components/jyinx/JyinxChatPanel";
 import { JyinxGitHubRepos, type JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
 import { JyinxSettingsPanel } from "@/components/jyinx/JyinxSettingsPanel";
@@ -327,7 +327,7 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
   const inspectorPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-auto border-l border-border bg-surface/60 p-4"><div className="mb-5 flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Inspector</p><p className="mt-1 text-sm font-medium">Workspace diagnostics</p></div><button className="text-xs text-muted lg:hidden" onClick={() => setDrawer(null)}>Close</button></div><section className="rounded-2xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Connection</p><p className="mt-2 text-xs text-muted"><span className={queue.status === "ONLINE" ? "text-success" : "text-gold"}>●</span> {queue.status === "ONLINE" ? "Synced" : "Local only"} · {queue.pendingItems} queued</p></section><section className="mt-4 rounded-2xl border border-border bg-background/50 p-3"><p className="text-sm font-medium">Model controller</p><div className="mt-3">{selector}</div><p className="mt-2 text-[11px] text-muted">{activeModelInfo.contextWindow.toLocaleString()} token context</p></section><JyinxGitHubRepos selectedRepositoryId={selectedRepository?.id} onSelectRepository={(repository) => setSelectedRepository(repository)} /><section className="mt-4 rounded-xl border border-gold/25 bg-gold/5 p-3 text-xs text-muted"><p className="font-medium text-gold">Deploy flow</p><p className="mt-1">Merge the Jyinx pull request and your GitHub-connected Vercel project deploys it automatically.</p></section></aside>;
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+    <div className="flex h-dvh max-w-full flex-col overflow-hidden bg-background text-foreground">
       {/* 1. Minimalist Top Header */}
       <header className="flex shrink-0 items-center justify-between border-b border-border bg-background/90 px-3 py-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -377,13 +377,13 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
       </header>
 
       {/* 2. Main split: file tree + editor + side panels */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex w-full max-w-full flex-1 min-h-0 overflow-hidden">
         <div className="hidden w-64 shrink-0 lg:block">{filesPanel}</div>
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1">
             <section className="flex min-w-0 flex-1 flex-col">
               {ws.openFiles.length > 0 && <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border bg-background/40 px-2"><span className="mr-1 text-[9px] uppercase tracking-wider text-muted">Open</span>{ws.openFiles.map((p) => <button key={p} type="button" onClick={() => ws.setActive(p)} className={`shrink-0 cursor-pointer rounded-t-md border-b-2 px-2 py-1.5 text-[11px] ${p === activePath ? "border-gold text-gold" : "border-transparent text-muted hover:text-foreground"}`} title={p}>{p.split("/").pop()}{ws.files[p]?.dirty ? " ●" : ""}<span className="ml-1 text-muted/60" onClick={(e) => { e.stopPropagation(); ws.closeFile(p); }}>✕</span></button>)}</div>}
-              <textarea value={activeBuf?.content ?? ""} onChange={(event) => { if (ws.activeFile) ws.writeFile(ws.activeFile, event.target.value); }} spellCheck={false} className="min-h-[180px] flex-1 resize-none bg-[#0d0917] p-4 font-mono text-xs leading-6 text-purple-soft outline-none md:text-sm" />
+              <textarea value={activeBuf?.content ?? ""} onChange={(event) => { if (ws.activeFile) ws.writeFile(ws.activeFile, event.target.value); }} spellCheck={false} className="min-h-[180px] w-full max-w-full flex-1 resize-none overflow-x-auto bg-[#0d0917] p-4 font-mono text-xs leading-6 text-purple-soft outline-none md:text-sm" />
             </section>
             {previewOpen && <div className="hidden w-[min(44%,560px)] shrink-0 border-l border-border lg:block"><PreviewLayout src="/" title="Live preview" /></div>}
             <div className="hidden w-[min(42%,440px)] shrink-0 border-l border-border lg:block">
@@ -418,7 +418,30 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
       {costOpen && <div className="fixed inset-0 z-[70] bg-black/70 p-4 sm:p-6" onClick={() => setCostOpen(false)}><section className="mx-auto mt-8 h-full max-h-[70vh] max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}><header className="flex items-center justify-between border-b border-border pb-3"><p className="text-sm font-semibold">Cost & keys</p><button type="button" onClick={() => setCostOpen(false)} className="rounded-lg border border-border px-2 py-1 text-xs text-muted">Close</button></header><div className="py-4"><CostTracker /></div></section></div>}
       <CustomizeSidebar open={customizeSidebarOpen} onClose={() => setCustomizeSidebarOpen(false)} queue={queue} activeModel={activeModelInfo} onModelChange={setActiveModel} selectedRepository={selectedRepository} onSelectRepository={setSelectedRepository} onAutonomousToggle={() => setAgentPanelOpen((current) => !current)} autonomousEnabled={agentPanelOpen} onCostClick={() => { setCostOpen(true); setCustomizeSidebarOpen(false); }} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={bridge.registry.list()} onRun={onRunCommand} state={ideState} />
-      {notice && <button type="button" onClick={() => setNotice(null)} className="fixed bottom-4 left-1/2 z-[80] -translate-x-1/2 rounded-xl border border-gold/30 bg-surface px-4 py-2 text-sm text-gold shadow-2xl">{notice}</button>}
+      {notice && (() => {
+    const isAuthError = notice.toLowerCase().includes("github") || notice.toLowerCase().includes("connect") || notice.toLowerCase().includes("token") || notice.toLowerCase().includes("auth") || notice.toLowerCase().includes("expired") || notice.toLowerCase().includes("scope") || notice.toLowerCase().includes("permission");
+    return (
+      <div className="fixed bottom-0 left-0 right-0 z-[80] flex items-center justify-center p-3 sm:bottom-4 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-lg sm:p-0">
+        <div className="flex w-full max-w-full flex-wrap items-center gap-2 rounded-xl border border-gold/30 bg-surface px-3 py-2.5 shadow-2xl sm:max-w-lg sm:flex-nowrap sm:px-4 sm:py-2">
+          <span className="min-w-0 flex-1 break-words text-[11px] leading-relaxed text-gold sm:text-xs">{notice}</span>
+          {isAuthError && (
+            <button
+              type="button"
+              onClick={() => {
+                clearStaleAuthKeys();
+                setNotice(null);
+                void connectGitHub("/jyinx");
+              }}
+              className="shrink-0 rounded-md bg-gold px-2.5 py-1.5 text-[10px] font-semibold text-background hover:bg-gold/90 sm:text-xs"
+            >
+              Connect GitHub
+            </button>
+          )}
+          <button type="button" onClick={() => setNotice(null)} className="shrink-0 rounded-lg border border-border px-2 py-1 text-[10px] text-muted hover:text-foreground sm:text-xs">✕</button>
+        </div>
+      </div>
+    );
+  })()}
     </div>
   );
 }
