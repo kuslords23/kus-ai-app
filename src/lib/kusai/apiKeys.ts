@@ -59,8 +59,9 @@ export async function gatewayFetch(
   const headers = new Headers(init?.headers);
   const { apiKey } = getPreferredCustomKey();
   if (apiKey) {
-    // Attach the user's key as the standard Bearer token AND the custom-key
-    // header so the server never falls through to an unconfigured env var.
+    // Only attach the BYOK key for AI model auth, NEVER overwrite an existing
+    // Authorization header (which may carry a GitHub PAT or other non-AI token).
+    // Use the x-custom-api-key header for explicit BYOK signaling instead.
     if (!headers.has("authorization")) headers.set("Authorization", `Bearer ${apiKey}`);
     if (!headers.has("x-custom-api-key")) headers.set("x-custom-api-key", apiKey);
   }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getGitHubToken } from "@/lib/jyinx/github-connect";
 import type { JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
 
 type ContextFile = { path: string; content: string };
@@ -25,8 +26,14 @@ export function useRepositoryContext(repository: JyinxRepository | null, query?:
       }
       setState((current) => ({ ...current, loading: true, error: null }));
       try {
-        const { data } = await createClient().auth.getSession();
-        const token = data.session?.provider_token;
+        let token: string | null = null;
+        try {
+          const { data } = await createClient().auth.getSession();
+          token = data.session?.provider_token ?? null;
+        } catch {
+          /* fall through */
+        }
+        if (!token) token = await getGitHubToken();
         if (!token) throw new Error("Reconnect GitHub to load repository context.");
         const params = new URLSearchParams({ repository: repository.fullName, branch: repository.defaultBranch, context: "1" });
         if (query) params.set("q", query);

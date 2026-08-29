@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getGitHubToken } from "@/lib/jyinx/github-connect";
 
 const LANGUAGES = ["typescript", "javascript", "python", "rust", "go"];
 
@@ -37,8 +38,14 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
     setState("creating");
     setMessage("");
     try {
-      const { data } = await createClient().auth.getSession();
-      const token = data.session?.provider_token;
+      let token: string | null = null;
+      try {
+        const { data } = await createClient().auth.getSession();
+        token = data.session?.provider_token ?? null;
+      } catch {
+        /* fall through */
+      }
+      if (!token) token = await getGitHubToken();
       if (!token) throw new Error("Connect GitHub before creating a project.");
       const response = await fetch("/api/github/create", {
         method: "POST",

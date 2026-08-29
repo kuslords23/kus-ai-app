@@ -82,7 +82,12 @@ export function JyinxGitHubRepos({
       try {
         const supabase = createClient();
         const { data } = await supabase.auth.getSession();
-        const token = data.session?.provider_token ?? null;
+        let token = data.session?.provider_token ?? null;
+        // Fall back to stored PAT (from getGitHubToken) when no OAuth session
+        if (!token) {
+          const { getGitHubToken } = await import("@/lib/jyinx/github-connect");
+          token = await getGitHubToken();
+        }
         if (!live) return;
         setProviderToken(token);
         setSessionChecked(true);
@@ -97,9 +102,14 @@ export function JyinxGitHubRepos({
     };
     void applySession();
     const supabase = createClient();
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!live) return;
-      const token = session?.provider_token ?? null;
+      let token = session?.provider_token ?? null;
+      // Fall back to stored PAT when OAuth session doesn't have a token
+      if (!token) {
+        const { getGitHubToken } = await import("@/lib/jyinx/github-connect");
+        token = await getGitHubToken();
+      }
       setProviderToken(token);
       setSessionChecked(true);
       if (token) void loadRepositories(token);

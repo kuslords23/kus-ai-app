@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getGitHubToken } from "@/lib/jyinx/github-connect";
 import type { JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
 
 export type JyinxWorkspaceEntry = { name: string; path: string; type: "file" | "dir"; size: number };
@@ -15,12 +16,21 @@ export function JyinxWorkspaceFiles({ repository, onOpenFile, onEntriesLoaded }:
 
   useEffect(() => {
     let live = true;
+    const getToken = async (): Promise<string | null> => {
+      try {
+        const { data } = await createClient().auth.getSession();
+        if (data.session?.provider_token) return data.session.provider_token;
+      } catch {
+        /* fall through */
+      }
+      return getGitHubToken();
+    };
+
     const load = async () => {
       if (!repository) { setEntries([]); return; }
       setLoading(true); setError(null);
       try {
-        const { data } = await createClient().auth.getSession();
-        const token = data.session?.provider_token;
+        const token = await getToken();
         if (!token) throw new Error("Reconnect GitHub to browse files.");
         const response = await fetch(`/api/github/workspace?repository=${encodeURIComponent(repository.fullName)}&branch=${encodeURIComponent(repository.defaultBranch)}`, { headers: { Authorization: `Bearer ${token}` } });
         const dataJson = (await response.json()) as { entries?: JyinxWorkspaceEntry[]; error?: string };
@@ -35,8 +45,7 @@ export function JyinxWorkspaceFiles({ repository, onOpenFile, onEntriesLoaded }:
   const open = async (entry: JyinxWorkspaceEntry) => {
     if (!repository || entry.type !== "file") return;
     try {
-      const { data } = await createClient().auth.getSession();
-      const token = data.session?.provider_token;
+      const token = await getToken();
       if (!token) throw new Error("Reconnect GitHub to open files.");
       const response = await fetch(`/api/github/workspace?repository=${encodeURIComponent(repository.fullName)}&branch=${encodeURIComponent(repository.defaultBranch)}&path=${encodeURIComponent(entry.path)}`, { headers: { Authorization: `Bearer ${token}` } });
       const result = (await response.json()) as { file?: { path: string; content: string }; error?: string };
