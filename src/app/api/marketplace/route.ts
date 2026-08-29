@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   // Resolve user from session
   let userId = "";
   try {
-    const supabase = (await import("@/lib/supabase/server")).createClient();
+    const supabase = await (await import("@/lib/supabase/server")).createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (user) userId = user.id;
   } catch {
