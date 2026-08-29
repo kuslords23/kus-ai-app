@@ -1,3 +1,5 @@
+"use client";
+
 import { createBrowserClient } from "@supabase/ssr";
 
 /**
@@ -11,7 +13,6 @@ function makeStorageKey(): string {
   let ref = "kus-lords";
   try {
     if (url) {
-      // Extract the subdomain from the Supabase URL (e.g. "abc123" from "https://abc123.supabase.co")
       const hostname = new URL(url).hostname;
       const parts = hostname.split(".");
       if (parts.length >= 2) {
@@ -48,7 +49,11 @@ export function createClient() {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      flowType: "pkce",
+      // Use implicit flow instead of PKCE to avoid "code verifier not found"
+      // errors. The PKCE verifier is stored in localStorage which can be lost
+      // between the OAuth redirect and the callback on Vercel serverless.
+      // Implicit flow doesn't require a code verifier.
+      flowType: "implicit",
       storageKey: getStorageKey(),
     },
   });
