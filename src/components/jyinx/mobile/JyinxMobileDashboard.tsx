@@ -254,3 +254,4 @@ if (ideOpen) return <div className="min-h-dvh"><JyinxStudio /></div>;
       {task && <TaskDetail task={task} onClose={() => setTask(null)} onAction={(selectedTask) => { setTask(null); setNotice(selectedTask.status === "review" ? "Open the full IDE to review the complete diff and create a pull request." : "Task is ready in the Jyinx agent workspace. Open the full IDE to build it with repository context."); }} />}
     </main>
   );
+}
