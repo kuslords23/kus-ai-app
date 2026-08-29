@@ -78,7 +78,7 @@ export function useChatAttachments() {
   );
 
   return {
-    attachments,
+    ts: attachments,
     addFiles,
     removeAttachment,
     clearAttachments,
