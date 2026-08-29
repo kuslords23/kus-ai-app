@@ -14,18 +14,18 @@ export function JyinxWorkspaceFiles({ repository, onOpenFile, onEntriesLoaded }:
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getToken = async (): Promise<string | null> => {
+    try {
+      const { data } = await createClient().auth.getSession();
+      if (data.session?.provider_token) return data.session.provider_token;
+    } catch {
+      /* fall through */
+    }
+    return getGitHubToken();
+  };
+
   useEffect(() => {
     let live = true;
-    const getToken = async (): Promise<string | null> => {
-      try {
-        const { data } = await createClient().auth.getSession();
-        if (data.session?.provider_token) return data.session.provider_token;
-      } catch {
-        /* fall through */
-      }
-      return getGitHubToken();
-    };
-
     const load = async () => {
       if (!repository) { setEntries([]); return; }
       setLoading(true); setError(null);
