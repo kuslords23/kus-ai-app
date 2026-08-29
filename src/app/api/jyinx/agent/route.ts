@@ -67,18 +67,18 @@ export async function POST(request: NextRequest): Promise<Response> {
   const endpoint = typeof body?.endpoint === "string" && body.endpoint.startsWith("https://") ? body.endpoint : undefined;
   const repository = typeof body?.repository === "string" && /^[\w.-]+\/[\w.-]+$/.test(body.repository) ? body.repository : null;
   const branch = typeof body?.branch === "string" && body.branch ? body.branch : "main";
-  const files =
+  const files: Array<{ path: string; content: string }> =
     Array.isArray(body?.repositoryFiles)
-      ? body.repositoryFiles.filter(
+      ? (body.repositoryFiles as Array<Record<string, unknown>>).filter(
           (f): f is { path: string; content: string } =>
-            Boolean(f) && typeof f === "object" && typeof (f as { path?: unknown }).path === "string" && typeof (f as { content?: unknown }).content === "string"
+            f && typeof f === "object" && typeof f.path === "string" && typeof f.content === "string"
         )
       : [];
-  const history =
+  const history: Array<{ role: "user" | "assistant"; content: string }> =
     Array.isArray(body?.history)
-      ? body.history.filter(
+      ? (body.history as Array<{ role: string; content: string }>).filter(
           (h): h is { role: "user" | "assistant"; content: string } =>
-            Boolean(h) && typeof h === "object" && (h as { role?: unknown }).role && (h as { content?: unknown }).content
+            h != null && (h.role === "user" || h.role === "assistant") && typeof h.content === "string"
         ).slice(-20)
       : [];
 
