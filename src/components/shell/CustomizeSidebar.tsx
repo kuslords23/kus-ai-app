@@ -171,7 +171,6 @@ export function CustomizeSidebar({
               <div className="rounded-2xl border border-border bg-background/50 p-4">
                 <GitHubSetup />
               </div>
-              </div>
 
               <div className="rounded-2xl border border-border bg-background/50 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-3">Quick actions</p>
