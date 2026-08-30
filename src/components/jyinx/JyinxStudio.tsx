@@ -44,7 +44,7 @@ export function JyinxStudio(_props: JyinxStudioProps) {
 function JyinxStudioInner() {
   const router = useRouter();
   const ws = useIdeWorkspace();
-  const { activeModel: sharedModel, setActiveModel: setSharedModel, selectedRepositoryId, selectedRepositoryName, setSelectedRepository: setSharedRepository } = useJyinxModelStore();
+  const { activeModel: sharedModel, setActiveModel: setSharedModel, selectedRepositoryId, selectedRepositoryName, setSelectedRepository: setSharedRepository, setMode } = useJyinxModelStore();
   const activeModel = sharedModel.id;
   const setActiveModel = (modelId: string) => setSharedModel(JYINX_MODELS.find((model) => model.id === modelId) ?? DEFAULT_JYINX_MODEL);
   // The active file + content now live in the IDE workspace buffer store.
@@ -413,7 +413,7 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
       {/* 3. Clean Bottom Tab Bar (Mobile) — just Chat, Jyinx, Royal */}
       <nav className="grid shrink-0 grid-cols-3 border-t border-border bg-surface/95 text-[11px] text-center text-muted xl:hidden">
         <button onClick={() => setDrawer("chat")} className="py-2 text-gold hover:text-gold/80 transition-colors">💬 Chat</button>
-        <button onClick={() => router.push("/jyinx")} className="py-2 hover:text-foreground transition-colors">🤖 Jyinx</button>
+        <button onClick={() => { setMode("agent"); router.push("/jyinx"); }} className="py-2 hover:text-foreground transition-colors">🤖 Jyinx</button>
         <button onClick={() => router.push("/")} className="py-2 hover:text-foreground transition-colors">👑 Royal</button>
       </nav>
 
