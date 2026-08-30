@@ -113,40 +113,75 @@ export async function POST(request: NextRequest) {
     }
     const commit = await createRes.json();
 
-    // 6. Update the branch ref (PATCH if exists, POST if new)
+    // 6. Update the branch ref
+    // Try PATCH first (existing branch), fall back to POST (new branch)
     const refPath = `heads/${encodeURIComponent(branch)}`;
-    const updateRes = await fetch(`${api}/git/ref/${refPath}`, {
+    let refUpdated = false;
+    let lastRefError = "";
+
+    // Try PATCH with `ref` path (matching the GET endpoint)
+    const patchUrl = `${api}/git/ref/${refPath}`;
+    const patchRes = await fetch(patchUrl, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ sha: commit.sha, force: true }),
     });
-    if (!updateRes.ok && updateRes.status === 404) {
-      // Branch doesn't exist yet — try to create it
-      const createRefRes = await fetch(`${api}/git/refs`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: commit.sha }),
-      });
-      if (!createRefRes.ok) {
-        if (createRefRes.status === 422) {
-          // "Reference already exists" — concurrent creation, force PATCH
-          const retryRes = await fetch(`${api}/git/ref/${refPath}`, {
+    if (patchRes.ok) {
+      refUpdated = true;
+    } else {
+      const errBody = await patchRes.text().catch(() => "");
+      lastRefError = `PATCH ${patchRes.status}: ${errBody.slice(0, 150)}`;
+
+      // If PATCH returned 404, try POST to create the ref
+      if (patchRes.status === 404) {
+        const createRes = await fetch(`${api}/git/refs`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: commit.sha }),
+        });
+        if (createRes.ok) {
+          refUpdated = true;
+        } else if (createRes.status === 422) {
+          // "Reference already exists" — concurrent creation, force PATCH retry
+          const retryRes = await fetch(patchUrl, {
             method: "PATCH",
             headers,
             body: JSON.stringify({ sha: commit.sha, force: true }),
           });
-          if (!retryRes.ok) {
-            const err = await retryRes.json().catch(() => ({ message: "Branch update failed after retry" }));
-            return NextResponse.json({ error: `Commit created but branch update failed: ${err.message}` }, { status: 500 });
+          if (retryRes.ok) {
+            refUpdated = true;
+          } else {
+            const retryErr = await retryRes.text().catch(() => "");
+            lastRefError = `PATCH retry ${retryRes.status}: ${retryErr.slice(0, 150)}`;
           }
         } else {
-          const err = await createRefRes.json().catch(() => ({ message: "Could not create branch ref" }));
-          return NextResponse.json({ error: `Commit created but branch creation failed: ${err.message}` }, { status: 500 });
+          const createErr = await createRes.text().catch(() => "");
+          lastRefError = `POST ${createRes.status}: ${createErr.slice(0, 150)}`;
         }
       }
-    } else if (!updateRes.ok) {
-      const err = await updateRes.json().catch(() => ({ message: "Branch update failed" }));
-      return NextResponse.json({ error: `Commit created but branch update failed: ${err.message}` }, { status: 500 });
+    }
+
+    // Also try alternative URL format with `refs` in the path
+    if (!refUpdated) {
+      const altUrl = `${api}/git/refs/${refPath}`;
+      const altRes = await fetch(altUrl, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ sha: commit.sha, force: true }),
+      });
+      if (altRes.ok) {
+        refUpdated = true;
+      } else {
+        const altErr = await altRes.text().catch(() => "");
+        lastRefError = `ALT ${altRes.status}: ${altErr.slice(0, 150)}`;
+      }
+    }
+
+    if (!refUpdated) {
+      return NextResponse.json({
+        error: `Commit created (${commit.sha}) but branch update failed. Last error: ${lastRefError}`,
+        partial: { sha: commit.sha },
+      }, { status: 500 });
     }
 
     return NextResponse.json({
