@@ -407,19 +407,44 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
         <div className="hidden w-72 shrink-0 lg:block">{inspectorPanel}</div>
       </div>
 
-      {/* 3. Clean Bottom Tab Bar (Mobile) */}
-      <nav className="grid shrink-0 grid-cols-7 border-t border-border bg-surface/95 text-[10px] text-center text-muted xl:hidden">
-        <button onClick={() => setDrawer("files")} className="py-2 hover:text-foreground transition-colors">Files</button>
-        <button onClick={() => setDrawer("chat")} className="py-2 text-gold hover:text-gold/80 transition-colors">Chat</button>
-        <button onClick={() => setCreateOpen(true)} className="py-2 hover:text-foreground transition-colors">Create</button>
-        <button onClick={() => setCostOpen(true)} className="py-2 hover:text-foreground transition-colors">Cost</button>
-        <button onClick={() => setDrawer("inspector")} className="py-2 hover:text-foreground transition-colors">Status</button>
-        <button onClick={() => setCustomizeSidebarOpen(true)} className="py-2 hover:text-foreground transition-colors">Settings</button>
-        <button onClick={() => router.push("/")} className="py-2 hover:text-foreground transition-colors">Royal</button>
+      {/* 3. Clean Bottom Tab Bar (Mobile) — just Chat, Jyinx, Royal */}
+      <nav className="grid shrink-0 grid-cols-3 border-t border-border bg-surface/95 text-[11px] text-center text-muted xl:hidden">
+        <button onClick={() => setDrawer("chat")} className="py-2 text-gold hover:text-gold/80 transition-colors">💬 Chat</button>
+        <button onClick={() => setDrawer("inspector")} className="py-2 hover:text-foreground transition-colors">🤖 Jyinx</button>
+        <button onClick={() => router.push("/")} className="py-2 hover:text-foreground transition-colors">👑 Royal</button>
       </nav>
 
-      {/* Drawer overlays (mobile) */}
-      {drawer && <div className="fixed inset-0 z-50 bg-black/60 lg:hidden" onClick={() => setDrawer(null)}><div className={`absolute top-0 bottom-0 w-[min(92vw,420px)] bg-surface shadow-2xl ${drawer === "files" ? "left-0" : "right-0"}`} onClick={(event) => event.stopPropagation()}>{drawer === "files" ? filesPanel : drawer === "inspector" ? inspectorPanel : builderOpen ? <BuilderPanel onClose={() => { setDrawer(null); setBuilderOpen(false); }} onLaunchAgent={handleLaunchAgent} /> : <JyinxAgentChat open onClose={() => setDrawer(null)} model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={repositoryContext.context} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} pendingPrompt={builderAgentPrompt ?? undefined} boundFile={activePath === "scratch.ts" ? undefined : activePath} defaultMode={agentPanelOpen ? "autonomous" : undefined} />}</div></div>}
+      {/* Drawer overlays (mobile) — files drawer shows a menu sidebar */}
+      {drawer && <div className="fixed inset-0 z-50 bg-black/60 lg:hidden" onClick={() => setDrawer(null)}>
+        <div className={`absolute top-0 bottom-0 w-[min(92vw,420px)] bg-surface shadow-2xl ${drawer === "files" ? "left-0" : "right-0"}`} onClick={(event) => event.stopPropagation()}>
+          {drawer === "files" ? (
+            <aside className="flex h-full flex-col overflow-y-auto p-4">
+              <header className="flex items-center justify-between border-b border-border pb-3 mb-4">
+                <p className="text-sm font-semibold">Menu</p>
+                <button type="button" onClick={() => setDrawer(null)} className="rounded-lg border border-border px-2 py-1 text-xs text-muted">Close</button>
+              </header>
+              <div className="space-y-2">
+                <button type="button" onClick={() => { /* No-op: Files is already shown */ }} className="flex w-full items-center gap-3 rounded-xl border border-gold/30 bg-gold/10 px-3 py-2.5 text-left text-xs text-gold transition-colors">📁 Files</button>
+                <button type="button" onClick={() => { setCreateOpen(true); setDrawer(null); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">＋ Create Project</button>
+                <button type="button" onClick={() => { setCostOpen(true); setDrawer(null); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">💳 Cost & Keys</button>
+                <button type="button" onClick={() => { setDrawer("inspector"); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">📊 Status</button>
+                <button type="button" onClick={() => { setCustomizeSidebarOpen(true); setDrawer(null); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">⚙ Settings</button>
+                <div className="border-t border-border pt-3 mt-3">
+                  {filesPanel}
+                </div>
+              </div>
+            </aside>
+          ) : drawer === "inspector" ? (
+            <JyinxAgentChat open onClose={() => setDrawer(null)} model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={repositoryContext.context} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} pendingPrompt={builderAgentPrompt ?? undefined} boundFile={activePath === "scratch.ts" ? undefined : activePath} defaultMode={agentPanelOpen ? "autonomous" : undefined} />
+          ) : drawer === "chat" ? (
+            builderOpen ? (
+              <BuilderPanel onClose={() => { setDrawer(null); setBuilderOpen(false); }} onLaunchAgent={handleLaunchAgent} />
+            ) : (
+              <JyinxAgentChat open onClose={() => setDrawer(null)} model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={repositoryContext.context} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} pendingPrompt={builderAgentPrompt ?? undefined} boundFile={activePath === "scratch.ts" ? undefined : activePath} />
+            )
+          ) : null}
+        </div>
+      </div>}
 
       {/* Modals */}
       <JyinxSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} activeModel={activeModel} onModelChange={setActiveModel} selectedRepositoryId={selectedRepository?.id} onRepositoryChange={(repository) => { if (repository) setSelectedRepository(repository); }} redirectPath="/jyinx" />
