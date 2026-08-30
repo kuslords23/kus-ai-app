@@ -14,7 +14,7 @@ import { StreamingText } from "@/components/ui/StreamingText";
 import { RepoReference } from "@/components/jyinx/RepoReference";
 import { extractCodeBlocks, type ExtractedFile } from "@/lib/jyinx/extract-code-blocks";
 
-type Message = { id: string; role: "user" | "assistant" | "system"; content: string; connectGithub?: boolean; kind?: "narration" | "reasoning" | "rejected" | "error" | "deploying" | "deployed" | "edit" | "done" | "log"; detail?: string; files?: Array<{ path: string; content: string }>; url?: string; summary?: string; label?: string; icon?: string };
+type Message = { id: string; role: "user" | "assistant" | "system"; content: string; connectGithub?: boolean; kind?: "narration" | "reasoning" | "rejected" | "error" | "deploying" | "deployed" | "edit" | "done" | "log" | "whitespace"; detail?: string; files?: Array<{ path: string; content: string }>; url?: string; summary?: string; label?: string; icon?: string };
 type ChatAgent = { modelId: string; endpoint: string; systemPrompt: string; tag: string };
 
 type Props = {
