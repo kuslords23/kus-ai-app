@@ -78,12 +78,21 @@ export function JyinxMobileDashboard() {
     const seed = async () => {
       try {
         const token = await getGitHubToken();
-        if (!token || cancelled) return;
+        if (!token || cancelled) {
+          if (!token) setNotice("Connect GitHub to load your repositories. Open Settings (K button) → Settings tab and paste your PAT.");
+          return;
+        }
         const response = await fetch("/api/github/repos", {
           headers: { Authorization: `Bearer ${token}` },
           cache: "no-store",
         });
-        if (!response.ok) return;
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as { error?: string };
+          // Clear the stale token so it's not reused
+          try { localStorage.removeItem("kus-ai-github-token"); } catch { /* ignore */ }
+          setNotice(data.error || "GitHub connection expired. Open Settings (K button) → Settings tab and paste your PAT.");
+          return;
+        }
         const payload = (await response.json().catch(() => ({}))) as { repositories?: JyinxRepository[] };
         if (cancelled) return;
         if (payload.repositories?.length) loadRepositories(payload.repositories);

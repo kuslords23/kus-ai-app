@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { persistGitHubToken } from "@/lib/jyinx/github-connect";
 
 type Repository = {
   id: number;
@@ -33,6 +34,8 @@ export function JyinxGitHubRepos({
   const [providerToken, setProviderToken] = useState<string | null>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [patInput, setPatInput] = useState("");
+  const [patSaving, setPatSaving] = useState(false);
 
   const connectGitHub = useCallback(async () => {
     setConnecting(true);
@@ -63,7 +66,14 @@ export function JyinxGitHubRepos({
         cache: "no-store",
       });
       const data = (await response.json().catch(() => ({}))) as { repositories?: Repository[]; error?: string };
-      if (!response.ok) throw new Error(data.error || "Could not load GitHub repositories.");
+      if (!response.ok) {
+        // Clear stale token if GitHub says it's expired
+        if (response.status === 401) {
+          try { localStorage.removeItem("kus-ai-github-token"); } catch { /* ignore */ }
+          setProviderToken(null);
+        }
+        throw new Error(data.error || "Could not load GitHub repositories.");
+      }
       const nextRepositories = data.repositories ?? [];
       setRepositories(nextRepositories);
       onRepositoriesLoaded?.(nextRepositories);
@@ -95,8 +105,15 @@ export function JyinxGitHubRepos({
         else setLoading(false);
       } catch {
         if (live) {
-          setError("Supabase authentication is not configured.");
-          setLoading(false);
+          // Session check failed, but PAT may still work via getGitHubToken fallback
+          const { getGitHubToken } = await import("@/lib/jyinx/github-connect");
+          const token = await getGitHubToken().catch(() => null);
+          if (live) {
+            setProviderToken(token);
+            setSessionChecked(true);
+            if (token) await loadRepositories(token);
+            else setLoading(false);
+          }
         }
       }
     };
@@ -124,7 +141,46 @@ export function JyinxGitHubRepos({
         <div><p className="text-sm font-medium">GitHub repositories</p><p className="mt-0.5 text-[11px] text-muted">Choose a repository for Jyinx context.</p></div>
         {providerToken && <button type="button" onClick={() => void loadRepositories(providerToken)} className="text-[11px] text-gold hover:text-gold-light">Refresh</button>}
       </div>
-      {!providerToken && sessionChecked && !loading && <button type="button" onClick={() => void connectGitHub()} disabled={connecting} className="mt-3 w-full rounded-xl border border-gold/35 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/20 disabled:opacity-60">{connecting ? "Opening GitHub…" : "Connect GitHub"}</button>}
+      {!providerToken && sessionChecked && !loading && (
+        <div className="space-y-2">
+          <button type="button" onClick={() => void connectGitHub()} disabled={connecting} className="w-full rounded-xl border border-gold/35 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/20 disabled:opacity-60">{connecting ? "Opening GitHub…" : "Connect GitHub (OAuth)"}</button>
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+            <div className="relative flex justify-center text-[10px]"><span className="bg-surface px-2 text-muted">or use PAT</span></div>
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={patInput}
+              onChange={(e) => setPatInput(e.target.value)}
+              placeholder="github_pat_11AA..."
+              className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-[11px] outline-none focus:border-gold/50"
+            />
+            <button
+              type="button"
+              onClick={async () => {
+                const token = patInput.trim();
+                if (!token) return;
+                setPatSaving(true);
+                try {
+                  await persistGitHubToken(token);
+                  setProviderToken(token);
+                  setPatInput("");
+                  await loadRepositories(token);
+                } catch (cause) {
+                  setError(cause instanceof Error ? cause.message : "Failed to save token");
+                } finally {
+                  setPatSaving(false);
+                }
+              }}
+              disabled={patSaving || !patInput.trim()}
+              className="shrink-0 rounded-lg bg-gold px-3 py-1.5 text-[11px] font-semibold text-background hover:bg-gold/90 disabled:opacity-50 transition-colors"
+            >
+              {patSaving ? "…" : "Save"}
+            </button>
+          </div>
+        </div>
+      )}
       {loading && <p className="mt-3 text-xs text-muted">Checking GitHub connection…</p>}
       {!loading && !sessionChecked && <p className="mt-3 text-xs text-muted">Restoring GitHub session…</p>}
       {error && <p className="mt-3 text-xs leading-relaxed text-danger">{error}</p>}
