@@ -331,6 +331,27 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 flex flex-col space-y-3 overflow-y-auto p-4">
+        {/* Autonomous mode header banner — always visible at top */}
+        {mode === "autonomous" && (
+          <div className="w-full rounded-xl border border-gold/30 bg-gold/5 p-3 mb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {sending ? (
+                  <span className="inline-block h-2 w-2 rounded-full bg-gold animate-pulse" />
+                ) : (
+                  <span className="inline-block h-2 w-2 rounded-full bg-success" />
+                )}
+                <span className="text-xs font-medium text-gold">🤖 Autonomous mode</span>
+              </div>
+              {thoughtSteps.length > 0 && (
+                <span className="text-[10px] text-muted">{thoughtSteps.length} step(s)</span>
+              )}
+            </div>
+            {!sending && thoughtSteps.length > 0 && (
+              <p className="mt-1 text-[10px] text-muted">Last step completed. Switch to 💬 Chat to refine, or run another task.</p>
+            )}
+          </div>
+        )}
         {/* Welcome suggestion chips — only in chat mode when no messages */}
         {mode === "chat" && messages.length <= 1 && (
           <div className="self-start w-full max-w-full space-y-2 pb-2">
@@ -350,13 +371,9 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
           </div>
         )}
 
-        {mode === "autonomous" && messages.length === 0 && !sending && (
-          <p className="text-sm text-muted self-start">Describe an autonomous change. Jyinx will draft edits, review them, and commit them to GitHub.</p>
-        )}
-
         {/* Autonomous mode: live thought process + agent status */}
         {mode === "autonomous" && thoughtSteps.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-2 w-full">
             <ExpandableThoughtProcess steps={thoughtSteps} defaultExpanded />
 
             {/* Live status indicator */}
@@ -370,6 +387,11 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
               </div>
             )}
           </div>
+        )}
+
+        {/* Empty state when in autonomous mode */}
+        {mode === "autonomous" && messages.length === 0 && !sending && (
+          <p className="text-sm text-muted self-start">Describe an autonomous change. Jyinx will draft edits, review them, and commit them to GitHub.</p>
         )}
 
         {messages.map((message, idx) => (
@@ -404,12 +426,6 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
             </article>
           )
         ))}
-        {sending && mode === "autonomous" && (
-          <div className="flex items-center gap-2 px-1 py-1 text-xs text-muted self-start">
-            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gold border-t-transparent" />
-            Working through the pipeline…
-          </div>
-        )}
         {sending && mode === "chat" && (
           <div className="max-w-[85%] w-fit self-start rounded-2xl border border-border bg-background/65 p-3 text-sm text-muted">
             <div className="flex items-center gap-2">
