@@ -21,6 +21,7 @@ import { PreviewLayout } from "@/components/jyinx/PreviewLayout";
 import { CreateProjectModal } from "@/components/CreateProjectModal";
 import { CostTracker } from "@/components/CostTracker";
 import { CommandPalette } from "@/components/jyinx/commands/CommandPalette";
+import { SidebarCommands } from "@/components/jyinx/SidebarCommands";
 import { createAgentBridge, buildIdeState, type IdeState, type LastRunResult } from "@/lib/bridge";
 import { consumeNotebookHand } from "@/lib/jyinx/notebooks";
 import { useRepositoryContext } from "@/lib/jyinx/use-repository-context";
@@ -75,6 +76,7 @@ function JyinxStudioInner() {
   const [commitState, setCommitState] = useState<"idle" | "committing" | "done" | "error">("idle");
   const [commitMessage, setCommitMessage] = useState("Jyinx update");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [commandsOpen, setCommandsOpen] = useState(false);
   const [lastResult, setLastResult] = useState<LastRunResult>({ kind: "idle", status: "idle", at: null });
 
   // In-IDE agent controller: applies the agent's streamed edits to the live
@@ -428,6 +430,7 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
               </header>
               <div className="space-y-2">
                 <button type="button" onClick={() => { /* No-op: Files is already shown */ }} className="flex w-full items-center gap-3 rounded-xl border border-gold/30 bg-gold/10 px-3 py-2.5 text-left text-xs text-gold transition-colors">📁 Files</button>
+                <button type="button" onClick={() => { setCommandsOpen(true); setDrawer(null); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">⌘ Commands</button>
                 <button type="button" onClick={() => { setBuilderOpen(true); setDrawer("builder"); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">🛠 Builder</button>
                 <button type="button" onClick={() => { setCreateFlowOpen(true); setDrawer(null); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">＋ Create Project</button>
                 <button type="button" onClick={() => { setCostOpen(true); setDrawer(null); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">💳 Cost & Keys</button>
@@ -472,6 +475,17 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
       {costOpen && <div className="fixed inset-0 z-[70] bg-black/70 p-4 sm:p-6" onClick={() => setCostOpen(false)}><section className="mx-auto mt-8 h-full max-h-[70vh] max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}><header className="flex items-center justify-between border-b border-border pb-3"><p className="text-sm font-semibold">Cost & keys</p><button type="button" onClick={() => setCostOpen(false)} className="rounded-lg border border-border px-2 py-1 text-xs text-muted">Close</button></header><div className="py-4"><CostTracker /></div></section></div>}
       <CustomizeSidebar open={customizeSidebarOpen} onClose={() => setCustomizeSidebarOpen(false)} queue={queue} activeModel={activeModelInfo} onModelChange={setActiveModel} selectedRepository={selectedRepository} onSelectRepository={setSelectedRepository} onAutonomousToggle={() => setAgentPanelOpen((current) => !current)} autonomousEnabled={agentPanelOpen} onCostClick={() => { setCostOpen(true); setCustomizeSidebarOpen(false); }} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={bridge.registry.list()} onRun={onRunCommand} state={ideState} />
+      {commandsOpen && (
+        <div className="fixed inset-0 z-[70] bg-black/60" onClick={() => setCommandsOpen(false)}>
+          <aside className="absolute right-0 top-0 h-full w-[min(92vw,400px)] overflow-y-auto border-l border-border bg-surface p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <header className="flex items-center justify-between border-b border-border pb-3 mb-3">
+              <p className="text-sm font-semibold">⌘ Commands</p>
+              <button type="button" onClick={() => setCommandsOpen(false)} className="rounded-lg border border-border px-2 py-1 text-xs text-muted">Close</button>
+            </header>
+            <SidebarCommands commands={bridge.registry.list()} onRun={onRunCommand} onClose={() => setCommandsOpen(false)} />
+          </aside>
+        </div>
+      )}
       {notice && (() => {
     const isAuthError = notice.toLowerCase().includes("github") || notice.toLowerCase().includes("connect") || notice.toLowerCase().includes("token") || notice.toLowerCase().includes("auth") || notice.toLowerCase().includes("expired") || notice.toLowerCase().includes("scope") || notice.toLowerCase().includes("permission");
     return (
