@@ -47,21 +47,28 @@ export async function POST(request: NextRequest) {
   const api = `https://api.github.com/repos/${repository}`;
 
   try {
-    // 1. Get the latest commit SHA on the branch
-    const refRes = await fetch(`${api}/git/ref/heads/${encodeURIComponent(branch)}`, { headers });
-    if (!refRes.ok) {
-      const err = await refRes.json().catch(() => ({ message: "Branch not found" }));
-      return NextResponse.json({ error: err.message || `GitHub: ${refRes.status}` }, { status: refRes.status });
-    }
-    const ref = await refRes.json();
-    const baseSha = ref.object?.sha;
-    if (!baseSha) return NextResponse.json({ error: "Could not resolve branch head." }, { status: 500 });
+    // 1. Try to get the latest commit SHA on the branch
+    let baseSha: string | undefined;
+    let baseTree: string | undefined;
 
-    // 2. Get the tree SHA from the base commit
-    const commitRes = await fetch(`${api}/git/commits/${baseSha}`, { headers });
-    const commitData = await commitRes.json();
-    const baseTree = commitData.tree?.sha;
-    if (!baseTree) return NextResponse.json({ error: "Could not resolve base tree." }, { status: 500 });
+    const refRes = await fetch(`${api}/git/ref/heads/${encodeURIComponent(branch)}`, { headers });
+    if (refRes.ok) {
+      const ref = await refRes.json();
+      baseSha = ref.object?.sha;
+      if (baseSha) {
+        // Get the tree SHA from the base commit
+        const commitRes = await fetch(`${api}/git/commits/${baseSha}`, { headers });
+        if (commitRes.ok) {
+          const commitData = await commitRes.json();
+          baseTree = commitData.tree?.sha;
+        }
+      }
+    } else if (refRes.status !== 404) {
+      const err = await refRes.json().catch(() => ({ message: "Branch check failed" }));
+      return NextResponse.json({ error: err.message || `GitHub: ${refRes.status}` }, { status: refRes.status });
+    } else {
+      isNewBranch = true;
+    }
 
     // 3. Create blobs for each file
     const entries: Array<{ path: string; mode: "100644"; type: "blob"; sha: string }> = [];
@@ -79,11 +86,13 @@ export async function POST(request: NextRequest) {
       entries.push({ path: file.path, mode: "100644", type: "blob", sha: blob.sha });
     }
 
-    // 4. Create a new tree
+    // 4. Create a new tree (with or without base tree)
+    const treeBody: Record<string, unknown> = { tree: entries };
+    if (baseTree) treeBody.base_tree = baseTree;
     const treeRes = await fetch(`${api}/git/trees`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ base_tree: baseTree, tree: entries }),
+      body: JSON.stringify(treeBody),
     });
     if (!treeRes.ok) {
       const err = await treeRes.json().catch(() => ({ message: "Tree creation failed" }));
@@ -91,8 +100,9 @@ export async function POST(request: NextRequest) {
     }
     const tree = await treeRes.json();
 
-    // 5. Create a commit
-    const commitPayload = { message: message.slice(0, 200), tree: tree.sha, parents: [baseSha] };
+    // 5. Create a commit (with or without parent)
+    const commitPayload: { message: string; tree: string; parents?: string[] } = { message: message.slice(0, 200), tree: tree.sha };
+    if (baseSha) commitPayload.parents = [baseSha];
     const createRes = await fetch(`${api}/git/commits`, {
       method: "POST",
       headers,
@@ -104,13 +114,25 @@ export async function POST(request: NextRequest) {
     }
     const commit = await createRes.json();
 
-    // 6. Update the branch ref
-    const updateRes = await fetch(`${api}/git/ref/heads/${encodeURIComponent(branch)}`, {
+    // 6. Update the branch ref (PATCH if exists, POST if new)
+    const refPath = `heads/${encodeURIComponent(branch)}`;
+    const updateRes = await fetch(`${api}/git/ref/${refPath}`, {
       method: "PATCH",
       headers,
       body: JSON.stringify({ sha: commit.sha, force: true }),
     });
-    if (!updateRes.ok) {
+    if (!updateRes.ok && updateRes.status === 404) {
+      // Branch doesn't exist yet — create it (first commit)
+      const createRefRes = await fetch(`${api}/git/refs`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: commit.sha }),
+      });
+      if (!createRefRes.ok) {
+        const err = await createRefRes.json().catch(() => ({ message: "Could not create branch ref" }));
+        return NextResponse.json({ error: `Commit created but branch creation failed: ${err.message}` }, { status: 500 });
+      }
+    } else if (!updateRes.ok) {
       const err = await updateRes.json().catch(() => ({ message: "Branch update failed" }));
       return NextResponse.json({ error: `Commit created but branch update failed: ${err.message}` }, { status: 500 });
     }
