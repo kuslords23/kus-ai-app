@@ -134,18 +134,7 @@ export async function getGitHubToken(): Promise<string | null> {
   // 1. Try localStorage FIRST — user-entered PAT or cached OAuth token
   try {
     const localToken = localStorage.getItem(LOCALSTORAGE_KEY);
-    if (localToken) {
-      // Quick validation: verify it's still valid against GitHub
-      const check = await fetch("/api/github/commit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localToken}` },
-        body: JSON.stringify({ action: "scope" }),
-        cache: "no-store",
-      }).catch(() => null);
-      if (check?.ok) return localToken;
-      // Token expired/invalid — remove it so we fall through
-      try { localStorage.removeItem(LOCALSTORAGE_KEY); } catch { /* ignore */ }
-    }
+    if (localToken) return localToken;
   } catch {
     /* fall through */
   }
@@ -164,20 +153,9 @@ export async function getGitHubToken(): Promise<string | null> {
       if (res.ok) {
         const body = (await res.json()) as { token?: string };
         if (body.token) {
-          // Verify the DB token is still valid
-          const check = await fetch("/api/github/commit", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${body.token}` },
-            body: JSON.stringify({ action: "scope" }),
-            cache: "no-store",
-          }).catch(() => null);
-          if (check?.ok) {
-            // Cache in localStorage
-            try { localStorage.setItem(LOCALSTORAGE_KEY, body.token); } catch { /* ignore */ }
-            return body.token;
-          }
-          // DB token is stale — remove it
-          try { await fetch("/api/github-pat", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) }).catch(() => {}); } catch { /* ignore */ }
+          // Cache in localStorage for next time
+          try { localStorage.setItem(LOCALSTORAGE_KEY, body.token); } catch { /* ignore */ }
+          return body.token;
         }
       }
     }
