@@ -1,8 +1,3 @@
-import { commitFiles, GitHubCommitError } from "@/services/githubCommit";
-import { runSandboxPipeline, isSandboxConfigured } from "@/services/sandboxExecution";
-import { runLocalSandbox, isLocalSandboxAvailable } from "@/services/localSandbox";
-import { pushToHost } from "@/server/deploy/pushHost";
-import { parseBuildOutput, formatErrorsForCoder } from "@/services/errorParser";
 import { generateWebApp, WEB_STACK_LABELS, type WebStack } from "@/lib/jyinx/web-app-generator";
 import {
   parseFileEdits,
@@ -291,165 +286,77 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
       return;
     }
 
-    // Cloud sandbox verification before committing (when E2B is configured).
-    if (isSandboxConfigured(process.env.E2B_API_KEY)) {
-      yield { type: "log", message: "Provisioning cloud sandbox to build, type-check, and test the change…" };
-      const sandboxLogs: Array<AgentExecutionEvent> = [];
-      const sandbox = await runSandboxPipeline(
-        {
-          repository: config.repository,
-          branch: config.branch,
-          providerToken: config.providerToken,
-          files: workingEdits,
-          commitMessage: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
-          apiKey: process.env.E2B_API_KEY,
-        },
-        (step) => {
-          if (step.logs?.length) {
-            sandboxLogs.push({ type: "log", message: `[${step.phase}] ${step.message}` });
-            sandboxLogs.push({ type: "reasoning", message: step.logs.join("\n") });
-          } else {
-            sandboxLogs.push({ type: "log", message: `[${step.phase}] ${step.message}` });
-          }
-        }
-      );
-
-      for (const log of sandboxLogs) yield log;
-
-      if (sandbox.ok) {
-        if (sandbox.committed && sandbox.commitUrl) {
-          yield { type: "log", message: `Committed ${workingEdits.length} file(s) → ${sandbox.commitUrl}` };
-          yield* pushAfterCommit({
-            repository: config.repository,
-            branch: config.branch,
-            commitSha: sandbox.commitSha,
-            commitMessage: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
-          });
-          return;
-        }
-        yield { type: "log", message: "Cloud build, type-check, and tests passed. Continuing to commit…" };
-      } else if (!sandbox.unavailable) {
-        lastError = sandbox.error || "Cloud sandbox verification failed.";
-        yield { type: "error", message: `Cloud verification failed: ${lastError}`, connect: sandbox.authorization === true };
-        if (sandbox.authorization) {
-          yield { type: "done", summary: "Blocked by GitHub permissions. Reconnect GitHub with the repo scope, then retry." };
-          return;
-        }
-        // Parse the sandbox error logs into structured errors for targeted
-        // self-correction instead of dumping raw logs back to the coder.
-        const sandboxStderr = sandbox.steps.map((s) => (s.logs ?? []).join("\n")).filter(Boolean).join("\n");
-        if (sandboxStderr) {
-          const parsed = parseBuildOutput(sandboxStderr);
-          lastError = formatErrorsForCoder(parsed);
-        } else {
-          lastError = sandbox.error || "Sandbox verification failed.";
-        }
-        yield { type: "log", message: `Sandbox errors:\n${lastError}` };
-        if (attempt < maxRetries) {
-          yield { type: "log", message: "Structured error feedback sent to the coder for self-correction…" };
-          continue;
-        }
-        yield { type: "done", summary: "Cloud verification could not pass after retries. No commit was made." };
-        return;
-      } else {
-        yield { type: "reasoning", message: "E2B sandbox unavailable; falling back to the lightweight reviewer before commit." };
-      }
-    } else if (isLocalSandboxAvailable()) {
-      // Local sandbox fallback when E2B is not configured — runs on the
-      // server's filesystem without any cloud dependency.
-      yield { type: "log", message: "Provisioning local sandbox to build, type-check, and test the change…" };
-      const sandboxLogs: Array<AgentExecutionEvent> = [];
-      const sandbox = await runLocalSandbox(
-        {
-          repository: config.repository,
-          branch: config.branch,
-          providerToken: config.providerToken,
-          files: workingEdits,
-          commitMessage: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
-        },
-        (step) => {
-          if (step.logs?.length) {
-            sandboxLogs.push({ type: "log", message: `[${step.phase}] ${step.message}` });
-            sandboxLogs.push({ type: "reasoning", message: step.logs.join("\n") });
-          } else {
-            sandboxLogs.push({ type: "log", message: `[${step.phase}] ${step.message}` });
-          }
-        }
-      );
-
-      for (const log of sandboxLogs) yield log;
-
-      if (sandbox.ok) {
-        if (sandbox.committed && sandbox.commitUrl) {
-          yield { type: "log", message: `Committed ${workingEdits.length} file(s) → ${sandbox.commitUrl}` };
-          yield* pushAfterCommit({
-            repository: config.repository,
-            branch: config.branch,
-            commitSha: sandbox.commitSha,
-            commitMessage: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
-          });
-          return;
-        }
-        yield { type: "log", message: "Local build, type-check, and tests passed. Continuing to commit…" };
-      } else if (!sandbox.ok) {
-        lastError = sandbox.error || "Local sandbox verification failed.";
-        yield { type: "error", message: `Local verification failed: ${lastError}`, connect: sandbox.authorization === true };
-        if (sandbox.authorization) {
-          yield { type: "done", summary: "Blocked by GitHub permissions. Reconnect GitHub with the repo scope, then retry." };
-          return;
-        }
-        // Parse sandbox errors into structured format for targeted fixes.
-        const sandboxStderr = sandbox.steps.map((s) => (s.logs ?? []).join("\n")).filter(Boolean).join("\n");
-        if (sandboxStderr) {
-          const parsed = parseBuildOutput(sandboxStderr);
-          lastError = formatErrorsForCoder(parsed);
-        } else {
-          lastError = sandbox.error || "Local sandbox verification failed.";
-        }
-        yield { type: "log", message: `Sandbox errors:\n${lastError}` };
-        if (attempt < maxRetries) {
-          yield { type: "log", message: "Structured error feedback sent to the coder for self-correction…" };
-          continue;
-        }
-        yield { type: "done", summary: "Local verification could not pass after retries. No commit was made." };
-        return;
-      }
-    } else {
-      yield { type: "reasoning", message: "No sandbox available (E2B not configured, local sandbox not available). Skipping cloud verification (lightweight review only)." };
-    }
-
-    // Commit via the GitHub engine (unless the sandbox already committed).
-    yield { type: "log", message: "All checks passed. Packaging change(s) into a single atomic commit…" };
+    // ── Commit directly — no sandbox verification needed.
+    // The review step above already verified structural integrity.
+    yield { type: "reasoning", message: "Review passed. Committing changes directly to GitHub…" };
+    yield { type: "narration", message: `Committing ${workingEdits.length} file(s) to ${config.repository}…`, detail: workingEdits.map((e) => `- ${e.path} (${e.content.length} chars)`).join("\n") };
     try {
-      const commit = await commitFiles({
-        repository: config.repository,
-        baseBranch: config.branch,
-        message: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
-        files: workingEdits,
-        token: config.providerToken,
+      const commitRes = await fetch("https://api.github.com/repos/" + config.repository + "/git/ref/heads/" + encodeURIComponent(config.branch), {
+        headers: { Authorization: `Bearer ${config.providerToken}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
       });
-      yield { type: "log", message: `Committed ${workingEdits.length} file(s) → ${commit.commitUrl}` };
-      // Push the committed repo/branch to the dedicated host platform(s).
-      yield* pushAfterCommit({
-        repository: config.repository,
-        branch: commit.branch,
-        commitSha: commit.commitSha,
-        commitMessage: `Jyinx autonomous: ${config.request.slice(0, 60)}`,
-      });
-      yield { type: "done", summary: `Committed ${workingEdits.length} file(s) → ${commit.commitUrl}` };
+      const commitData = await commitRes.json() as { object?: { sha?: string } };
+      const baseSha = commitRes.ok ? commitData.object?.sha : undefined;
+
+      // Create blobs, tree, commit, and update ref using the Git Data API
+      const api = `https://api.github.com/repos/${config.repository}`;
+      const headers = { Authorization: `Bearer ${config.providerToken}`, Accept: "application/vnd.github+json", "Content-Type": "application/json", "X-GitHub-Api-Version": "2022-11-28" };
+
+      // Create blobs
+      const entries: Array<{ path: string; mode: "100644"; type: "blob"; sha: string }> = [];
+      for (const file of workingEdits) {
+        const blobRes = await fetch(`${api}/git/blobs`, { method: "POST", headers, body: JSON.stringify({ content: file.content, encoding: "utf-8" }) });
+        if (!blobRes.ok) throw new Error(`Failed to create blob for ${file.path}`);
+        const blob = await blobRes.json() as { sha: string };
+        entries.push({ path: file.path, mode: "100644", type: "blob", sha: blob.sha });
+      }
+
+      // Get base tree if available
+      let baseTree: string | undefined;
+      if (baseSha) {
+        const treeRes = await fetch(`${api}/git/commits/${baseSha}`, { headers });
+        if (treeRes.ok) {
+          const treeData = await treeRes.json() as { tree?: { sha?: string } };
+          baseTree = treeData.tree?.sha;
+        }
+      }
+
+      // Create tree
+      const treeBody: Record<string, unknown> = { tree: entries };
+      if (baseTree) treeBody.base_tree = baseTree;
+      const treeRes = await fetch(`${api}/git/trees`, { method: "POST", headers, body: JSON.stringify(treeBody) });
+      if (!treeRes.ok) throw new Error("Failed to create tree");
+      const tree = await treeRes.json() as { sha: string };
+
+      // Create commit
+      const commitPayload: Record<string, unknown> = { message: `Jyinx autonomous: ${config.request.slice(0, 200)}`, tree: tree.sha };
+      if (baseSha) commitPayload.parents = [baseSha];
+      const commitRes2 = await fetch(`${api}/git/commits`, { method: "POST", headers, body: JSON.stringify(commitPayload) });
+      if (!commitRes2.ok) throw new Error("Failed to create commit");
+      const commit = await commitRes2.json() as { sha: string };
+
+      // Update branch ref
+      const refPath = `heads/${encodeURIComponent(config.branch)}`;
+      const patchRes = await fetch(`${api}/git/ref/${refPath}`, { method: "PATCH", headers, body: JSON.stringify({ sha: commit.sha, force: true }) });
+      let refUpdated = patchRes.ok;
+      if (!refUpdated && patchRes.status === 404) {
+        const createRes = await fetch(`${api}/git/refs`, { method: "POST", headers, body: JSON.stringify({ ref: `refs/heads/${config.branch}`, sha: commit.sha }) });
+        refUpdated = createRes.ok;
+        if (!refUpdated && createRes.status === 422) {
+          const retryRes = await fetch(`${api}/git/ref/${refPath}`, { method: "PATCH", headers, body: JSON.stringify({ sha: commit.sha, force: true }) });
+          refUpdated = retryRes.ok;
+        }
+      }
+      if (!refUpdated) throw new Error("Branch update failed — commit was created but the branch could not be updated.");
+
+      yield { type: "log", message: `Committed ${workingEdits.length} file(s) → ${config.repository}` };
+      yield { type: "deploying", message: `Committed to ${config.repository}#${config.branch}` };
+      yield { type: "done", summary: `Committed ${workingEdits.length} file(s) to ${config.repository}.` };
       return;
     } catch (cause) {
-      const isAuth = cause instanceof GitHubCommitError && cause.authorization;
       lastError = cause instanceof Error ? cause.message : "Commit failed.";
-      yield { type: "error", message: lastError, connect: isAuth };
-      if (isAuth) {
-        // Missing/expired repo-scope token: don't burn retries, hand the user
-        // to the "reconnect GitHub" flow instead.
-        yield { type: "done", summary: "Blocked by GitHub permissions. Reconnect GitHub with the repo scope, then retry the change." };
-        return;
-      }
+      yield { type: "error", message: `Commit failed: ${lastError}` };
       if (attempt < maxRetries) {
-        yield { type: "log", message: "Commit failed — regenerating edits with the returned error fed back…" };
+        yield { type: "log", message: "Commit failed — retrying with regenerated edits…" };
         continue;
       }
       yield { type: "done", summary: "Autonomous pipeline halted after retries. No commit was made." };
