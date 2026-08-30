@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getGitHubToken, clearStaleAuthKeys, clearPersistedGitHubToken, connectGitHub } from "@/lib/jyinx/github-connect";
-import { JyinxChatPanel } from "@/components/jyinx/JyinxChatPanel";
 import { JyinxGitHubRepos, type JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
 import { JyinxSettingsPanel } from "@/components/jyinx/JyinxSettingsPanel";
 import { JyinxWorkspaceFiles } from "@/components/jyinx/JyinxWorkspaceFiles";
@@ -13,6 +12,19 @@ import { BuilderPanel } from "@/components/jyinx/BuilderPanel";
 import { CreateProjectFlow } from "@/components/jyinx/CreateProjectFlow";
 import { CommitButton } from "@/components/jyinx/CommitButton";
 import { IdeWorkspaceProvider, useIdeWorkspace } from "@/lib/ide/workspace";
+import { useJyinxModelStore } from "@/lib/jyinx/model-store";
+import { HierarchicalModelSelector } from "@/components/models/HierarchicalModelSelector";
+import { providerFromModel, type HierarchicalSelection } from "@/lib/models/catalog";
+import { AgentIdeController } from "@/lib/ide/controller";
+import { CustomizeSidebar } from "@/components/shell/CustomizeSidebar";
+import { PreviewLayout } from "@/components/jyinx/PreviewLayout";
+import { CreateProjectModal } from "@/components/CreateProjectModal";
+import { CostTracker } from "@/components/CostTracker";
+import { CommandPalette } from "@/components/jyinx/commands/CommandPalette";
+import { createAgentBridge, buildIdeState, type IdeState, type LastRunResult } from "@/lib/bridge";
+import { consumeNotebookHand } from "@/lib/jyinx/notebooks";
+import { useRepositoryContext } from "@/lib/jyinx/use-repository-context";
+import { DEFAULT_JYINX_MODEL, JYINX_MODELS } from "@/lib/jyinx/model-registry";
 
 type QueueState = { status: "ONLINE" | "OFFLINE" | "CONNECTING"; pendingItems: number; lastSync: string | null; total: number };
 
