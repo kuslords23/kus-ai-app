@@ -354,9 +354,22 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
           <p className="text-sm text-muted self-start">Describe an autonomous change. Jyinx will draft edits, review them, and commit them to GitHub.</p>
         )}
 
-        {/* Expandable thought process for autonomous mode */}
+        {/* Autonomous mode: live thought process + agent status */}
         {mode === "autonomous" && thoughtSteps.length > 0 && (
-          <ExpandableThoughtProcess steps={thoughtSteps} />
+          <div className="space-y-2">
+            <ExpandableThoughtProcess steps={thoughtSteps} defaultExpanded />
+
+            {/* Live status indicator */}
+            {sending && (
+              <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-muted border border-gold/20 bg-gold/[0.03] rounded-xl">
+                <span className="inline-block h-2 w-2 rounded-full bg-gold animate-pulse" />
+                <span className="font-medium text-gold">Agent working...</span>
+                <span className="text-muted/60">
+                  {thoughtSteps.filter(s => s.status === "active" || s.status === "done").length} step(s)
+                </span>
+              </div>
+            )}
+          </div>
         )}
 
         {messages.map((message, idx) => (

@@ -18,11 +18,13 @@ export interface ThoughtStep {
 export function ExpandableThoughtProcess({
   steps,
   className = "",
+  defaultExpanded = true,
 }: {
   steps: ThoughtStep[];
   className?: string;
+  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
 
   if (steps.length === 0) return null;
