@@ -20,14 +20,15 @@ export type CommandCategory =
 export const COMMAND_CATEGORIES: ReadonlyArray<{
   id: CommandCategory;
   label: string;
+  icon: string;
 }> = [
-  { id: "file", label: "File" },
-  { id: "edit", label: "Edit" },
-  { id: "view", label: "View" },
-  { id: "run", label: "Run" },
-  { id: "source-control", label: "Source Control" },
-  { id: "agent", label: "Agent" },
-  { id: "window", label: "Window / Layout" },
+  { id: "file", label: "File", icon: "🗒" },
+  { id: "edit", label: "Edit", icon: "✏️" },
+  { id: "view", label: "View", icon: "👁" },
+  { id: "run", label: "Run", icon: "▶" },
+  { id: "source-control", label: "Source Control", icon: "✅" },
+  { id: "agent", label: "Agent", icon: "🤖" },
+  { id: "window", label: "Window / Layout", icon: "⌘" },
 ];
 
 export interface ArgField {
