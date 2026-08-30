@@ -122,16 +122,25 @@ export function clearStaleAuthKeys(): void {
  * Returns a GitHub token that can write to repositories.
  *
  * Resolution order:
- *   1. GitHub App installation token (auto-refreshed, preferred)
- *   2. localStorage — user-entered PAT or cached OAuth token
+ *   1. localStorage — user-entered PAT or cached token (fastest, no network)
+ *   2. GitHub App installation token (auto-refreshed, preferred)
  *   3. Supabase database (github_pat_tokens) — user-attached, permanent
  *   4. Supabase session provider_token — ephemeral, last resort
  *
- * GitHub App tokens are checked first because they have automatic refresh
- * and don't expire as long as the user has the app installed.
+ * localStorage is checked FIRST because it's instant and the user's PAT
+ * is the most reliable method. GitHub App tokens are checked second since
+ * they require an API call to the server.
  */
 export async function getGitHubToken(): Promise<string | null> {
-  // 1. Try GitHub App installation token (auto-refreshed, preferred)
+  // 1. Try localStorage FIRST — instant, no network call
+  try {
+    const localToken = localStorage.getItem(LOCALSTORAGE_KEY);
+    if (localToken && localToken.length > 20) return localToken;
+  } catch {
+    /* fall through */
+  }
+
+  // 2. Try GitHub App installation token (auto-refreshed)
   try {
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
@@ -151,14 +160,6 @@ export async function getGitHubToken(): Promise<string | null> {
         }
       }
     }
-  } catch {
-    /* fall through */
-  }
-
-  // 2. Try localStorage — user-entered PAT or cached token
-  try {
-    const localToken = localStorage.getItem(LOCALSTORAGE_KEY);
-    if (localToken) return localToken;
   } catch {
     /* fall through */
   }

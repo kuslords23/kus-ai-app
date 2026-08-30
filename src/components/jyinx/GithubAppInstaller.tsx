@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { persistGitHubToken, clearStaleAuthKeys } from "@/lib/jyinx/github-connect";
 
 /**
  * GithubAppInstaller — Primary GitHub auth via GitHub App installation.
@@ -154,7 +155,16 @@ export function GithubAppInstaller({
               if (!token) return;
               setPatSaving(true);
               try {
-                localStorage.setItem("kus-ai-github-token", token);
+                // Clear stale auth keys that might interfere
+                clearStaleAuthKeys();
+                // Use persistGitHubToken which saves to localStorage + Supabase DB
+                await persistGitHubToken(token);
+                // Verify it was saved correctly by reading it back
+                const saved = localStorage.getItem("kus-ai-github-token");
+                if (!saved || saved !== token) {
+                  // Fallback: try direct save
+                  localStorage.setItem("kus-ai-github-token", token);
+                }
                 await testPat(token);
               } finally {
                 setPatSaving(false);

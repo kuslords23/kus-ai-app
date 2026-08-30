@@ -90,7 +90,7 @@ export function JyinxMobileDashboard() {
           const data = (await response.json().catch(() => ({}))) as { error?: string };
           // Clear the stale token so it's not reused
           try { localStorage.removeItem("kus-ai-github-token"); } catch { /* ignore */ }
-          setNotice(data.error || "GitHub connection expired. Open Settings (K button) → Settings tab and paste your PAT.");
+          setNotice(data.error || "GitHub token rejected. Open Settings (K button) → Settings tab and paste your PAT.");
           return;
         }
         const payload = (await response.json().catch(() => ({}))) as { repositories?: JyinxRepository[] };

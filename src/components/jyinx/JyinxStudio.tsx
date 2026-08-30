@@ -152,7 +152,9 @@ function JyinxStudioInner() {
       if (!response.ok) {
         const msg = result.error || `HTTP ${response.status}: ${body.slice(0, 200)}`;
         if (result.authorization || response.status === 401 || response.status === 403 || response.status === 404) {
-          setNotice(`GitHub access expired for ${selectedRepository.fullName}. Open Settings → Settings tab and paste your PAT (repo scope) to reconnect.`);
+          // Clear the stale token so it's not reused
+          try { localStorage.removeItem("kus-ai-github-token"); } catch { /* ignore */ }
+          setNotice(`GitHub token rejected for ${selectedRepository.fullName}. Open Settings → Settings tab and paste your PAT (repo scope) to reconnect.`);
           setCommitState("error");
           return;
         }
