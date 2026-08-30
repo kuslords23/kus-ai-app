@@ -282,12 +282,12 @@ function JyinxStudioInner() {
         setTheme: () => undefined,
       },
       agent: {
-        ask: (prompt) => { setNotebookPrompt(prompt || "Help me with the active file."); setDrawer("chat"); },
-        explain: () => { setNotebookPrompt(`Explain ${activePath}.`); setDrawer("chat"); },
-        fixError: () => { setNotebookPrompt(`Fix errors in ${activePath}.`); setDrawer("chat"); },
-        refactor: (path, goal) => { setNotebookPrompt(`Refactor ${path || activePath}${goal ? `: ${goal}` : ""}.`); setDrawer("chat"); },
-        generate: (prompt) => { setNotebookPrompt(prompt); setDrawer("chat"); },
-        preview: (path) => { setNotebookPrompt(`Generate a live preview for ${path || activePath}.`); setDrawer("chat"); },
+        ask: (prompt) => { setDrawer("chat"); },
+        explain: () => { setDrawer("chat"); },
+        fixError: () => { setDrawer("chat"); },
+        refactor: (path, goal) => { setDrawer("chat"); },
+        generate: (prompt) => { setDrawer("chat"); },
+        preview: (path) => { setDrawer("chat"); },
       },
       window: {
         resetLayout: () => setNotice("Layout reset to defaults."),
