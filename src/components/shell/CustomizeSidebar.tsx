@@ -153,7 +153,6 @@ export function CustomizeSidebar({
             <section className="rounded-2xl border border-border bg-background/50 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-3">Connected repositories</p>
               <JyinxGitHubRepos
-                redirectPath="/jyinx"
                 selectedRepositoryId={selectedRepository?.id}
                 onSelectRepository={(repo) => onSelectRepository(repo)}
               />
