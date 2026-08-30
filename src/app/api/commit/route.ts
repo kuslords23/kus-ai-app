@@ -66,9 +66,8 @@ export async function POST(request: NextRequest) {
     } else if (refRes.status !== 404) {
       const err = await refRes.json().catch(() => ({ message: "Branch check failed" }));
       return NextResponse.json({ error: err.message || `GitHub: ${refRes.status}` }, { status: refRes.status });
-    } else {
-      isNewBranch = true;
     }
+    // If 404, branch doesn't exist — proceed without base (first commit)
 
     // 3. Create blobs for each file
     const entries: Array<{ path: string; mode: "100644"; type: "blob"; sha: string }> = [];
