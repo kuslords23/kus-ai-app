@@ -12,6 +12,7 @@ import { AGENTS } from "@/lib/agents/registry";
 import type { AgentExecutionEvent } from "@/lib/agent-execution";
 import { StreamingText } from "@/components/ui/StreamingText";
 import { ExpandableThoughtProcess, type ThoughtStep } from "@/components/ui/ExpandableThoughtProcess";
+import { RepoReference } from "@/components/jyinx/RepoReference";
 
 type Message = { id: string; role: "user" | "assistant" | "system"; content: string; connectGithub?: boolean; kind?: "narration" | "reasoning" | "rejected" | "error" | "deploying" | "deployed" | "edit" | "done" | "log"; detail?: string; files?: Array<{ path: string; content: string }>; url?: string; summary?: string };
 type ChatAgent = { modelId: string; endpoint: string; systemPrompt: string; tag: string };
@@ -111,6 +112,8 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
   const consumedPrompt = useRef(false);
   const startedRef = useRef(false);
   const [thoughtSteps, setThoughtSteps] = useState<ThoughtStep[]>([]);
+  const [repoRefOpen, setRepoRefOpen] = useState(false);
+  const [referencedRepos, setReferencedRepos] = useState<Array<{ repo: string; files: Array<{ path: string; content: string }> }>>([]);
 
   // Persist history to localStorage
   useEffect(() => {
@@ -157,10 +160,18 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
         .map((m) => ({ role: m.role === "user" ? "user" as const : "assistant" as const, content: m.content }));
       const attachmentPayload = await attachments.toPayload();
       const scopedContext = await searchRepositoryContext(repository, githubToken, text);
+      // Build referenced repo context and inject into the prompt
+      let enhancedText = text;
+      if (referencedRepos.length > 0) {
+        const repoRefSection = "\n\n[Referenced repositories for context]:\n" + referencedRepos.map((r) =>
+          `--- ${r.repo} ---\n${r.files.map((f) => `File: ${f.path}\n\`\`\`\n${f.content.slice(0, 2000)}\n\`\`\``).join("\n")}`
+        ).join("\n");
+        enhancedText = text + repoRefSection;
+      }
       const fullContext = [repositoryContext, scopedContext].filter(Boolean).join("\n");
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (githubToken) headers["x-github-token"] = `Bearer ${githubToken}`;
-      const response = await gatewayFetch("/api/jyinx/chat", { method: "POST", headers, body: JSON.stringify({ prompt: text, model: model.id, code, file, repository, branch: "main", repositoryContext: fullContext, agent, history, attachments: attachmentPayload }) });
+      const response = await gatewayFetch("/api/jyinx/chat", { method: "POST", headers, body: JSON.stringify({ prompt: enhancedText, model: model.id, code, file, repository, branch: "main", repositoryContext: fullContext, agent, history, attachments: attachmentPayload }) });
       const dataJson = (await response.json().catch(() => ({}))) as { content?: string; error?: string; connectGithub?: boolean };
       setMessages((current) => [...current, { id: `assistant-${Date.now()}`, role: "assistant", content: dataJson.content || dataJson.error || "Jyinx could not complete that request.", connectGithub: dataJson.connectGithub === true }]);
     } catch { setMessages((current) => [...current, { id: `offline-${Date.now()}`, role: "assistant", content: "Network unavailable. Your workspace remains local; try again when you are connected." }]); }
@@ -184,10 +195,18 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
         .filter((m) => m.id !== "welcome" && !m.connectGithub && m.role !== "system")
         .slice(-20)
         .map((m) => ({ role: m.role === "user" ? "user" as const : "assistant" as const, content: m.content }));
+      // Build enhanced prompt with referenced repo context
+      let enhancedText = text;
+      if (referencedRepos.length > 0) {
+        const repoRefSection = "\n\n[Referenced repositories for context]:\n" + referencedRepos.map((r) =>
+          `--- ${r.repo} ---\n${r.files.map((f) => `File: ${f.path}\n\`\`\`\n${f.content.slice(0, 2000)}\n\`\`\``).join("\n")}`
+        ).join("\n");
+        enhancedText = text + repoRefSection;
+      }
       const response = await gatewayFetch("/api/jyinx/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-github-token": `Bearer ${token}` },
-        body: JSON.stringify({ prompt: text, model: model.id, repository: repository ?? "", branch: "main", repositoryFiles, history }),
+        body: JSON.stringify({ prompt: enhancedText, model: model.id, repository: repository ?? "", branch: "main", repositoryFiles, history }),
       });
       if (!response.ok || !response.body) {
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -391,8 +410,46 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
       {/* Composer */}
       <div className="shrink-0 border-t border-border bg-background/60 px-4 pb-2 pt-2">
         {attachments.ts?.length > 0 && <AttachmentChips attachments={attachments.ts} onRemove={attachments.removeAttachment} />}
+
+        {/* Referenced repos chips */}
+        {referencedRepos.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {referencedRepos.map((r) => (
+              <span key={r.repo} className="inline-flex items-center gap-1 rounded-full border border-gold/25 bg-gold/5 py-0.5 pl-2 pr-1 text-[10px] text-gold">
+                📦 {r.repo.split("/").pop()}
+                <button type="button" onClick={() => setReferencedRepos((prev) => prev.filter((x) => x.repo !== r.repo))} className="text-muted hover:text-foreground">✕</button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Repo reference picker */}
+        {repoRefOpen && (
+          <div className="mb-2">
+            <RepoReference
+              onSelectRepo={(repo, files) => {
+                setReferencedRepos((prev) => {
+                  const filtered = prev.filter((r) => r.repo !== repo);
+                  return [...filtered, { repo, files }];
+                });
+              }}
+              onClose={() => setRepoRefOpen(false)}
+            />
+          </div>
+        )}
+
         <div className="flex items-end gap-2">
           <AttachButton onClick={attachments.openPicker} disabled={sending} />
+          <button
+            type="button"
+            onClick={() => setRepoRefOpen(!repoRefOpen)}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${
+              repoRefOpen ? "bg-gold/15 text-gold border border-gold/30" : "text-muted hover:bg-border/50 hover:text-gold"
+            }`}
+            title="Reference a repository"
+          >
+            📦
+          </button>
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
