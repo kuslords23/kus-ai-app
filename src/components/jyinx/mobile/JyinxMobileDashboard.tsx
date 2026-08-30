@@ -161,7 +161,7 @@ export function JyinxMobileDashboard() {
 if (ideOpen) return <div className="min-h-dvh"><JyinxStudio /></div>;
 
   return (
-    <main className="flex min-h-dvh flex-col overflow-y-auto bg-background px-4 pb-40 pt-5 text-foreground sm:mx-auto sm:max-w-xl sm:px-6">
+    <main className="flex flex-1 flex-col overflow-y-auto bg-background px-4 pb-40 pt-5 text-foreground sm:mx-auto sm:max-w-xl sm:px-6" style={{ height: '100dvh' }}>
       {/* Header */}
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -173,15 +173,9 @@ if (ideOpen) return <div className="min-h-dvh"><JyinxStudio /></div>;
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`hidden rounded-full px-2 py-1 text-[10px] sm:inline-flex ${queueStatus === "ONLINE" ? "bg-success/10 text-success" : "bg-gold/10 text-gold"}`}>{queueStatus === "ONLINE" ? "Live" : `${pendingItems} queued`}</span>
-          <Link href="/jyinx/peer-chat" className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-2 py-2 text-xs text-blue-400" aria-label="Peer-to-Peer chat">👥</Link>
-          <Link href="/jyinx/code-library" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-2 py-2 text-xs text-emerald-400" aria-label="Code library">📦</Link>
-          <Link href="/jyinx/search" className="rounded-xl border border-border p-2 text-muted hover:border-gold/30 hover:text-gold" aria-label="Online code search">🔎</Link>
-          <button type="button" onClick={() => setChatOpen(true)} className="rounded-xl border border-gold/30 bg-gold/10 px-2 py-2 text-xs text-gold" aria-label="Open Jyinx chat">Chat</button>
-          <button type="button" onClick={() => setMode("ide")} className="rounded-xl border border-purple/35 bg-purple/10 px-2 py-2 text-xs text-purple-soft" aria-label="Open Jyinx IDE">IDE</button>
-          <Link href="/jyinx/notebooks" className="rounded-xl border border-border p-2 text-muted hover:border-gold/30 hover:text-gold" aria-label="Open notebooks">📓</Link>
-          <button type="button" onClick={() => setSearchOpen((v) => !v)} className="rounded-xl border border-border p-2 text-muted" aria-label="Search workspaces">⌕</button>
-          <button type="button" onClick={() => setCustomizeOpen(true)} className="rounded-xl border border-border p-2 text-muted" aria-label="Customize dashboard">☷</button>
+          <button type="button" onClick={() => setChatOpen(true)} className="rounded-xl border border-gold/30 bg-gold/10 px-2 py-2 text-xs text-gold" aria-label="Open Jyinx chat">💬 Chat</button>
+          <button type="button" onClick={() => setMode("ide")} className="rounded-xl border border-purple/35 bg-purple/10 px-2 py-2 text-xs text-purple-soft" aria-label="Open Jyinx IDE">🖥 IDE</button>
+          <button type="button" onClick={() => setCustomizeOpen(true)} className="rounded-xl border border-border p-2 text-muted hover:border-gold/30 hover:text-gold" aria-label="Customize dashboard">☷</button>
         </div>
       </header>
 

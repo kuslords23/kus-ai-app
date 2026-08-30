@@ -229,9 +229,12 @@ export function CustomizeSidebar({
                       setPatStatus("saving");
                       setPatMessage("");
                       try {
-                        await persistGitHubToken(token);
+                        // Save to localStorage FIRST (this is the fast path)
+                        localStorage.setItem("kus-ai-github-token", token);
+                        // Also persist via the API for Supabase DB backup
+                        await persistGitHubToken(token).catch(() => {});
                         setPatShort(token.slice(0, 8) + "...");
-                        // Verify the token
+                        // Verify the token against GitHub
                         const res = await fetch("/api/github/commit", {
                           method: "POST",
                           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },

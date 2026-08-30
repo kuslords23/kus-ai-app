@@ -163,7 +163,10 @@ export function JyinxGitHubRepos({
                 if (!token) return;
                 setPatSaving(true);
                 try {
-                  await persistGitHubToken(token);
+                  // Save to localStorage FIRST — immediate effect
+                  localStorage.setItem("kus-ai-github-token", token);
+                  // Back up via persistGitHubToken (Supabase DB)
+                  await persistGitHubToken(token).catch(() => {});
                   setProviderToken(token);
                   setPatInput("");
                   await loadRepositories(token);
