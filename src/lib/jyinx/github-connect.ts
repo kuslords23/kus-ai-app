@@ -122,16 +122,40 @@ export function clearStaleAuthKeys(): void {
  * Returns a GitHub token that can write to repositories.
  *
  * Resolution order:
- *   1. localStorage — survives page refresh (user-entered PAT or persisted OAuth)
- *   2. Supabase database (github_pat_tokens) — user-attached, permanent
- *   3. Supabase session provider_token — ephemeral, last resort
+ *   1. GitHub App installation token (auto-refreshed, preferred)
+ *   2. localStorage — user-entered PAT or cached OAuth token
+ *   3. Supabase database (github_pat_tokens) — user-attached, permanent
+ *   4. Supabase session provider_token — ephemeral, last resort
  *
- * localStorage is checked FIRST because the user's PAT (entered in Settings)
- * is the most reliable token. The Supabase DB may contain an expired OAuth
- * provider_token from a previous session that would override the PAT.
+ * GitHub App tokens are checked first because they have automatic refresh
+ * and don't expire as long as the user has the app installed.
  */
 export async function getGitHubToken(): Promise<string | null> {
-  // 1. Try localStorage FIRST — user-entered PAT or cached OAuth token
+  // 1. Try GitHub App installation token (auto-refreshed, preferred)
+  try {
+    const { createClient } = await import("@/lib/supabase/client");
+    const supabase = createClient();
+    const { data: session } = await supabase.auth.getSession();
+    const userId = session.session?.user?.id;
+
+    if (userId) {
+      const res = await fetch(`/api/github-app?userId=${encodeURIComponent(userId)}&action=resolve-token&repo=any`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { token?: string };
+        if (body.token) {
+          // Cache in localStorage for fast access
+          try { localStorage.setItem(LOCALSTORAGE_KEY, body.token); } catch { /* ignore */ }
+          return body.token;
+        }
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+
+  // 2. Try localStorage — user-entered PAT or cached token
   try {
     const localToken = localStorage.getItem(LOCALSTORAGE_KEY);
     if (localToken) return localToken;
@@ -139,7 +163,7 @@ export async function getGitHubToken(): Promise<string | null> {
     /* fall through */
   }
 
-  // 2. Try the Supabase database (permanent, user-attached)
+  // 3. Try the Supabase database (permanent, user-attached)
   try {
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
@@ -153,7 +177,6 @@ export async function getGitHubToken(): Promise<string | null> {
       if (res.ok) {
         const body = (await res.json()) as { token?: string };
         if (body.token) {
-          // Cache in localStorage for next time
           try { localStorage.setItem(LOCALSTORAGE_KEY, body.token); } catch { /* ignore */ }
           return body.token;
         }
@@ -163,7 +186,7 @@ export async function getGitHubToken(): Promise<string | null> {
     /* fall through */
   }
 
-  // 3. Try the Supabase session's provider_token (ephemeral)
+  // 4. Try the Supabase session's provider_token (ephemeral)
   try {
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
@@ -180,12 +203,7 @@ export async function getGitHubToken(): Promise<string | null> {
     }
 
     if (sessionToken) {
-      // Save it to localStorage for next time
-      try {
-        localStorage.setItem(LOCALSTORAGE_KEY, sessionToken);
-      } catch {
-        /* ignore */
-      }
+      try { localStorage.setItem(LOCALSTORAGE_KEY, sessionToken); } catch { /* ignore */ }
       return sessionToken;
     }
   } catch {

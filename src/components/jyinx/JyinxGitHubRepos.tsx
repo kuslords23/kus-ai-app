@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { persistGitHubToken } from "@/lib/jyinx/github-connect";
+import { GithubAppInstaller } from "@/components/jyinx/GithubAppInstaller";
 
 type Repository = {
   id: number;
@@ -18,44 +18,19 @@ type Repository = {
 type JyinxGitHubReposProps = {
   onSelectRepository: (repository: Repository) => void;
   selectedRepositoryId?: number;
-  redirectPath?: string;
   onRepositoriesLoaded?: (repositories: Repository[]) => void;
 };
 
 export function JyinxGitHubRepos({
   onSelectRepository,
   selectedRepositoryId,
-  redirectPath = "/jyinx",
   onRepositoriesLoaded,
 }: JyinxGitHubReposProps) {
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [providerToken, setProviderToken] = useState<string | null>(null);
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [sessionChecked, setSessionChecked] = useState(false);
-  const [patInput, setPatInput] = useState("");
-  const [patSaving, setPatSaving] = useState(false);
-
-  const connectGitHub = useCallback(async () => {
-    setConnecting(true);
-    setError(null);
-    try {
-      const supabase = createClient();
-      const siteOrigin = typeof window !== "undefined" ? window.location.origin : "https://kus-ai-app.vercel.app";
-      const { error: authError } = await supabase.auth.signInWithOAuth({
-        provider: "github",
-        options: {
-          redirectTo: `${siteOrigin}/auth/callback?next=${encodeURIComponent(redirectPath)}`,
-          scopes: "repo",
-        },
-      });
-      if (authError) throw authError;
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not start GitHub connection.");
-      setConnecting(false);
-    }
-  }, [redirectPath]);
 
   const loadRepositories = useCallback(async (token: string) => {
     setLoading(true);
@@ -142,46 +117,13 @@ export function JyinxGitHubRepos({
         {providerToken && <button type="button" onClick={() => void loadRepositories(providerToken)} className="text-[11px] text-gold hover:text-gold-light">Refresh</button>}
       </div>
       {!providerToken && sessionChecked && !loading && (
-        <div className="space-y-2">
-          <button type="button" onClick={() => void connectGitHub()} disabled={connecting} className="w-full rounded-xl border border-gold/35 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/20 disabled:opacity-60">{connecting ? "Opening GitHub…" : "Connect GitHub (OAuth)"}</button>
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
-            <div className="relative flex justify-center text-[10px]"><span className="bg-surface px-2 text-muted">or use PAT</span></div>
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              value={patInput}
-              onChange={(e) => setPatInput(e.target.value)}
-              placeholder="github_pat_11AA..."
-              className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-[11px] outline-none focus:border-gold/50"
-            />
-            <button
-              type="button"
-              onClick={async () => {
-                const token = patInput.trim();
-                if (!token) return;
-                setPatSaving(true);
-                try {
-                  // Save to localStorage FIRST — immediate effect
-                  localStorage.setItem("kus-ai-github-token", token);
-                  // Back up via persistGitHubToken (Supabase DB)
-                  await persistGitHubToken(token).catch(() => {});
-                  setProviderToken(token);
-                  setPatInput("");
-                  await loadRepositories(token);
-                } catch (cause) {
-                  setError(cause instanceof Error ? cause.message : "Failed to save token");
-                } finally {
-                  setPatSaving(false);
-                }
-              }}
-              disabled={patSaving || !patInput.trim()}
-              className="shrink-0 rounded-lg bg-gold px-3 py-1.5 text-[11px] font-semibold text-background hover:bg-gold/90 disabled:opacity-50 transition-colors"
-            >
-              {patSaving ? "…" : "Save"}
-            </button>
-          </div>
+        <div className="mt-3">
+          <GithubAppInstaller
+            onTokenReady={(token) => {
+              setProviderToken(token);
+              void loadRepositories(token);
+            }}
+          />
         </div>
       )}
       {loading && <p className="mt-3 text-xs text-muted">Checking GitHub connection…</p>}

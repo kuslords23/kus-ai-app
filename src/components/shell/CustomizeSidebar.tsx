@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import type { JyinxRepository } from "@/components/jyinx/JyinxGitHubRepos";
 import { JyinxGitHubRepos } from "@/components/jyinx/JyinxGitHubRepos";
 import type { JyinxModel } from "@/lib/jyinx/model-registry";
 import { HierarchicalModelSelector } from "@/components/models/HierarchicalModelSelector";
 import { providerFromModel, type HierarchicalSelection } from "@/lib/models/catalog";
-import { persistGitHubToken } from "@/lib/jyinx/github-connect";
+import { GithubAppInstaller } from "@/components/jyinx/GithubAppInstaller";
 
 type QueueState = { status: "ONLINE" | "OFFLINE" | "CONNECTING"; pendingItems: number; lastSync: string | null; total: number };
 
@@ -38,44 +38,6 @@ export function CustomizeSidebar({
   if (!open) return null;
 
   const [activeTab, setActiveTab] = useState<"model" | "repo" | "settings">("model");
-  const [patInput, setPatInput] = useState("");
-  const [patStatus, setPatStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [patMessage, setPatMessage] = useState("");
-  const [patShort, setPatShort] = useState<string | null>(null);
-  const [githubLogin, setGithubLogin] = useState<string | null>(null);
-
-  // Load existing token status on mount
-  useEffect(() => {
-    if (!open) return;
-    const check = async () => {
-      try {
-        const local = localStorage.getItem("kus-ai-github-token");
-        if (local) {
-          setPatShort(local.slice(0, 8) + "...");
-          // Verify the stored token
-          const res = await fetch("/api/github/commit", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${local}` },
-            body: JSON.stringify({ action: "scope" }),
-            cache: "no-store",
-          });
-          const data = (await res.json().catch(() => ({}))) as { ok?: boolean; login?: string; scopes?: string[]; error?: string };
-          if (data.ok) {
-            setGithubLogin(data.login ?? null);
-            setPatStatus("saved");
-            const hasRepoScope = data.scopes?.includes("repo") || data.scopes?.includes("fine-grained-pat");
-            setPatMessage(hasRepoScope ? "Connected with repo write access" : `Connected as ${data.login ?? ""} (scopes: ${(data.scopes ?? []).join(", ") || "none"})`);
-          } else {
-            setPatStatus("error");
-            setPatMessage(data.error ?? "Token invalid or expired");
-          }
-        }
-      } catch {
-        // ignore
-      }
-    };
-    void check();
-  }, [open]);
 
   const hierSelection: HierarchicalSelection = (() => {
     const p = providerFromModel(activeModel.id);
@@ -206,67 +168,13 @@ export function CustomizeSidebar({
 
           {activeTab === "settings" && (
             <section className="space-y-3">
-              {/* ── GitHub Personal Access Token ── */}
+              {/* ── GitHub Authentication ── */}
               <div className="rounded-2xl border border-border bg-background/50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-2">GitHub key</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-2">GitHub</p>
                 <p className="text-[10px] text-muted mb-3 leading-relaxed">
-                  Enter a classic or fine-grained PAT with <strong>repo</strong> scope so Jyinx can commit code to your repositories.
-                  {patShort && <span className="block mt-1 text-gold">Active token: {patShort}</span>}
-                  {githubLogin && <span className="block mt-0.5 text-success">Logged in as {githubLogin}</span>}
+                  Connect Jyinx to GitHub so it can commit code to your repositories.
                 </p>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    value={patInput}
-                    onChange={(e) => setPatInput(e.target.value)}
-                    placeholder="github_pat_11AA..."
-                    className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs outline-none focus:border-gold/50"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const token = patInput.trim();
-                      if (!token) return;
-                      setPatStatus("saving");
-                      setPatMessage("");
-                      try {
-                        // Save to localStorage FIRST (this is the fast path)
-                        localStorage.setItem("kus-ai-github-token", token);
-                        // Also persist via the API for Supabase DB backup
-                        await persistGitHubToken(token).catch(() => {});
-                        setPatShort(token.slice(0, 8) + "...");
-                        // Verify the token against GitHub
-                        const res = await fetch("/api/github/commit", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                          body: JSON.stringify({ action: "scope" }),
-                          cache: "no-store",
-                        });
-                        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; login?: string; scopes?: string[]; error?: string };
-                        if (data.ok) {
-                          setGithubLogin(data.login ?? null);
-                          const hasRepoScope = data.scopes?.includes("repo") || data.scopes?.includes("fine-grained-pat");
-                          setPatStatus("saved");
-                          setPatMessage(hasRepoScope ? "Connected with repo write access" : `Connected as ${data.login ?? ""} (scopes: ${(data.scopes ?? []).join(", ") || "none"})`);
-                          setPatInput("");
-                        } else {
-                          setPatStatus("error");
-                          setPatMessage(data.error ?? "Token invalid or expired");
-                        }
-                      } catch (cause) {
-                        setPatStatus("error");
-                        setPatMessage(cause instanceof Error ? cause.message : "Failed to save token");
-                      }
-                    }}
-                    disabled={patStatus === "saving" || !patInput.trim()}
-                    className="shrink-0 rounded-lg bg-gold px-3 py-2 text-xs font-semibold text-background hover:bg-gold/90 disabled:opacity-50 transition-colors"
-                  >
-                    {patStatus === "saving" ? "Saving…" : "Save"}
-                  </button>
-                </div>
-                {patMessage && (
-                  <p className={"mt-2 text-[10px] " + (patStatus === "error" ? "text-danger" : "text-success")}>{patMessage}</p>
-                )}
+                <GithubAppInstaller />
               </div>
 
               <div className="rounded-2xl border border-border bg-background/50 p-4">
