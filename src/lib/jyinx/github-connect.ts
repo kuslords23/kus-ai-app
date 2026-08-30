@@ -122,12 +122,35 @@ export function clearStaleAuthKeys(): void {
  * Returns a GitHub token that can write to repositories.
  *
  * Resolution order:
- *   1. Supabase database (github_pat_tokens) — user-attached, permanent
- *   2. localStorage — survives page refresh
+ *   1. localStorage — survives page refresh (user-entered PAT or persisted OAuth)
+ *   2. Supabase database (github_pat_tokens) — user-attached, permanent
  *   3. Supabase session provider_token — ephemeral, last resort
+ *
+ * localStorage is checked FIRST because the user's PAT (entered in Settings)
+ * is the most reliable token. The Supabase DB may contain an expired OAuth
+ * provider_token from a previous session that would override the PAT.
  */
 export async function getGitHubToken(): Promise<string | null> {
-  // 1. Try the Supabase database (permanent, user-attached)
+  // 1. Try localStorage FIRST — user-entered PAT or cached OAuth token
+  try {
+    const localToken = localStorage.getItem(LOCALSTORAGE_KEY);
+    if (localToken) {
+      // Quick validation: verify it's still valid against GitHub
+      const check = await fetch("/api/github/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localToken}` },
+        body: JSON.stringify({ action: "scope" }),
+        cache: "no-store",
+      }).catch(() => null);
+      if (check?.ok) return localToken;
+      // Token expired/invalid — remove it so we fall through
+      try { localStorage.removeItem(LOCALSTORAGE_KEY); } catch { /* ignore */ }
+    }
+  } catch {
+    /* fall through */
+  }
+
+  // 2. Try the Supabase database (permanent, user-attached)
   try {
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
@@ -141,24 +164,23 @@ export async function getGitHubToken(): Promise<string | null> {
       if (res.ok) {
         const body = (await res.json()) as { token?: string };
         if (body.token) {
-          // Refresh localStorage with the DB token
-          try {
-            localStorage.setItem(LOCALSTORAGE_KEY, body.token);
-          } catch {
-            /* ignore */
+          // Verify the DB token is still valid
+          const check = await fetch("/api/github/commit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${body.token}` },
+            body: JSON.stringify({ action: "scope" }),
+            cache: "no-store",
+          }).catch(() => null);
+          if (check?.ok) {
+            // Cache in localStorage
+            try { localStorage.setItem(LOCALSTORAGE_KEY, body.token); } catch { /* ignore */ }
+            return body.token;
           }
-          return body.token;
+          // DB token is stale — remove it
+          try { await fetch("/api/github-pat", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId }) }).catch(() => {}); } catch { /* ignore */ }
         }
       }
     }
-  } catch {
-    /* fall through */
-  }
-
-  // 2. Try localStorage
-  try {
-    const localToken = localStorage.getItem(LOCALSTORAGE_KEY);
-    if (localToken) return localToken;
   } catch {
     /* fall through */
   }

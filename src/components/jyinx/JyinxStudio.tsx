@@ -150,7 +150,9 @@ function JyinxStudioInner() {
       if (!response.ok) {
         const msg = result.error || `HTTP ${response.status}: ${body.slice(0, 200)}`;
         if (result.authorization || response.status === 401 || response.status === 403 || response.status === 404) {
-          throw new Error("GitHub connection expired or missing write access. Connect GitHub again.");
+          setNotice(`GitHub access expired for ${selectedRepository.fullName}. Open Settings → Settings tab and paste your PAT (repo scope) to reconnect.`);
+          setCommitState("error");
+          return;
         }
         throw new Error(msg);
       }
