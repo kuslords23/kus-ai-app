@@ -133,7 +133,7 @@ export function BuilderPanel({ onClose, onLaunchAgent }: BuilderPanelProps) {
         </div>
       </section>
     );
-  
+  }
 
 
   if (step === "configure") {
