@@ -12,6 +12,7 @@ import { JyinxAgentChat } from "@/components/jyinx/JyinxAgentChat";
 import { BuilderPanel } from "@/components/jyinx/BuilderPanel";
 import { CreateProjectFlow } from "@/components/jyinx/CreateProjectFlow";
 import { CommitButton } from "@/components/jyinx/CommitButton";
+import { IdeWorkspaceProvider, useIdeWorkspace } from "@/lib/ide/workspace";
 
 type QueueState = { status: "ONLINE" | "OFFLINE" | "CONNECTING"; pendingItems: number; lastSync: string | null; total: number };
 
