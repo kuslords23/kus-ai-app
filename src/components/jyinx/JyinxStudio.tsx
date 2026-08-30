@@ -74,8 +74,6 @@ function JyinxStudioInner() {
   const [queue, setQueue] = useState<QueueState>({ status: "ONLINE", pendingItems: 0, lastSync: null, total: 0 });
   const [commitState, setCommitState] = useState<"idle" | "committing" | "done" | "error">("idle");
   const [commitMessage, setCommitMessage] = useState("Jyinx update");
-  const [notebookContext, setNotebookContext] = useState<string | null>(null);
-  const [notebookPrompt, setNotebookPrompt] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [lastResult, setLastResult] = useState<LastRunResult>({ kind: "idle", status: "idle", at: null });
 
@@ -92,8 +90,6 @@ function JyinxStudioInner() {
   useEffect(() => {
     const pending = consumeNotebookHand();
     if (pending) {
-      setNotebookContext(pending.context);
-      setNotebookPrompt(`Continue from the "${pending.notebookName}" notebook context.`);
       setDrawer("chat");
       setAgentPanelOpen(false);
       setNotice(`Opened notebook "${pending.notebookName}" in Jyinx.`);
@@ -178,13 +174,12 @@ function JyinxStudioInner() {
         setNotice("Committing workspace changes before pushing…");
         const token = await getGitHubToken();
         if (token) {
-          const commitRes = await fetch("/api/github/commit", {
+          const commitRes = await fetch("/api/commit", {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({
-              action: "commit-files",
               repository: selectedRepository.fullName,
-              baseBranch: selectedRepository.defaultBranch,
+              branch: selectedRepository.defaultBranch,
               message: `Jyinx push · ${dirty.length} file(s)`,
               files: dirty.map((f) => ({ path: f.path, content: f.content })),
             }),

@@ -49,7 +49,7 @@ export function JyinxMobileDashboard() {
   const repositoryContext = useRepositoryContext(selectedRepository);
   const [customAgentId, setCustomAgentId] = useState<string | null>(customAgents[0]?.id ?? null);
   const customAgent = customAgents.find((item) => item.id === customAgentId) ?? customAgents[0] ?? null;
-  const [notebookContext, setNotebookContext] = useState<string | null>(null);
+  const [, setNotebookContext] = useState<string | null>(null);
 
   // "Open in Jyinx" hand-off from the Notebook view: consume the staged
   // payload, open the agent chat, and seed the notebook context into it.

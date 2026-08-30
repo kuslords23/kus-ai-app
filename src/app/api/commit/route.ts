@@ -12,18 +12,27 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+type CommitBody = {
+  repository?: unknown;
+  branch?: unknown;
+  message?: unknown;
+  files?: unknown;
+};
+
 export async function POST(request: NextRequest) {
   const auth = request.headers.get("authorization");
   const token = auth?.startsWith("Bearer ") ? auth.slice(7).trim() : null;
   if (!token) return NextResponse.json({ error: "No GitHub token." }, { status: 401 });
 
-  const body = await request.json().catch(() => null);
+  const body = (await request.json().catch(() => null)) as CommitBody | null;
   if (!body) return NextResponse.json({ error: "Invalid body." }, { status: 400 });
 
   const repository = typeof body.repository === "string" && /^[\w.-]+\/[\w.-]+$/.test(body.repository) ? body.repository : null;
   const branch = typeof body.branch === "string" && body.branch.length > 0 ? body.branch : "main";
   const message = typeof body.message === "string" && body.message.trim().length > 0 ? body.message.trim() : null;
-  const files = Array.isArray(body.files) ? body.files.filter((f: unknown) => f && typeof f === "object" && typeof (f as Record<string, unknown>).path === "string" && typeof (f as Record<string, unknown>).content === "string") : null;
+  const files: Array<{ path: string; content: string }> | null = Array.isArray(body.files) ? (body.files as Array<Record<string, unknown>>).filter(
+    (f): f is { path: string; content: string } => f && typeof f === "object" && typeof f.path === "string" && typeof f.content === "string"
+  ) : null;
 
   if (!repository) return NextResponse.json({ error: "Invalid repository (use owner/repo format)." }, { status: 400 });
   if (!message) return NextResponse.json({ error: "Commit message is required." }, { status: 400 });
