@@ -95,35 +95,6 @@ async function callLLMOnce(opts: {
 const DEFAULT_REVIEW_MODEL = "openai/gpt-4.1-mini";
 
 /**
- * Pushes an already-committed branch to the dedicated host platform(s) and
- * emits deploying/deployed events. Non-fatal: if the push fails, the pipeline
- * still reports the commit and lets the user retry in the IDE.
- */
-async function* pushAfterCommit(opts: {
-  repository: string;
-  branch: string;
-  commitSha?: string;
-  commitMessage?: string;
-}): AsyncGenerator<AgentExecutionEvent, void, unknown> {
-  yield { type: "deploying", message: `Pushing ${opts.repository}#${opts.branch} to the host platform(s)…` };
-  try {
-    const pushed = await pushToHost({
-      repository: opts.repository,
-      branch: opts.branch,
-      commitSha: opts.commitSha,
-      commitMessage: opts.commitMessage,
-    });
-    if (pushed.ok && pushed.href) {
-      yield { type: "deployed", url: pushed.href };
-    } else {
-      yield { type: "error", message: pushed.error ?? "Push to the host platform returned no confirmation." };
-    }
-  } catch (cause) {
-    yield { type: "error", message: cause instanceof Error ? cause.message : "Push to the host platform failed." };
-  }
-}
-
-/**
  * Runs the full multi-agent execution flow: coder edits, structural + multi-agent
  * review/fact-check, self-correction retries, then an atomic commit via the
  * GitHub engine. Emits narration/verification events as an async generator.
