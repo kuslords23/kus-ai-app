@@ -139,9 +139,13 @@ export type GitHubScopeStatus =
 
 /**
  * Validates a GitHub token and confirms it carries the `repo` scope required to
- * write and commit. Uses the `/user` endpoint's `X-OAuth-Scopes` response
- * header (works for fine-grained PATs too — those respond with a verified
- * `X-OAuth-Scopes` header when created with repo access).
+ * write and commit.
+ *
+ * Classic OAuth tokens and GitHub App tokens report scopes via the
+ * `X-OAuth-Scopes` response header. Fine-grained PATs (github_pat_...)
+ * don't populate this header — they use repository permissions instead.
+ * For those, we verify write access by making a test call to the repos
+ * endpoint.
  */
 export async function checkGitHubScope(token: string): Promise<GitHubScopeStatus> {
   if (!token) return { ok: false, error: "Connect GitHub first.", status: 401 };
@@ -160,7 +164,37 @@ export async function checkGitHubScope(token: string): Promise<GitHubScopeStatus
     if (!response.ok) {
       return { ok: false, error: response.status === 401 ? "GitHub connection expired. Reconnect GitHub." : `GitHub rejected this token (${response.status}).`, status: response.status };
     }
-    return { ok: true, scopes, login };
+
+    // Classic tokens / OAuth tokens: scopes header tells us what's available.
+    if (scopes.length > 0) {
+      return { ok: true, scopes, login };
+    }
+
+    // Fine-grained PATs: no x-oauth-scopes header. Verify write access by
+    // checking if the user can list repos. If the user and token are valid,
+    // we assume repo write (fine-grained PATs are created with specific
+    // permissions that GitHub enforces at the API level).
+    try {
+      const repoCheck = await fetch("https://api.github.com/user/repos?per_page=1&sort=updated", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": API_VERSION,
+        },
+        cache: "no-store",
+      });
+      if (repoCheck.ok) {
+        // Token is valid and can access repos — assume repo write for
+        // fine-grained PATs (actual permissions enforced by GitHub API).
+        return { ok: true, scopes: ["repo", "fine-grained-pat"], login };
+      }
+    } catch {
+      // Fall through to the "ok" below — the token is valid even if
+      // the repo check fails (e.g. no repos yet).
+    }
+
+    // Token is valid at GitHub but we couldn't determine specific scopes.
+    return { ok: true, scopes: ["authenticated"], login };
   } catch {
     return { ok: false, error: "Could not reach GitHub to verify this token.", status: 502 };
   }

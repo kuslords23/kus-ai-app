@@ -64,7 +64,9 @@ function AuthCallback() {
               window.location.replace(`/jyinx?github_error=${encodeURIComponent(result.error || "GitHub connection is missing write access.")}`);
               return;
             }
-            if (result.scopes && !result.scopes.includes("repo")) {
+            if (result.scopes && result.scopes.length > 0 && !result.scopes.includes("repo") && !result.scopes.includes("fine-grained-pat")) {
+              // Scopes header was populated but doesn't include repo write —
+              // this is a genuine scope issue.
               window.location.replace(`/jyinx?github_error=${encodeURIComponent("Your GitHub connection is missing the repo write scope.")}`);
               return;
             }

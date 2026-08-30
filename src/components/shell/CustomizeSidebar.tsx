@@ -63,7 +63,8 @@ export function CustomizeSidebar({
           if (data.ok) {
             setGithubLogin(data.login ?? null);
             setPatStatus("saved");
-            setPatMessage(data.scopes?.includes("repo") ? "Connected with repo write access" : `Connected (scopes: ${(data.scopes ?? []).join(", ") || "none"})`);
+            const hasRepoScope = data.scopes?.includes("repo") || data.scopes?.includes("fine-grained-pat");
+            setPatMessage(hasRepoScope ? "Connected with repo write access" : `Connected as ${data.login ?? ""} (scopes: ${(data.scopes ?? []).join(", ") || "none"})`);
           } else {
             setPatStatus("error");
             setPatMessage(data.error ?? "Token invalid or expired");
@@ -244,8 +245,9 @@ export function CustomizeSidebar({
                         const data = (await res.json().catch(() => ({}))) as { ok?: boolean; login?: string; scopes?: string[]; error?: string };
                         if (data.ok) {
                           setGithubLogin(data.login ?? null);
+                          const hasRepoScope = data.scopes?.includes("repo") || data.scopes?.includes("fine-grained-pat");
                           setPatStatus("saved");
-                          setPatMessage(data.scopes?.includes("repo") ? "Connected with repo write access" : `Connected (scopes: ${(data.scopes ?? []).join(", ") || "none"})`);
+                          setPatMessage(hasRepoScope ? "Connected with repo write access" : `Connected as ${data.login ?? ""} (scopes: ${(data.scopes ?? []).join(", ") || "none"})`);
                           setPatInput("");
                         } else {
                           setPatStatus("error");
