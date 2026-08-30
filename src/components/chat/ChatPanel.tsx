@@ -186,10 +186,17 @@ export function ChatPanel() {
           assembled.trim() ||
           "Kus AI hiccuped — try “help” or ask again.";
 
-        setMessages((prev) =>
-          prev.map((m) => {
-            if (m.id !== replyId) return m;
-            const cards = [];
+      const modeLabel = result.usedWebSearch
+        ? "🔎 Web Search"
+        : result.mode === "sports"
+          ? "⚽ Sports Expert"
+          : "🤖 Kus AI";
+      setStatus(modeLabel);
+
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== replyId) return m;
+          const cards = [];
             if (result.sportsData) {
               cards.push({
                 type: "match",
@@ -213,12 +220,6 @@ export function ChatPanel() {
                     : process.env.NEXT_PUBLIC_HUB_URL,
               });
             }
-const modeLabel = result.usedWebSearch
-            ? "🔎 Web Search"
-            : result.mode === "sports"
-              ? "⚽ Sports Expert"
-              : "🤖 Kus AI";
-        setStatus(modeLabel);
         return {
           ...m,
           content: finalText,
@@ -226,19 +227,13 @@ const modeLabel = result.usedWebSearch
           cards: cards.length ? cards : m.cards,
           chips: actionChips.length ? actionChips : m.chips,
         };
+      })
+    );
 
-        setStatus(
-          result.usedWebSearch
-            ? "News"
-            : result.mode === "sports"
-              ? "Sports"
-              : "Kus AI"
-        );
+    handleDeepLink(result.action);
 
-        handleDeepLink(result.action);
-
-        if (user?.id) {
-          const topics = [
+    if (user?.id) {
+      const topics = [
             ...(memory?.recentTopics ?? []),
             query.slice(0, 48),
           ].slice(0, 12);
