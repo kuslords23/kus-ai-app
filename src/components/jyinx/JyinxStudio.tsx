@@ -9,23 +9,9 @@ import { JyinxSettingsPanel } from "@/components/jyinx/JyinxSettingsPanel";
 import { JyinxWorkspaceFiles } from "@/components/jyinx/JyinxWorkspaceFiles";
 import { JyinxTerminalPanel } from "@/components/jyinx/JyinxTerminalPanel";
 import { JyinxAgentChat } from "@/components/jyinx/JyinxAgentChat";
-import { AgentExecutionStream } from "@/components/jyinx/AgentExecutionStream";
-import { useRepositoryContext } from "@/lib/jyinx/use-repository-context";
-import { DEFAULT_JYINX_MODEL, JYINX_MODELS } from "@/lib/jyinx/model-registry";
-import { useJyinxModelStore } from "@/lib/jyinx/model-store";
-import { HierarchicalModelSelector } from "@/components/models/HierarchicalModelSelector";
-import { providerFromModel, type HierarchicalSelection } from "@/lib/models/catalog";
-import { CommandPalette } from "@/components/jyinx/commands/CommandPalette";
-import { createAgentBridge, buildIdeState, type IdeState, type LastRunResult } from "@/lib/bridge";
-import { CustomizeSidebar } from "@/components/shell/CustomizeSidebar";
-import { PreviewLayout } from "@/components/jyinx/PreviewLayout";
-import { CreateProjectModal } from "@/components/CreateProjectModal";
-import { CostTracker } from "@/components/CostTracker";
-import { consumeNotebookHand } from "@/lib/jyinx/notebooks";
-import { IdeWorkspaceProvider, useIdeWorkspace } from "@/lib/ide/workspace";
-import { AgentIdeController } from "@/lib/ide/controller";
 import { BuilderPanel } from "@/components/jyinx/BuilderPanel";
 import { CreateProjectFlow } from "@/components/jyinx/CreateProjectFlow";
+import { CommitButton } from "@/components/jyinx/CommitButton";
 
 type QueueState = { status: "ONLINE" | "OFFLINE" | "CONNECTING"; pendingItems: number; lastSync: string | null; total: number };
 
@@ -135,8 +121,7 @@ function JyinxStudioInner() {
     } catch (cause) { setCommitState("error"); setNotice(cause instanceof Error ? cause.message : "Unable to publish change."); }
   };
 
-  // Commits ALL dirty workspace buffers atomically (action "commit-files"),
-  // marks them clean, then offers to push the branch to the host platform.
+  // Commits ALL dirty workspace buffers atomically via the new /api/commit endpoint.
   const commitWorkspace = async (message = commitMessage) => {
     const dirty = Object.values(ws.files).filter((f) => f.dirty);
     if (!selectedRepository) { setCommitState("error"); setNotice("Select a repository, then commit."); return; }
@@ -144,25 +129,30 @@ function JyinxStudioInner() {
     setCommitState("committing");
     try {
       const token = await getGitHubToken();
-      if (!token) throw new Error("Reconnect GitHub before committing.");
-      const response = await fetch("/api/github/commit", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ action: "commit-files", repository: selectedRepository.fullName, baseBranch: selectedRepository.defaultBranch, message: message.trim() || `Jyinx update · ${dirty.length} file(s)`, files: dirty.map((f) => ({ path: f.path, content: f.content })) }) });
-      const body = await response.text();
-      let result: { error?: string; commitSha?: string; commitUrl?: string; authorization?: boolean } = {};
-      try { result = JSON.parse(body); } catch { /* ignore parse errors */ }
-      if (!response.ok) {
-        const msg = result.error || `HTTP ${response.status}: ${body.slice(0, 200)}`;
-        if (result.authorization || response.status === 401 || response.status === 403 || response.status === 404) {
-          // Clear the stale token so it's not reused
+      if (!token) throw new Error("No GitHub token. Open Settings → GitHub and paste your PAT.");
+      const res = await fetch("/api/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          repository: selectedRepository.fullName,
+          branch: selectedRepository.defaultBranch,
+          message: message.trim() || `Jyinx update · ${dirty.length} file(s)`,
+          files: dirty.map((f) => ({ path: f.path, content: f.content })),
+        }),
+      });
+      const data = await res.json() as { sha?: string; url?: string; error?: string };
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
           try { localStorage.removeItem("kus-ai-github-token"); } catch { /* ignore */ }
-          setNotice(`GitHub token rejected for ${selectedRepository.fullName}. Open Settings → Settings tab and paste your PAT (repo scope) to reconnect.`);
+          setNotice("GitHub token rejected. Open Settings → GitHub and paste your PAT.");
           setCommitState("error");
           return;
         }
-        throw new Error(msg);
+        throw new Error(data.error || `HTTP ${res.status}`);
       }
       ws.markClean(dirty.map((f) => f.path));
       setCommitState("done"); setCommitMessage("Jyinx update");
-      setNotice(`Committed ${dirty.length} file(s) to GitHub.`);
+      setNotice(`Committed ${dirty.length} file(s) to ${selectedRepository.fullName}.`);
     } catch (cause) { setCommitState("error"); setNotice(cause instanceof Error ? cause.message : "Commit failed."); }
   };
 

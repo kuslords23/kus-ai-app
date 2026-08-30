@@ -6,7 +6,7 @@ import { JyinxGitHubRepos } from "@/components/jyinx/JyinxGitHubRepos";
 import type { JyinxModel } from "@/lib/jyinx/model-registry";
 import { HierarchicalModelSelector } from "@/components/models/HierarchicalModelSelector";
 import { providerFromModel, type HierarchicalSelection } from "@/lib/models/catalog";
-import { GithubAppInstaller } from "@/components/jyinx/GithubAppInstaller";
+import { GitHubSetup } from "@/components/jyinx/GitHubSetup";
 
 type QueueState = { status: "ONLINE" | "OFFLINE" | "CONNECTING"; pendingItems: number; lastSync: string | null; total: number };
 
@@ -167,13 +167,10 @@ export function CustomizeSidebar({
 
           {activeTab === "settings" && (
             <section className="space-y-3">
-              {/* ── GitHub Authentication ── */}
+              {/* ── GitHub ── */}
               <div className="rounded-2xl border border-border bg-background/50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-2">GitHub</p>
-                <p className="text-[10px] text-muted mb-3 leading-relaxed">
-                  Connect Jyinx to GitHub so it can commit code to your repositories.
-                </p>
-                <GithubAppInstaller />
+                <GitHubSetup />
+              </div>
               </div>
 
               <div className="rounded-2xl border border-border bg-background/50 p-4">

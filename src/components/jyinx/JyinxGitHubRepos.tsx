@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { GithubAppInstaller } from "@/components/jyinx/GithubAppInstaller";
+import { GitHubSetup } from "@/components/jyinx/GitHubSetup";
 
 type Repository = {
   id: number;
@@ -118,12 +118,7 @@ export function JyinxGitHubRepos({
       </div>
       {!providerToken && sessionChecked && !loading && (
         <div className="mt-3">
-          <GithubAppInstaller
-            onTokenReady={(token) => {
-              setProviderToken(token);
-              void loadRepositories(token);
-            }}
-          />
+          <GitHubSetup onTokenReady={(token) => { setProviderToken(token); void loadRepositories(token); }} />
         </div>
       )}
       {loading && <p className="mt-3 text-xs text-muted">Checking GitHub connection…</p>}
