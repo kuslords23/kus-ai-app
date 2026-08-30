@@ -25,6 +25,7 @@ import { consumeNotebookHand } from "@/lib/jyinx/notebooks";
 import { IdeWorkspaceProvider, useIdeWorkspace } from "@/lib/ide/workspace";
 import { AgentIdeController } from "@/lib/ide/controller";
 import { BuilderPanel } from "@/components/jyinx/BuilderPanel";
+import { CreateProjectFlow } from "@/components/jyinx/CreateProjectFlow";
 
 type QueueState = { status: "ONLINE" | "OFFLINE" | "CONNECTING"; pendingItems: number; lastSync: string | null; total: number };
 
@@ -57,6 +58,7 @@ function JyinxStudioInner() {
   const [builderAgentPrompt, setBuilderAgentPrompt] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createFlowOpen, setCreateFlowOpen] = useState(false);
   const [costOpen, setCostOpen] = useState(false);
   const [customizeSidebarOpen, setCustomizeSidebarOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -307,6 +309,7 @@ function JyinxStudioInner() {
     setBuilderAgentPrompt(prompt);
     setBuilderOpen(false);
     setAgentPanelOpen(true);
+    setDrawer("chat");
   };
 
   // The agent should process the IDE's live buffers (edits already in the
@@ -426,7 +429,7 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
               <div className="space-y-2">
                 <button type="button" onClick={() => { /* No-op: Files is already shown */ }} className="flex w-full items-center gap-3 rounded-xl border border-gold/30 bg-gold/10 px-3 py-2.5 text-left text-xs text-gold transition-colors">📁 Files</button>
                 <button type="button" onClick={() => { setBuilderOpen(true); setDrawer("builder"); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">🛠 Builder</button>
-                <button type="button" onClick={() => { setCreateOpen(true); setDrawer(null); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">＋ Create Project</button>
+                <button type="button" onClick={() => { setCreateFlowOpen(true); setDrawer(null); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">＋ Create Project</button>
                 <button type="button" onClick={() => { setCostOpen(true); setDrawer(null); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">💳 Cost & Keys</button>
                 <button type="button" onClick={() => { setDrawer("inspector"); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">📊 Status</button>
                 <button type="button" onClick={() => { setCustomizeSidebarOpen(true); setDrawer(null); }} className="flex w-full items-center gap-3 rounded-xl border border-border bg-background/40 px-3 py-2.5 text-left text-xs text-muted hover:border-gold/40 hover:text-gold transition-colors">⚙ Settings</button>
@@ -448,6 +451,22 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
       </div>}
 
       {/* Modals */}
+      {createFlowOpen && (
+        <div className="fixed inset-0 z-[70] bg-black/70 sm:p-6" onClick={() => setCreateFlowOpen(false)}>
+          <div className="absolute right-0 top-0 h-full w-[min(92vw,420px)] overflow-y-auto sm:mx-auto sm:max-w-md sm:relative sm:mt-10 sm:rounded-2xl sm:border sm:border-border sm:bg-surface" onClick={(e) => e.stopPropagation()}>
+            <CreateProjectFlow
+              open
+              onClose={() => setCreateFlowOpen(false)}
+              onLaunchAgent={(prompt) => {
+                setCreateFlowOpen(false);
+                setBuilderAgentPrompt(prompt);
+                setBuilderOpen(false);
+                setDrawer("chat");
+              }}
+            />
+          </div>
+        </div>
+      )}
       <JyinxSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} activeModel={activeModel} onModelChange={setActiveModel} selectedRepositoryId={selectedRepository?.id} onRepositoryChange={(repository) => { if (repository) setSelectedRepository(repository); }} redirectPath="/jyinx" />
       {createOpen && <CreateProjectModal open onClose={() => setCreateOpen(false)} onCreated={(repo) => { setCreateOpen(false); setNotice(`Project created: ${repo.fullName}`); }} />}
       {costOpen && <div className="fixed inset-0 z-[70] bg-black/70 p-4 sm:p-6" onClick={() => setCostOpen(false)}><section className="mx-auto mt-8 h-full max-h-[70vh] max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}><header className="flex items-center justify-between border-b border-border pb-3"><p className="text-sm font-semibold">Cost & keys</p><button type="button" onClick={() => setCostOpen(false)} className="rounded-lg border border-border px-2 py-1 text-xs text-muted">Close</button></header><div className="py-4"><CostTracker /></div></section></div>}
