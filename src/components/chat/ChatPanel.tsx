@@ -213,14 +213,19 @@ export function ChatPanel() {
                     : process.env.NEXT_PUBLIC_HUB_URL,
               });
             }
-            return {
-              ...m,
-              content: finalText,
-              cards: cards.length ? cards : m.cards,
-              chips: actionChips.length ? actionChips : m.chips,
-            };
-          })
-        );
+const modeLabel = result.usedWebSearch
+            ? "🔎 Web Search"
+            : result.mode === "sports"
+              ? "⚽ Sports Expert"
+              : "🤖 Kus AI";
+        setStatus(modeLabel);
+        return {
+          ...m,
+          content: finalText,
+          sourceLabel: modeLabel,
+          cards: cards.length ? cards : m.cards,
+          chips: actionChips.length ? actionChips : m.chips,
+        };
 
         setStatus(
           result.usedWebSearch
@@ -302,7 +307,13 @@ export function ChatPanel() {
 
       <div className="shrink-0 px-3 pt-1 space-y-2 pb-2">
         {status && (
-          <p className="text-[10px] text-muted px-1">{status}</p>
+          <p className="text-[10px] px-1">
+            {status === "Thinking…" && <span className="text-muted animate-pulse">💭 Thinking…</span>}
+            {status === "Sports" && <span className="text-success">⚽ Sports Expert</span>}
+            {status === "News" && <span className="text-gold">🔎 Web Search</span>}
+            {status === "Kus AI" && <span className="text-purple-soft">🤖 Kus AI</span>}
+            {!["Thinking…", "Sports", "News", "Kus AI"].includes(status) && <span className="text-muted">{status}</span>}
+          </p>
         )}
         <SuggestionChips chips={chips} onSelect={onChip} />
         <ChatInput

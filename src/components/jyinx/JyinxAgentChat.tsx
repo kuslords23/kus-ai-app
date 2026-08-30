@@ -12,6 +12,7 @@ import { AGENTS } from "@/lib/agents/registry";
 import type { AgentExecutionEvent } from "@/lib/agent-execution";
 import { StreamingText } from "@/components/ui/StreamingText";
 import { RepoReference } from "@/components/jyinx/RepoReference";
+import { extractCodeBlocks, type ExtractedFile } from "@/lib/jyinx/extract-code-blocks";
 
 type Message = { id: string; role: "user" | "assistant" | "system"; content: string; connectGithub?: boolean; kind?: "narration" | "reasoning" | "rejected" | "error" | "deploying" | "deployed" | "edit" | "done" | "log"; detail?: string; files?: Array<{ path: string; content: string }>; url?: string; summary?: string; label?: string; icon?: string };
 type ChatAgent = { modelId: string; endpoint: string; systemPrompt: string; tag: string };
@@ -153,7 +154,7 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
     try { await connectGitHub("/jyinx"); } finally { setConnecting(false); }
   };
 
-  // ── Chat mode send ──
+// ── Chat mode send ──
   const sendChat = async (text: string) => {
     setMessages((current) => [...current, { id: `user-${Date.now()}`, role: "user", content: text }]);
     setSending(true);
@@ -182,7 +183,16 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
       if (githubToken) headers["x-github-token"] = `Bearer ${githubToken}`;
       const response = await gatewayFetch("/api/jyinx/chat", { method: "POST", headers, body: JSON.stringify({ prompt: enhancedText, model: model.id, code, file, repository, branch: "main", repositoryContext: fullContext, agent, history, attachments: attachmentPayload }) });
       const dataJson = (await response.json().catch(() => ({}))) as { content?: string; error?: string; connectGithub?: boolean };
-      setMessages((current) => [...current, { id: `assistant-${Date.now()}`, role: "assistant", content: dataJson.content || dataJson.error || "Jyinx could not complete that request.", connectGithub: dataJson.connectGithub === true }]);
+      const content = dataJson.content || dataJson.error || "Jyinx could not complete that request.";
+      setMessages((current) => [...current, { id: `assistant-${Date.now()}`, role: "assistant", content, connectGithub: dataJson.connectGithub === true }]);
+
+      // Extract code blocks from the response and apply to IDE workspace
+      if (content && onEdits) {
+        const { files } = extractCodeBlocks(content);
+        if (files.length > 0) {
+          onEdits(files);
+        }
+      }
     } catch { setMessages((current) => [...current, { id: `offline-${Date.now()}`, role: "assistant", content: "Network unavailable. Your workspace remains local; try again when you are connected." }]); }
     finally { setSending(false); attachments.clearAttachments(); }
   };
@@ -470,13 +480,42 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
           }
 
           // Regular user/assistant messages
+          // For assistant messages, check if the content has code blocks
+          const isAssistantMsg = message.role === "assistant" && !message.kind;
+          const codeBlocks = isAssistantMsg ? extractCodeBlocks(message.content) : null;
+          const hasCode = codeBlocks && codeBlocks.files.length > 0;
+
           return (
-            <article key={message.id} className={"max-w-[85%] w-fit box-border rounded-2xl border p-3 text-sm leading-relaxed " + (message.role === "user" ? "self-end border-gold/30 bg-gold/10" : "self-start border-border bg-background/65")}>
+            <article key={message.id} className={"box-border rounded-2xl border p-3 text-sm leading-relaxed " + (message.role === "user" ? "max-w-[85%] w-fit self-end border-gold/30 bg-gold/10" : "self-start w-full border-border bg-background/65")}>
               <p className="mb-1 text-[10px] uppercase tracking-wider text-muted">{message.role === "user" ? "You" : "Jyinx"}</p>
               {message.role === "user" ? (
                 <p className="whitespace-pre-wrap">{message.content}</p>
               ) : sending && idx === messages.length - 1 ? (
+                // Streaming - use StreamingText, parse later
                 <div className="whitespace-pre-wrap"><StreamingText text={message.content} /></div>
+              ) : hasCode ? (
+                <div className="space-y-2">
+                  {/* Show clean text with code blocks replaced by file references */}
+                  <div className="whitespace-pre-wrap mb-3">{renderMessageText(codeBlocks!.cleanText)}</div>
+                  {/* Show each file as a styled section */}
+                  <div className="space-y-2 border-t border-border pt-2">
+                    {codeBlocks!.files.map((file, fi) => (
+                      <div key={fi} className="rounded-lg border border-border bg-background/40 overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-1.5 bg-surface/40 border-b border-border">
+                          <span className="text-[10px] font-mono text-gold truncate">📄 {file.path}</span>
+                          <button
+                            type="button"
+                            onClick={() => onEdits?.([file])}
+                            className="shrink-0 rounded border border-gold/30 px-2 py-0.5 text-[9px] text-gold hover:bg-gold/10"
+                          >
+                            Apply to IDE
+                          </button>
+                        </div>
+                        <pre className="whitespace-pre-wrap bg-[#0d0917] p-3 text-[11px] leading-relaxed text-purple-soft overflow-x-auto max-h-48 overflow-y-auto">{file.content}</pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               ) : (
                 <div className="whitespace-pre-wrap">{renderMessageText(message.content)}</div>
               )}
