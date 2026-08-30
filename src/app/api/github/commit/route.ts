@@ -39,22 +39,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = (await request.json().catch(() => null)) as CommitBody | null;
   if (!body) return NextResponse.json({ error: "Invalid commit request." }, { status: 400 });
 
-  const { repository, baseBranch, branch, message } = body;
-  if (!validRepository(repository) || typeof message !== "string" || !message.trim()) {
-    return NextResponse.json({ error: "Repository and a commit message are required." }, { status: 400 });
-  }
-
   const action = typeof body.action === "string" ? body.action : "commit-files";
 
-  try {
-    if (action === "scope") {
+  // Scope check doesn't need repository or message — just the token.
+  if (action === "scope") {
+    try {
       const status = await checkGitHubScope(token);
       if (!status.ok) {
         return NextResponse.json({ ok: false, error: status.error }, { status: status.status });
       }
       return NextResponse.json({ ok: true, scopes: status.scopes, login: status.login });
+    } catch (cause) {
+      return NextResponse.json({ ok: false, error: "GitHub scope check failed." }, { status: 502 });
     }
+  }
 
+  const { repository, baseBranch, branch, message } = body;
+  if (!validRepository(repository) || typeof message !== "string" || !message.trim()) {
+    return NextResponse.json({ error: "Repository and a commit message are required." }, { status: 400 });
+  }
+
+  try {
     switch (action) {
       case "create": {
         const path = body.path;
