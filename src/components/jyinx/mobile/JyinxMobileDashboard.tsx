@@ -238,7 +238,7 @@ if (ideOpen) return <div className="min-h-dvh"><JyinxStudio /></div>;
       {chatOpen && (
         <div className="fixed inset-0 z-[60] bg-black/70 p-3 sm:p-6" onClick={() => setChatOpen(false)}>
           <section className="mx-auto h-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-surface" onClick={(e) => e.stopPropagation()}>
-            <JyinxAgentChat open onClose={() => setChatOpen(false)} model={activeModel} code="" file="mobile-workspace" repository={workspace?.name} repositoryContext={repositoryContext.context} repositoryFiles={repositoryContext.files} sessionKey={workspace?.name ?? "mobile"} />
+            <JyinxAgentChat key={"chat-" + (workspace?.name ?? "mobile")} open onClose={() => setChatOpen(false)} model={activeModel} code="" file="mobile-workspace" repository={workspace?.name} repositoryContext={repositoryContext.context} repositoryFiles={repositoryContext.files} sessionKey={workspace?.name ?? "mobile"} />
           </section>
         </div>
       )}
@@ -246,7 +246,7 @@ if (ideOpen) return <div className="min-h-dvh"><JyinxStudio /></div>;
       {executionOpen && (
         <div className="fixed inset-0 z-[60] bg-black/70 p-3 sm:p-6" onClick={() => setExecutionOpen(false)}>
           <section className="mx-auto h-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-surface" onClick={(e) => e.stopPropagation()}>
-            <JyinxAgentChat open onClose={() => setExecutionOpen(false)} model={activeModel} code="" file="mobile-workspace" repository={workspace?.name} repositoryContext={repositoryContext.context} repositoryFiles={repositoryContext.files} sessionKey={workspace?.name ?? "mobile"} defaultMode="autonomous" />
+            <JyinxAgentChat key={"auto-" + (workspace?.name ?? "mobile")} open onClose={() => setExecutionOpen(false)} model={activeModel} code="" file="mobile-workspace" repository={workspace?.name} repositoryContext={repositoryContext.context} repositoryFiles={repositoryContext.files} sessionKey={workspace?.name ?? "mobile"} defaultMode="autonomous" />
           </section>
         </div>
       )}

@@ -391,6 +391,7 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
               <BuilderPanel onClose={() => setBuilderOpen(false)} onLaunchAgent={handleLaunchAgent} />
             ) : (
               <JyinxAgentChat
+                key={selectedRepository?.fullName ?? "local"}
                 open
                 model={activeModelInfo}
                 code={activeBuf?.content ?? ""}
@@ -442,12 +443,12 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
               </div>
             </aside>
           ) : drawer === "inspector" ? (
-            <JyinxAgentChat open onClose={() => setDrawer(null)} model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={repositoryContext.context} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} pendingPrompt={builderAgentPrompt ?? undefined} boundFile={activePath === "scratch.ts" ? undefined : activePath} defaultMode={agentPanelOpen ? "autonomous" : undefined} />
+            <JyinxAgentChat key={"inspector-" + (selectedRepository?.fullName ?? "local")} open onClose={() => setDrawer(null)} model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={repositoryContext.context} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} pendingPrompt={builderAgentPrompt ?? undefined} boundFile={activePath === "scratch.ts" ? undefined : activePath} defaultMode={agentPanelOpen ? "autonomous" : undefined} />
           ) : drawer === "chat" || drawer === "builder" ? (
             drawer === "builder" || builderOpen ? (
               <BuilderPanel onClose={() => { setDrawer(null); setBuilderOpen(false); }} onLaunchAgent={handleLaunchAgent} />
             ) : (
-              <JyinxAgentChat open onClose={() => setDrawer(null)} model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={repositoryContext.context} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} pendingPrompt={builderAgentPrompt ?? undefined} boundFile={activePath === "scratch.ts" ? undefined : activePath} />
+              <JyinxAgentChat key={"chat-" + (selectedRepository?.fullName ?? "local")} open onClose={() => setDrawer(null)} model={activeModelInfo} code={activeBuf?.content ?? ""} file={activePath} repository={selectedRepository?.fullName} repositoryContext={repositoryContext.context} repositoryFiles={ideContextFiles} onEdits={controller.applyEdits.bind(controller)} sessionKey={selectedRepository?.fullName ?? "local"} pendingPrompt={builderAgentPrompt ?? undefined} boundFile={activePath === "scratch.ts" ? undefined : activePath} />
             )
           ) : null}
         </div>
