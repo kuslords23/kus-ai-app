@@ -352,7 +352,7 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
           <span className="font-mono">{activePath}</span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {uncommittedCount > 0 && <button type="button" onClick={() => void commitWorkspace()} disabled={commitState === "committing"} className="rounded-md border border-border px-2 py-1 text-[10px] font-medium text-muted hover:text-foreground hover:border-gold/40 transition-colors disabled:opacity-50">{commitState === "committing" ? "…" : "Commit"}</button>}
+          <button type="button" onClick={() => void commitWorkspace()} disabled={commitState === "committing" || uncommittedCount === 0} className="rounded-md border border-border px-2 py-1 text-[10px] font-medium text-muted hover:text-foreground hover:border-gold/40 transition-colors disabled:opacity-50">{commitState === "committing" ? "…" : `Commit${uncommittedCount > 0 ? ` (${uncommittedCount})` : ""}`}</button>
           <button type="button" onClick={() => void handleDeploy()} disabled={!selectedRepository} className="rounded-md bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1 text-[10px] font-medium text-white transition-colors disabled:opacity-50">Push</button>
           <span className="mx-1 h-4 w-px bg-border/60" />
           <button
