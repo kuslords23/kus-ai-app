@@ -20,6 +20,7 @@ export function SidebarCommands({
 }) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   const filtered = query.trim()
     ? commands.filter((c) =>
@@ -37,6 +38,10 @@ export function SidebarCommands({
   const run = (id: string) => {
     onRun(id);
     onClose();
+  };
+
+  const toggleCollapse = (id: string) => {
+    setCollapsed((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   return (
@@ -83,34 +88,50 @@ export function SidebarCommands({
       </div>
 
       {/* Command list */}
-      <div className="flex-1 overflow-y-auto space-y-3">
+      <div className="flex-1 overflow-y-auto space-y-1">
         {grouped.length === 0 && (
           <p className="px-2 py-4 text-center text-[10px] text-muted">No commands match "{query}".</p>
         )}
         {grouped.map((group) => {
           const items = activeCategory ? group.items : group.items;
           if (items.length === 0) return null;
+          const isCollapsed = collapsed[group.id] === true;
           return (
             <div key={group.id}>
-              <p className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted">
-                {group.icon} {group.label}
-              </p>
-              <div className="space-y-0.5">
-                {items.map((cmd) => (
-                  <button
-                    key={cmd.id}
-                    type="button"
-                    onClick={() => run(cmd.id)}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-surface-hover"
-                  >
-                    <span className="w-4 text-center text-[10px] text-muted">{cmd.icon}</span>
-                    <span className="flex-1 text-foreground">{cmd.title}</span>
-                    {cmd.shortcut && (
-                      <span className="shrink-0 text-[9px] text-muted font-mono">{cmd.shortcut}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
+              {/* Collapsible category header */}
+              <button
+                type="button"
+                onClick={() => toggleCollapse(group.id)}
+                className="flex w-full items-center gap-1.5 px-2 py-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted hover:text-foreground transition-colors"
+              >
+                <span className="text-[8px] transition-transform duration-150" style={{ transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>
+                  ▾
+                </span>
+                <span>{group.icon}</span>
+                <span>{group.label}</span>
+                <span className="ml-auto text-[8px] text-muted/60">{items.length}</span>
+              </button>
+
+              {!isCollapsed && (
+                <div className="space-y-0.5 pb-1">
+                  {items.map((cmd) => (
+                    <button
+                      key={cmd.id}
+                      type="button"
+                      onClick={() => run(cmd.id)}
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-surface-hover"
+                    >
+                      <span className="w-4 text-center text-[10px] text-muted shrink-0">{cmd.icon}</span>
+                      <span className="flex-1 text-foreground truncate">{cmd.title}</span>
+                      {cmd.shortcut && (
+                        <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-mono bg-muted/20 text-muted border border-border/50">
+                          {cmd.shortcut}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
