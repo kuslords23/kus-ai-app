@@ -20,6 +20,7 @@ import { PreviewLayout } from "@/components/jyinx/PreviewLayout";
 import { CostTracker } from "@/components/CostTracker";
 import { CommandPalette } from "@/components/jyinx/commands/CommandPalette";
 import { SidebarCommands } from "@/components/jyinx/SidebarCommands";
+import { SyntaxHighlightedEditor } from "@/components/ui/SyntaxHighlightedEditor";
 import { createAgentBridge, buildIdeState, type IdeState, type LastRunResult } from "@/lib/bridge";
 import { consumeNotebookHand } from "@/lib/jyinx/notebooks";
 import { useRepositoryContext } from "@/lib/jyinx/use-repository-context";
@@ -380,7 +381,11 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
           <div className="flex min-h-0 flex-1">
             <section className="flex min-w-0 flex-1 flex-col">
               {ws.openFiles.length > 0 && <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border bg-background/40 px-2"><span className="mr-1 text-[9px] uppercase tracking-wider text-muted">Open</span>{ws.openFiles.map((p) => <button key={p} type="button" onClick={() => ws.setActive(p)} className={`shrink-0 cursor-pointer rounded-t-md border-b-2 px-2 py-1.5 text-[11px] ${p === activePath ? "border-gold text-gold" : "border-transparent text-muted hover:text-foreground"}`} title={p}>{p.split("/").pop()}{ws.files[p]?.dirty ? " ●" : ""}<span className="ml-1 text-muted/60" onClick={(e) => { e.stopPropagation(); ws.closeFile(p); }}>✕</span></button>)}</div>}
-              <textarea value={activeBuf?.content ?? ""} onChange={(event) => { if (ws.activeFile) ws.writeFile(ws.activeFile, event.target.value); }} spellCheck={false} className="min-h-[180px] w-full max-w-full flex-1 resize-none overflow-x-auto p-4 font-mono text-xs leading-6 outline-none md:text-sm" style={{ backgroundColor: "var(--editor-bg)", color: "var(--editor-text)" }} />
+              <SyntaxHighlightedEditor
+                value={activeBuf?.content ?? ""}
+                onChange={(val) => { if (ws.activeFile) ws.writeFile(ws.activeFile, val); }}
+                className="min-h-[180px] w-full max-w-full flex-1"
+              />
             </section>
             {previewOpen && <div className="hidden w-[min(44%,560px)] shrink-0 border-l border-border lg:block"><PreviewLayout src="/" title="Live preview" /></div>}
             <div className="hidden w-[min(42%,440px)] shrink-0 border-l border-border lg:block">

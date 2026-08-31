@@ -38,12 +38,16 @@ export function RepoReference({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch("https://api.github.com/search/repositories?q=" + encodeURIComponent(query + " user:" + query.split("/")[0] || "") + "&per_page=10&sort=updated", {
+        // Fetch the user's own repos (includes private repos the token has access to)
+        const res = await fetch("https://api.github.com/user/repos?per_page=50&sort=updated&type=all", {
           headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
         });
-        if (!res.ok) throw new Error("Search failed");
-        const data = await res.json() as { items?: Array<{ full_name: string; description?: string; language?: string; updated_at?: string }> };
-        setRepos((data.items || []).map((r) => ({ fullName: r.full_name, description: r.description, language: r.language, updatedAt: r.updated_at })));
+        if (!res.ok) throw new Error("Could not load repos");
+        const data = await res.json() as Array<{ full_name: string; description?: string | null; language?: string | null; updated_at?: string }>;
+        // Filter client-side by the query string
+        const q = query.toLowerCase();
+        const filtered = data.filter((r) => r.full_name.toLowerCase().includes(q));
+        setRepos(filtered.map((r) => ({ fullName: r.full_name, description: r.description || undefined, language: r.language || undefined, updatedAt: r.updated_at })));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Search failed");
       } finally {
