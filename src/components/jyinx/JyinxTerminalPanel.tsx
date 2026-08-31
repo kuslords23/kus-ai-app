@@ -110,20 +110,20 @@ export function JyinxTerminalPanel({ repository, file, onClose }: Props) {
 
   if (!visible) {
     return (
-      <div className="flex shrink-0 items-center justify-center border-t border-border bg-[#090711]">
-        <button
-          type="button"
-          onClick={() => setVisible(true)}
-          className="flex w-full items-center justify-center gap-2 py-1 text-[10px] text-muted hover:text-gold transition-colors"
-        >
-          <span>▴</span> Terminal
-        </button>
-      </div>
+<div className="flex shrink-0 items-center justify-center border-t border-border" style={{ backgroundColor: "var(--terminal-bg)" }}>
+          <button
+            type="button"
+            onClick={() => setVisible(true)}
+            className="flex w-full items-center justify-center gap-2 py-1 text-[10px] text-muted hover:text-gold transition-colors"
+          >
+            <span>▴</span> Terminal
+          </button>
+        </div>
     );
   }
 
   return (
-    <section className="relative flex shrink-0 flex-col border-t border-border bg-[#090711] font-mono text-xs" style={{ height: currentHeight }}>
+    <section className="relative flex shrink-0 flex-col border-t border-border font-mono text-xs" style={{ height: currentHeight, backgroundColor: "var(--terminal-bg)", color: "var(--terminal-text)" }}>
       {/* Resize handle */}
       <div
         className="absolute -top-1 left-0 right-0 z-10 h-2 cursor-n-resize hover:bg-gold/30 transition-colors"
@@ -173,20 +173,20 @@ export function JyinxTerminalPanel({ repository, file, onClose }: Props) {
       {/* Tab content */}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
         {tab === "terminal" && (
-          <div className="space-y-0.5 text-purple-soft/90">
+          <div className="space-y-0.5" style={{ color: "var(--terminal-text)" }}>
             {logs.slice(-60).map((log, i) => (
               <p key={`${i}-${log.slice(0, 20)}`} className="whitespace-pre-wrap break-all text-[11px] leading-relaxed">
-                {log.startsWith("$ ") ? <span><span className="text-success">$</span> <span className="text-foreground/80">{log.slice(2)}</span></span> : log}
+                {log.startsWith("$ ") ? <span><span style={{ color: "var(--terminal-prompt)" }}>$</span> <span style={{ opacity: 0.9 }}>{log.slice(2)}</span></span> : <span style={{ opacity: 0.8 }}>{log}</span>}
               </p>
             ))}
             {running && <p className="text-gold animate-pulse">Running…</p>}
           </div>
         )}
         {tab === "output" && (
-          <div className="space-y-0.5 text-purple-soft/90">
+          <div className="space-y-0.5" style={{ color: "var(--terminal-text)" }}>
             {outputLines.length === 0 && <p className="text-muted italic text-[11px]">No output yet.</p>}
             {outputLines.slice(-60).map((line, i) => (
-              <p key={`out-${i}`} className="whitespace-pre-wrap break-all text-[11px] leading-relaxed">{line}</p>
+              <p key={`out-${i}`} className="whitespace-pre-wrap break-all text-[11px] leading-relaxed" style={{ opacity: 0.8 }}>{line}</p>
             ))}
           </div>
         )}
@@ -207,7 +207,7 @@ export function JyinxTerminalPanel({ repository, file, onClose }: Props) {
 
       {/* Command input */}
       <div className="flex shrink-0 items-center gap-2 border-t border-border/40 px-3 py-1.5">
-        <span className="text-success text-[11px]">$</span>
+        <span style={{ color: "var(--terminal-prompt)" }}>$</span>
         <input
           value={command}
           onChange={(e) => setCommand(e.target.value)}

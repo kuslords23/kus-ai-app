@@ -490,7 +490,7 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
                     {message.files.map((file, fi) => (
                       <div key={fi}>
                         <p className="text-[10px] font-mono text-gold/80">{file.path}</p>
-                        <pre className="whitespace-pre-wrap rounded-md bg-[#0d0917] p-2 text-[10px] leading-relaxed text-purple-soft/80 overflow-x-auto max-h-48 overflow-y-auto">
+                        <pre className="whitespace-pre-wrap rounded-md p-2 text-[10px] leading-relaxed overflow-x-auto max-h-48 overflow-y-auto" style={{ backgroundColor: "var(--editor-bg)", color: "var(--editor-text)" }}>
                           {sending && idx === messages.length - 1 && fi === message.files!.length - 1 ? (
                             <StreamingText text={file.content} speed={15} />
                           ) : (
@@ -550,7 +550,7 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
                             Apply to IDE
                           </button>
                         </div>
-                        <pre className="whitespace-pre-wrap bg-[#0d0917] p-3 text-[11px] leading-relaxed text-purple-soft overflow-x-auto max-h-48 overflow-y-auto">{file.content}</pre>
+                        <pre className="whitespace-pre-wrap p-3 text-[11px] leading-relaxed overflow-x-auto max-h-48 overflow-y-auto" style={{ backgroundColor: "var(--editor-bg)", color: "var(--editor-text)" }}>{file.content}</pre>
                       </div>
                     ))}
                   </div>
