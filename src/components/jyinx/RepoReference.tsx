@@ -38,16 +38,50 @@ export function RepoReference({
       setLoading(true);
       setError(null);
       try {
-        // Fetch the user's own repos (includes private repos the token has access to)
-        const res = await fetch("https://api.github.com/user/repos?per_page=50&sort=updated&type=all", {
-          headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
-        });
-        if (!res.ok) throw new Error("Could not load repos");
-        const data = await res.json() as Array<{ full_name: string; description?: string | null; language?: string | null; updated_at?: string }>;
-        // Filter client-side by the query string
+        // 1. Search GitHub for public repos matching the query
+        const searchRes = await fetch(
+          `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&per_page=10&sort=updated`,
+          { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" } }
+        );
+        let searchItems: Array<{ full_name: string; description?: string | null; language?: string | null; updated_at?: string }> = [];
+        if (searchRes.ok) {
+          const searchData = await searchRes.json() as { items?: Array<{ full_name: string; description?: string | null; language?: string | null; updated_at?: string }> };
+          searchItems = searchData.items || [];
+        }
+
+        // 2. Also fetch the user's own repos (includes private ones)
+        let userRepos: Array<{ full_name: string; description?: string | null; language?: string | null; updated_at?: string }> = [];
+        try {
+          const userRes = await fetch("https://api.github.com/user/repos?per_page=50&sort=updated&type=all", {
+            headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" },
+          });
+          if (userRes.ok) {
+            userRepos = await userRes.json() as Array<{ full_name: string; description?: string | null; language?: string | null; updated_at?: string }>;
+          }
+        } catch { /* skip */ }
+
+        // 3. Merge: user repos first (deduped), then search results
+        const seen = new Set<string>();
+        const merged: Array<{ fullName: string; description?: string; language?: string; updatedAt?: string }> = [];
+        for (const r of [...userRepos, ...searchItems]) {
+          if (!seen.has(r.full_name)) {
+            seen.add(r.full_name);
+            merged.push({
+              fullName: r.full_name,
+              description: r.description || undefined,
+              language: r.language || undefined,
+              updatedAt: r.updated_at,
+            });
+          }
+        }
+
+        // Filter by query if it looks like an owner/repo pattern
         const q = query.toLowerCase();
-        const filtered = data.filter((r) => r.full_name.toLowerCase().includes(q));
-        setRepos(filtered.map((r) => ({ fullName: r.full_name, description: r.description || undefined, language: r.language || undefined, updatedAt: r.updated_at })));
+        const filtered = q.includes("/")
+          ? merged.filter((r) => r.fullName.toLowerCase().includes(q))
+          : merged.filter((r) => r.fullName.toLowerCase().includes(q) || (r.description?.toLowerCase() || "").includes(q));
+
+        setRepos(filtered);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Search failed");
       } finally {
