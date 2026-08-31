@@ -5,7 +5,7 @@ import { resolveApiKey, openRouterUrl } from "@/lib/kusai/apiKeysServer";
 import { commitFiles, GitHubCommitError } from "@/services/githubCommit";
 import { parseFileEdits, verifyEdits } from "@/services/agentPipeline";
 import { loadRepositoryContextFiles, formatContextFiles, validRepositoryName } from "@/server/github/context";
-import { routeKusCode } from "@/server/kus-code/live";
+import { routeKusCode, resolveRoutableAgentModel } from "@/server/kus-code/live";
 
 export const runtime = "nodejs";
 
@@ -61,6 +61,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const branch = typeof body?.branch === "string" && /^[\w./-]{1,160}$/.test(body.branch) ? body.branch : "main";
   const agent = body?.agent && typeof body.agent === "object" ? body.agent : null;
   const agentModelId = typeof agent?.modelId === "string" ? agent.modelId : modelId;
+  const fallbackModelId = modelId.startsWith("kus-ai/kus-code") ? resolveRoutableAgentModel(modelId) : agentModelId;
   const agentEndpoint = typeof agent?.endpoint === "string" && agent.endpoint.startsWith("https://") ? agent.endpoint : OPENROUTER_URL;
   // Bounded conversation memory: prior user/assistant turns from the same chat
   // thread. Sanitized so only plain text with valid roles is passed upstream.
@@ -228,11 +229,8 @@ const commitActive = Boolean(githubToken && repository && repository !== "local"
       if (live.content) {
         return NextResponse.json({ content: live.content, model: live.backendModel, engine: live.engine, usage: null });
       }
-      if (live.error) {
-        // Fall through to the generic endpoint so a missing Kus Code key still
-        // produces an answer rather than a hard block.
-        return NextResponse.json({ error: live.error, engine: live.engine }, { status: 502 });
-      }
+      // Fall through to the generic OpenRouter endpoint so Kus Code models
+      // still produce answers even when the dedicated engine fails.
     }
 
     // Kus AI (Royal) → route through the internal RAG brain. Kus AI (Royal)
@@ -285,7 +283,7 @@ const commitActive = Boolean(githubToken && repository && repository !== "local"
         "X-Title": "Kus AI Jyinx",
       },
       body: JSON.stringify({
-        model: agentModelId,
+        model: fallbackModelId,
         messages: [
           { role: "system", content: agentSystemPrompt },
           ...history.map((turn) => ({ role: turn.role, content: turn.content })),
