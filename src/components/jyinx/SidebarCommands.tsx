@@ -55,6 +55,13 @@ export function SidebarCommands({
     return commands.filter((c) => mappedIds.includes(c.category));
   };
 
+  // External links at the bottom
+  const externalLinks = [
+    { label: "My Codespaces", href: "/jyinx/workspace", icon: "⌨" },
+    { label: "Open in VS Code Desktop", href: null, icon: "🖥" },
+    { label: "Open in VS Code Insiders Desktop", href: null, icon: "⚡" },
+  ];
+
   return (
     <div className="flex h-full flex-col bg-surface">
       {/* Primary category list */}
