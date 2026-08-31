@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * 5-Phase, 15-Agent Execution Pipeline
  *
