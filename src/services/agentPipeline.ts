@@ -215,35 +215,6 @@ const coderSystem = [
     "When the task is clear, execute it directly. Do not ask clarifying questions, do not modify or revert files unrelated to the task, and do not loop back asking the user to rephrase an already-clear instruction.",
   ].join("\n");
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    yield {
-      type: "log",
-      message: attempt === 0 ? "Coder agent: shaping the change…" : `Coder agent: retrying after self-correction (${attempt}/${maxRetries})…`,
-    };
-    yield { type: "reasoning", message: "Coder is inspecting context and drafting file edits…" };
-    await delay(600);
-
-    const coderPrompt = [
-      `Repository: ${config.repository}\nBranch: ${config.branch}`,
-      `Task: ${config.request}`,
-      "",
-      `Loaded repository files:\n${repoFiles.length ? repoFiles.map((f) => `### ${f.path}\n${f.content}`).join("\n\n") : "(none)"}`,
-      searchContext ? `\nRelevant context from web search and marketplace:\n${searchContext}\n` : "",
-      lastError ? `\nFeedback from the previous iteration to incorporate:\n${lastError}` : "",
-      config.history?.length ? `\nConversation history:\n${config.history.map((h) => `${h.role === "user" ? "User" : "Jyinx"}: ${h.content}`).join("\n")}` : "",
-    ].join("\n");
-
-  // Build the coder prompt with search context injected
-  const coderPrompt = [
-    `Repository: ${config.repository}\nBranch: ${config.branch}`,
-    `Task: ${config.request}`,
-    "",
-    `Loaded repository files:\n${repoFiles.length ? repoFiles.map((f) => `### ${f.path}\n${f.content}`).join("\n\n") : "(none)"}`,
-    searchContext ? `\nRelevant context from web search and marketplace:\n${searchContext}\n` : "",
-    lastError ? `\nFeedback from the previous iteration to incorporate:\n${lastError}` : "",
-    config.history?.length ? `\nConversation history:\n${config.history.map((h) => `${h.role === "user" ? "User" : "Jyinx"}: ${h.content}`).join("\n")}` : "",
-  ].join("\n");
-
   const reviewerSystem = [
     "You are the Review & Fact-Check agent in a multi-agent pipeline.",
     "Inspect a code patch for syntax errors, missing imports, unhandled edge cases, and logical bugs against the repository.",
@@ -263,6 +234,7 @@ const coderSystem = [
       `Task: ${config.request}`,
       "",
       `Loaded repository files:\n${repoFiles.length ? repoFiles.map((f) => `### ${f.path}\n${f.content}`).join("\n\n") : "(none)"}`,
+      searchContext ? `\nRelevant context from web search and marketplace:\n${searchContext}\n` : "",
       lastError ? `\nFeedback from the previous iteration to incorporate:\n${lastError}` : "",
       config.history?.length ? `\nConversation history:\n${config.history.map((h) => `${h.role === "user" ? "User" : "Jyinx"}: ${h.content}`).join("\n")}` : "",
     ].join("\n");
