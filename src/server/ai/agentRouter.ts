@@ -74,12 +74,12 @@ const KUS_CODE_KEY = process.env.KUS_CODE_API_KEY ?? process.env.KUS_CODE_KEY ??
 
 /**
  * Routes a request to the Kus AI sub-agent system.
- * Falls back gracefully if the endpoint is not configured.
+ * Falls back to general OpenRouter if the dedicated endpoint is not configured.
  */
-export async function routeToKusAgent(req: AgentRequest): Promise<AgentResult> {
+export async function routeToKusAgent(req: AgentRequest, fallback?: { apiKey: string; endpoint: string }): Promise<AgentResult> {
   const isKusCode = typeof req.model === "string" && req.model.startsWith("kus-ai/kus-code");
-  const apiKey = isKusCode ? KUS_CODE_KEY : KUS_AI_KEY;
-  const endpoint = isKusCode ? KUS_CODE_ENDPOINT : KUS_AI_ENDPOINT;
+  const apiKey = isKusCode ? (KUS_CODE_KEY || fallback?.apiKey || "") : KUS_AI_KEY;
+  const endpoint = isKusCode ? (KUS_CODE_KEY ? KUS_CODE_ENDPOINT : (fallback?.endpoint || KUS_CODE_ENDPOINT)) : KUS_AI_ENDPOINT;
 
   if (!apiKey) {
     return {
@@ -87,7 +87,7 @@ export async function routeToKusAgent(req: AgentRequest): Promise<AgentResult> {
       role: req.role,
       model: isKusCode ? "kus-code" : "kus-ai",
       error: isKusCode
-        ? "Kus Code / AI 3 is not configured. Add KUS_CODE_API_KEY in environment variables."
+        ? "Kus Code is not configured. Add KUS_CODE_API_KEY environment variable, or select a different model."
         : "Kus AI is not configured. Add KUS_AI_API_KEY in environment variables.",
     };
   }

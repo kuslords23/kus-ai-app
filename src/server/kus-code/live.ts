@@ -100,7 +100,8 @@ export function resolveRoutableAgentModel(modelId: string): string {
  */
 export async function routeKusCode(
   modelId: string,
-  ctx: KusCodeContext
+  ctx: KusCodeContext,
+  fallback?: { apiKey: string; endpoint: string }
 ): Promise<KusCodeDispatchResult> {
   const variant = resolveKusCodeVariant(modelId);
   const backendModel = backendModelFor(modelId);
@@ -141,7 +142,7 @@ export async function routeKusCode(
         history: ctx.history,
         model: modelId,
       };
-      const result = await routeToKusAgent(agent);
+      const result = await routeToKusAgent(agent, fallback);
       return {
         engine: variant,
         backendModel,

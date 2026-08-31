@@ -224,7 +224,7 @@ const commitActive = Boolean(githubToken && repository && repository !== "local"
         contextFiles: scopedContextFiles,
         history,
         providerToken: apiKey,
-      });
+      }, { apiKey, endpoint });
       if (live.content) {
         return NextResponse.json({ content: live.content, model: live.backendModel, engine: live.engine, usage: null });
       }
