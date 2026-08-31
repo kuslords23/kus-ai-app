@@ -92,38 +92,38 @@ export function CustomizeSidebar({
         <div className="py-4 space-y-4">
           {activeTab === "model" && (
             <>
-              <section className="rounded-2xl border border-border bg-background/50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-3">Model controller</p>
+              <section className="border-l-2 border-l-purple-soft/50 pl-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-2">Model controller</p>
                 <HierarchicalModelSelector
                   value={hierSelection}
                   onChange={(sel) => onModelChange(sel.model)}
                   components={{ optionMeta: (entry) => `${entry.contextWindow.toLocaleString()} ctx` }}
                 />
-                <p className="mt-2 text-[11px] text-muted">{activeModel.contextWindow.toLocaleString()} token context</p>
+                <p className="mt-1.5 text-[10px] text-muted">{activeModel.contextWindow.toLocaleString()} token context</p>
               </section>
 
-              <section className="rounded-2xl border border-border bg-background/50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-3">Connection</p>
+              <section className="border-l-2 border-l-success/50 pl-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-2">Connection</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted">Status</span>
-                  <span className={`text-xs flex items-center gap-1 ${
+                  <span className="text-[11px] text-muted">Status</span>
+                  <span className={`text-[11px] flex items-center gap-1 ${
                     queue.status === "ONLINE" ? "text-success" : "text-gold"}`}>
-                    <span className={`inline-block h-2 w-2 rounded-full ${
+                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${
                       queue.status === "ONLINE" ? "bg-success" : "bg-gold"}`} />
                     {queue.status === "ONLINE" ? "Synced" : "Local only"}
                   </span>
                 </div>
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-xs text-muted">Queued items</span>
-                  <span className="text-xs font-mono">{queue.pendingItems}</span>
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-[11px] text-muted">Queued items</span>
+                  <span className="text-[11px] font-mono">{queue.pendingItems}</span>
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-gold/25 bg-gold/5 p-4">
-                <p className="text-xs font-medium text-gold mb-2">Autonomous mode</p>
-                <p className="text-[11px] text-muted mb-3">Let Jyinx execute tasks autonomously without manual approval for each step.</p>
+              <section className="border-l-2 border-l-gold/40 pl-3 py-2">
+                <p className="text-[10px] font-medium text-gold/80 mb-1.5">Autonomous mode</p>
+                <p className="text-[10px] text-muted/80 mb-2">Let Jyinx execute tasks autonomously without manual approval for each step.</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted">Enabled</span>
+                  <span className="text-[11px] text-muted">Enabled</span>
                   <button
                     type="button"
                     onClick={onAutonomousToggle}
@@ -141,25 +141,25 @@ export function CustomizeSidebar({
               <button
                 type="button"
                 onClick={onCostClick}
-                className="w-full rounded-xl border border-border bg-background/50 p-3 text-left hover:bg-surface"
+                className="w-full border-l-2 border-l-border/40 pl-3 py-2 text-left hover:border-l-gold/50 transition-colors"
               >
-                <p className="text-xs font-semibold">Cost & API keys</p>
-                <p className="text-[10px] text-muted mt-0.5">View credit balance and manage provider keys</p>
+                <p className="text-[11px] font-semibold">Cost & API keys</p>
+                <p className="text-[9px] text-muted mt-0.5">View credit balance and manage provider keys</p>
               </button>
             </>
           )}
 
           {activeTab === "repo" && (
-            <section className="rounded-2xl border border-border bg-background/50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-3">Connected repositories</p>
+            <section className="border-l-2 border-l-border/40 pl-3 py-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-2">Connected repositories</p>
               <JyinxGitHubRepos
                 selectedRepositoryId={selectedRepository?.id}
                 onSelectRepository={(repo) => onSelectRepository(repo)}
               />
               {selectedRepository && (
-                <div className="mt-4 rounded-xl border border-border bg-background/40 p-3">
+                <div className="mt-3 border-l-2 border-l-gold/30 pl-2 py-1">
                   <p className="text-xs font-medium">{selectedRepository.fullName}</p>
-                  <p className="text-[10px] text-muted mt-0.5">{selectedRepository.defaultBranch} branch</p>
+                  <p className="text-[9px] text-muted mt-0.5">{selectedRepository.defaultBranch} branch</p>
                 </div>
               )}
             </section>
@@ -167,47 +167,46 @@ export function CustomizeSidebar({
 
           {activeTab === "settings" && (
             <section className="space-y-3">
-              {/* ── GitHub ── */}
-              <div className="rounded-2xl border border-border bg-background/50 p-4">
+              <div className="border-l-2 border-l-border/40 pl-3 py-2">
                 <GitHubSetup />
               </div>
 
-              <div className="rounded-2xl border border-border bg-background/50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-3">Quick actions</p>
-                <div className="grid grid-cols-2 gap-2">
+              <div className="border-l-2 border-l-border/40 pl-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted mb-2">Quick actions</p>
+                <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
                     onClick={() => window.location.href = "/jyinx/search"}
-                    className="rounded-lg border border-border px-3 py-2 text-xs text-muted hover:border-gold/40 hover:text-gold"
+                    className="rounded-md border border-border/40 px-2.5 py-1.5 text-[10px] text-muted hover:border-gold/40 hover:text-gold transition-colors"
                   >
                     🔎 Code search
                   </button>
                   <button
                     type="button"
                     onClick={() => window.location.href = "/jyinx/code-library"}
-                    className="rounded-lg border border-border px-3 py-2 text-xs text-muted hover:border-gold/40 hover:text-gold"
+                    className="rounded-md border border-border/40 px-2.5 py-1.5 text-[10px] text-muted hover:border-gold/40 hover:text-gold transition-colors"
                   >
                     📦 Code library
                   </button>
                   <button
                     type="button"
                     onClick={() => window.location.href = "/jyinx/peer-chat"}
-                    className="rounded-lg border border-border px-3 py-2 text-xs text-muted hover:border-gold/40 hover:text-gold"
+                    className="rounded-md border border-border/40 px-2.5 py-1.5 text-[10px] text-muted hover:border-gold/40 hover:text-gold transition-colors"
                   >
                     👥 Peer chat
                   </button>
                   <button
                     type="button"
                     onClick={() => window.location.href = "/jyinx/marketplace"}
-                    className="rounded-lg border border-border px-3 py-2 text-xs text-muted hover:border-gold/40 hover:text-gold"
+                    className="rounded-md border border-border/40 px-2.5 py-1.5 text-[10px] text-muted hover:border-gold/40 hover:text-gold transition-colors"
                   >
                     🏪 Marketplace
                   </button>
                 </div>
               </div>
-              <div className="rounded-2xl border border-gold/25 bg-gold/5 p-4">
-                <p className="text-xs font-medium text-gold mb-2">Deploy flow</p>
-                <p className="text-[10px] text-muted leading-relaxed">
+              <div className="border-l-2 border-l-gold/40 pl-3 py-2">
+                <p className="text-[10px] font-medium text-gold/80 mb-1">Deploy flow</p>
+                <p className="text-[9px] text-muted/80 leading-relaxed">
                   Merge the Jyinx pull request and your GitHub-connected Vercel project deploys it automatically.
                 </p>
               </div>

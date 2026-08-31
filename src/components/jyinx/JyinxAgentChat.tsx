@@ -459,28 +459,38 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
         )}
 
         {messages.map((message, idx) => {
-          // Autonomous events have a kind and label — render them with special styling
+          // Autonomous events — terminal-style activity feed with left-border accents
           if (message.kind) {
+            const borderColor =
+              message.kind === "done" || message.kind === "deployed" ? "border-l-success" :
+              message.kind === "error" || message.kind === "rejected" ? "border-l-red-400" :
+              message.kind === "narration" || message.kind === "deploying" ? "border-l-gold" :
+              message.kind === "reasoning" || message.kind === "edit" ? "border-l-purple-soft" :
+              "border-l-border";
+            const labelColor =
+              message.kind === "done" || message.kind === "deployed" ? "text-success" :
+              message.kind === "error" || message.kind === "rejected" ? "text-red-400" :
+              message.kind === "narration" || message.kind === "deploying" ? "text-gold" :
+              message.kind === "reasoning" || message.kind === "edit" ? "text-purple-soft" :
+              message.kind === "log" ? "text-muted" :
+              "text-muted";
+
             return (
-              <article key={message.id} className="self-start w-full rounded-xl border border-border bg-background/40 p-3">
-                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider">
-                  {message.kind === "done" && <span className="text-success">{message.label || "✅ Done"}</span>}
-                  {message.kind === "error" && <span className="text-red-400">{message.label || "❌ Error"}</span>}
-                  {message.kind === "rejected" && <span className="text-red-400">{message.label || "❌ Rejected"}</span>}
-                  {message.kind === "narration" && <span className="text-gold">{message.label || "📋 Plan"}</span>}
-                  {message.kind === "reasoning" && <span className="text-purple-soft">{message.label || "⟳ Reasoning"}</span>}
-                  {message.kind === "edit" && <span className="text-purple-soft">{message.label || "✏️ Edit"}</span>}
-                  {message.kind === "deploying" && <span className="text-gold">{message.label || "🚀 Deploy"}</span>}
-                  {message.kind === "deployed" && <span className="text-success">{message.label || "✅ Deployed"}</span>}
-                  {message.kind === "log" && <span className="text-muted">{message.label || "• Info"}</span>}
-                  {message.kind === "whitespace" && <span className="text-gold">{message.label || "📄 Whitespace"}</span>}
-                </p>
+              <div key={message.id} className={`self-start w-full border-l-2 ${borderColor} pl-3 py-1.5 ${message.kind === "done" ? "mb-1" : ""}`}>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className={`text-[10px] font-medium ${labelColor}`}>
+                    {message.label || message.kind}
+                  </span>
+                  {message.kind === "edit" && message.files && (
+                    <span className="text-[9px] text-muted/60">{message.files.length} file(s)</span>
+                  )}
+                </div>
                 {message.kind === "edit" && message.files ? (
-                  <div className="space-y-2">
+                  <div className="space-y-1.5 mt-1">
                     {message.files.map((file, fi) => (
                       <div key={fi}>
-                        <p className="text-[11px] font-mono text-gold mb-1">{file.path}</p>
-                        <pre className="whitespace-pre-wrap rounded-lg bg-[#0d0917] p-3 text-[11px] leading-relaxed text-purple-soft overflow-x-auto max-h-64 overflow-y-auto">
+                        <p className="text-[10px] font-mono text-gold/80">{file.path}</p>
+                        <pre className="whitespace-pre-wrap rounded-md bg-[#0d0917] p-2 text-[10px] leading-relaxed text-purple-soft/80 overflow-x-auto max-h-48 overflow-y-auto">
                           {sending && idx === messages.length - 1 && fi === message.files!.length - 1 ? (
                             <StreamingText text={file.content} speed={15} />
                           ) : (
@@ -491,20 +501,20 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
                     ))}
                   </div>
                 ) : message.kind === "done" ? (
-                  <p className="text-sm text-success whitespace-pre-wrap">{message.summary || message.content}</p>
+                  <p className="text-xs text-success/90 whitespace-pre-wrap">{message.summary || message.content}</p>
                 ) : message.kind === "error" || message.kind === "rejected" ? (
-                  <p className="text-xs text-red-400 whitespace-pre-wrap">{message.content}</p>
+                  <p className="text-xs text-red-400/90 whitespace-pre-wrap">{message.content}</p>
                 ) : message.kind === "deployed" && message.url ? (
-                  <p className="text-xs text-success">🚀 <a href={message.url} target="_blank" rel="noreferrer" className="underline">{message.content}</a></p>
+                  <p className="text-xs text-success/90">🚀 <a href={message.url} target="_blank" rel="noreferrer" className="underline">{message.content}</a></p>
                 ) : (
-                  <div className="text-xs text-muted whitespace-pre-wrap">{renderMessageText(message.content)}</div>
+                  <div className="text-xs text-muted/90 whitespace-pre-wrap">{renderMessageText(message.content)}</div>
                 )}
                 {message.connectGithub && (
-                  <button type="button" onClick={() => void handleConnect()} disabled={connecting} className="mt-2 rounded-xl border border-gold/35 bg-gold/10 px-3 py-2 text-xs font-medium text-gold hover:bg-gold/20 disabled:opacity-60">
+                  <button type="button" onClick={() => void handleConnect()} disabled={connecting} className="mt-1.5 rounded-md border border-gold/35 bg-gold/10 px-2 py-1 text-[10px] font-medium text-gold hover:bg-gold/20 disabled:opacity-60">
                     {connecting ? "Opening GitHub…" : "Connect GitHub →"}
                   </button>
                 )}
-              </article>
+              </div>
             );
           }
 
@@ -515,8 +525,8 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
           const hasCode = codeBlocks && codeBlocks.files.length > 0;
 
           return (
-            <article key={message.id} className={"box-border rounded-2xl border p-3 text-sm leading-relaxed " + (message.role === "user" ? "max-w-[85%] w-fit self-end border-gold/30 bg-gold/10" : "self-start w-full border-border bg-background/65")}>
-              <p className="mb-1 text-[10px] uppercase tracking-wider text-muted">{message.role === "user" ? "You" : "Jyinx"}</p>
+            <article key={message.id} className={"box-border rounded-md border border-border/40 p-2.5 text-sm leading-relaxed " + (message.role === "user" ? "max-w-[85%] w-fit self-end border-gold/30 bg-gold/10" : "self-start w-full border-border/40 bg-background/65")}>
+              <p className="mb-1 text-[9px] uppercase tracking-wider text-muted">{message.role === "user" ? "You" : "Jyinx"}</p>
               {message.role === "user" ? (
                 <p className="whitespace-pre-wrap">{message.content}</p>
               ) : sending && idx === messages.length - 1 ? (
