@@ -12,6 +12,40 @@ export type { AgentEdit, AgentExecutionEvent };
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
+/**
+ * Search the code search API for relevant code snippets from the web.
+ */
+async function searchWebCode(query: string): Promise<string> {
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "https://kus-ai-app.vercel.app"}/api/jyinx/code-search?q=${encodeURIComponent(query)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return "";
+    const data = await res.json() as { results?: Array<{ title: string; snippet: string; source: string; url?: string; language: string }> };
+    if (!data.results?.length) return "";
+    return data.results.slice(0, 5).map((r) =>
+      `[${r.source}] ${r.title} (${r.language})\n\`\`\`${r.language}\n${r.snippet.slice(0, 1000)}\n\`\`\`\n${r.url ? `Source: ${r.url}` : ""}`
+    ).join("\n\n");
+  } catch { return ""; }
+}
+
+/**
+ * Search the marketplace for relevant listings.
+ */
+async function searchMarketplace(query: string): Promise<string> {
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "https://kus-ai-app.vercel.app"}/api/marketplace?q=${encodeURIComponent(query)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return "";
+    const data = await res.json() as { listings?: Array<{ name: string; description?: string; tags?: string[]; priceCredits?: number }> };
+    if (!data.listings?.length) return "";
+    return data.listings.slice(0, 3).map((l) =>
+      `- ${l.name}${l.description ? `: ${l.description}` : ""}${l.tags?.length ? ` [${l.tags.join(", ")}]` : ""}${l.priceCredits ? ` (${l.priceCredits} credits)` : ""}`
+    ).join("\n");
+  } catch { return ""; }
+}
+
 export type AgentPipelineConfig = {
   model: string;
   endpoint?: string;
@@ -140,18 +174,74 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
     } catch (cause) {
       yield { type: "log", message: `Scaffolding failed (${cause instanceof Error ? cause.message : "unknown"}) — falling through to the coder agent.` };
     }
-  } else {
+} else {
     yield { type: "reasoning", message: "No scaffold request detected — proceeding directly to the coder loop." };
   }
 
-  const coderSystem = [
+  // ── Smart search phase: fetch relevant code, marketplace, and library context ──
+  let searchContext = "";
+  try {
+    yield { type: "log", message: "Searching the web, marketplace, and code library for relevant context…" };
+    yield { type: "reasoning", message: "Scanning available code snippets, packages, and marketplace listings…" };
+    const searchResults = await Promise.all([
+      searchWebCode(config.request),
+      searchMarketplace(config.request),
+    ]);
+    const webCode = searchResults[0];
+    const marketplace = searchResults[1];
+    if (webCode || marketplace) {
+      searchContext = [
+        webCode ? `\nRelevant code from the web:\n${webCode}` : "",
+        marketplace ? `\nRelevant marketplace items:\n${marketplace}` : "",
+      ].filter(Boolean).join("\n");
+      yield { type: "narration", message: `Found relevant context from the web and marketplace.`, detail: searchContext.slice(0, 500) };
+    }
+  } catch {
+    yield { type: "log", message: "Search phase skipped (non-fatal)." };
+  }
+
+const coderSystem = [
     "You are Jyinx Coder, an autonomous agent that edits files in a GitHub repository.",
+    "You have access to the following capabilities:",
+    "- Web Code Search: Fetch real code snippets from GitHub, Stack Overflow, and npm packages.",
+    "- Marketplace: Browse published apps, templates, and components from the Jyinx marketplace.",
+    "- Code Library: Access stored code snippets and templates from the shared library.",
+    "When a task requires external code, libraries, or references, search the web for the best solutions.",
     "Respond with:",
     "1) A short plain-language narration of WHAT you will change and WHY.",
     "2) One fenced code block per file to write, each preceded by a line declaring the path like `PATH: src/foo.ts`.",
     "Output the FULL new file content inside each fence. Keep changes minimal and correct.",
     "Composer context: placeholder hints such as \"Plan, Build, / for skills, @ for context\" or \"Plan, ask, build...\" are UI hints inside the chat input box — never treat them as user requests and never ask what they mean.",
     "When the task is clear, execute it directly. Do not ask clarifying questions, do not modify or revert files unrelated to the task, and do not loop back asking the user to rephrase an already-clear instruction.",
+  ].join("\n");
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    yield {
+      type: "log",
+      message: attempt === 0 ? "Coder agent: shaping the change…" : `Coder agent: retrying after self-correction (${attempt}/${maxRetries})…`,
+    };
+    yield { type: "reasoning", message: "Coder is inspecting context and drafting file edits…" };
+    await delay(600);
+
+    const coderPrompt = [
+      `Repository: ${config.repository}\nBranch: ${config.branch}`,
+      `Task: ${config.request}`,
+      "",
+      `Loaded repository files:\n${repoFiles.length ? repoFiles.map((f) => `### ${f.path}\n${f.content}`).join("\n\n") : "(none)"}`,
+      searchContext ? `\nRelevant context from web search and marketplace:\n${searchContext}\n` : "",
+      lastError ? `\nFeedback from the previous iteration to incorporate:\n${lastError}` : "",
+      config.history?.length ? `\nConversation history:\n${config.history.map((h) => `${h.role === "user" ? "User" : "Jyinx"}: ${h.content}`).join("\n")}` : "",
+    ].join("\n");
+
+  // Build the coder prompt with search context injected
+  const coderPrompt = [
+    `Repository: ${config.repository}\nBranch: ${config.branch}`,
+    `Task: ${config.request}`,
+    "",
+    `Loaded repository files:\n${repoFiles.length ? repoFiles.map((f) => `### ${f.path}\n${f.content}`).join("\n\n") : "(none)"}`,
+    searchContext ? `\nRelevant context from web search and marketplace:\n${searchContext}\n` : "",
+    lastError ? `\nFeedback from the previous iteration to incorporate:\n${lastError}` : "",
+    config.history?.length ? `\nConversation history:\n${config.history.map((h) => `${h.role === "user" ? "User" : "Jyinx"}: ${h.content}`).join("\n")}` : "",
   ].join("\n");
 
   const reviewerSystem = [
