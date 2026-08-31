@@ -114,6 +114,16 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
   const startedRef = useRef(false);
   const [repoRefOpen, setRepoRefOpen] = useState(false);
   const [referencedRepos, setReferencedRepos] = useState<Array<{ repo: string; files: Array<{ path: string; content: string }> }>>([]);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const stop = () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setSending(false);
+    setMessages((current) => [...current, { id: `stop-${Date.now()}`, role: "assistant", content: "⏹ Stopped by user.", kind: "done", label: "⏹ Stopped", summary: "Process stopped by user." }]);
+  };
 
   // Persist history to localStorage + auto-scroll (unless user scrolled up)
   useEffect(() => {
@@ -158,10 +168,13 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
   const sendChat = async (text: string) => {
     setMessages((current) => [...current, { id: `user-${Date.now()}`, role: "user", content: text }]);
     setSending(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const githubToken = await getGitHubToken();
       if (ACTION_PROMPT.test(text) && (!repository || !githubToken)) {
         setMessages((current) => [...current, { id: `connect-${Date.now()}`, role: "assistant", content: !githubToken ? "To modify or commit files I need your GitHub account. Connect GitHub so I can apply changes to a repository." : "I need to know which repository to commit to. Select a repository in Settings, then ask again.", connectGithub: true }]);
+        setSending(false);
         return;
       }
       const history = messages
@@ -170,7 +183,6 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
         .map((m) => ({ role: m.role === "user" ? "user" as const : "assistant" as const, content: m.content }));
       const attachmentPayload = await attachments.toPayload();
       const scopedContext = await searchRepositoryContext(repository, githubToken, text);
-      // Build referenced repo context and inject into the prompt
       let enhancedText = text;
       if (referencedRepos.length > 0) {
         const repoRefSection = "\n\n[Referenced repositories for context]:\n" + referencedRepos.map((r) =>
@@ -181,7 +193,7 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
       const fullContext = [repositoryContext, scopedContext].filter(Boolean).join("\n");
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (githubToken) headers["x-github-token"] = `Bearer ${githubToken}`;
-      const response = await gatewayFetch("/api/jyinx/chat", { method: "POST", headers, body: JSON.stringify({ prompt: enhancedText, model: model.id, code, file, repository, branch: "main", repositoryContext: fullContext, agent, history, attachments: attachmentPayload }) });
+      const response = await gatewayFetch("/api/jyinx/chat", { method: "POST", headers, signal: controller.signal, body: JSON.stringify({ prompt: enhancedText, model: model.id, code, file, repository, branch: "main", repositoryContext: fullContext, agent, history, attachments: attachmentPayload }) });
       const dataJson = (await response.json().catch(() => ({}))) as { content?: string; error?: string; connectGithub?: boolean };
       const content = dataJson.content || dataJson.error || "Jyinx could not complete that request.";
       setMessages((current) => [...current, { id: `assistant-${Date.now()}`, role: "assistant", content, connectGithub: dataJson.connectGithub === true }]);
@@ -193,7 +205,10 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
           onEdits(files);
         }
       }
-    } catch { setMessages((current) => [...current, { id: `offline-${Date.now()}`, role: "assistant", content: "Network unavailable. Your workspace remains local; try again when you are connected." }]); }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setMessages((current) => [...current, { id: `offline-${Date.now()}`, role: "assistant", content: error instanceof Error ? error.message : "Network unavailable. Your workspace remains local; try again when you are connected." }]);
+    }
     finally { setSending(false); attachments.clearAttachments(); }
   };
 
@@ -201,19 +216,19 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
   const sendAutonomous = async (text: string) => {
     setMessages((current) => [...current, { id: `user-${Date.now()}`, role: "user", content: text }]);
     setSending(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const token = await getGitHubToken();
       if (!token) {
         setMessages((current) => [...current, { id: `connect-${Date.now()}`, role: "assistant", content: "Connect GitHub to commit changes to the repository.", connectGithub: true }]);
+        setSending(false);
         return;
       }
-      // Send full conversation history so the autonomous pipeline has context
-      // from any plan/ask discussion that happened in chat mode.
       const history = messages
         .filter((m) => m.id !== "welcome" && !m.connectGithub && m.role !== "system")
         .slice(-20)
         .map((m) => ({ role: m.role === "user" ? "user" as const : "assistant" as const, content: m.content }));
-      // Build enhanced prompt with referenced repo context
       let enhancedText = text;
       if (referencedRepos.length > 0) {
         const repoRefSection = "\n\n[Referenced repositories for context]:\n" + referencedRepos.map((r) =>
@@ -223,6 +238,7 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
       }
       const response = await gatewayFetch("/api/jyinx/agent", {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json", "x-github-token": `Bearer ${token}` },
         body: JSON.stringify({ prompt: enhancedText, model: model.id, repository: repository ?? "", branch: "main", repositoryFiles, history }),
       });
@@ -237,6 +253,7 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
+        if (controller.signal.aborted) break;
         buffer += decoder.decode(value, { stream: true });
         let split = buffer.indexOf("\n\n");
         while (split !== -1) {
@@ -253,8 +270,9 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
         }
       }
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       setMessages((current) => [...current, { id: `error-${Date.now()}`, role: "system", content: error instanceof Error ? error.message : "Failed to connect to the agent pipeline." }]);
-    } finally { setSending(false); }
+    } finally { setSending(false); abortRef.current = null; }
   };
 
   const pushAgentEvent = (event: AgentExecutionEvent) => {
@@ -405,7 +423,18 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
             {repository && <span className="text-muted"> · {repository.split("/").pop()}</span>}
           </p>
         </div>
-        {onClose && <button type="button" onClick={onClose} className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-muted hover:text-gold">Close</button>}
+        <div className="flex items-center gap-2 shrink-0">
+          {sending && (
+            <button
+              type="button"
+              onClick={stop}
+              className="rounded-md bg-red-500/15 border border-red-500/40 px-2.5 py-1 text-[10px] font-medium text-red-400 hover:bg-red-500/25 transition-colors"
+            >
+              ⏹ Stop
+            </button>
+          )}
+          {onClose && <button type="button" onClick={onClose} className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-muted hover:text-gold">Close</button>}
+        </div>
       </header>
 
       {/* Messages */}
