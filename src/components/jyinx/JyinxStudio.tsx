@@ -10,15 +10,6 @@ import { JyinxTerminalPanel } from "@/components/jyinx/JyinxTerminalPanel";
 import { JyinxAgentChat } from "@/components/jyinx/JyinxAgentChat";
 import { BuilderPanel } from "@/components/jyinx/BuilderPanel";
 import { CreateProjectFlow } from "@/components/jyinx/CreateProjectFlow";
-import { CommitButton } from "@/components/jyinx/CommitButton";
-import { IdeWorkspaceProvider, useIdeWorkspace } from "@/lib/ide/workspace";
-import { useJyinxModelStore } from "@/lib/jyinx/model-store";
-import { HierarchicalModelSelector } from "@/components/models/HierarchicalModelSelector";
-import { providerFromModel, type HierarchicalSelection } from "@/lib/models/catalog";
-import { AgentIdeController } from "@/lib/ide/controller";
-import { CustomizeSidebar } from "@/components/shell/CustomizeSidebar";
-import { PreviewLayout } from "@/components/jyinx/PreviewLayout";
-import { CreateProjectModal } from "@/components/CreateProjectModal";
 import { CostTracker } from "@/components/CostTracker";
 import { CommandPalette } from "@/components/jyinx/commands/CommandPalette";
 import { SidebarCommands } from "@/components/jyinx/SidebarCommands";
@@ -57,7 +48,6 @@ function JyinxStudioInner() {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [builderAgentPrompt, setBuilderAgentPrompt] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
   const [createFlowOpen, setCreateFlowOpen] = useState(false);
   const [costOpen, setCostOpen] = useState(false);
   const [customizeSidebarOpen, setCustomizeSidebarOpen] = useState(false);
@@ -472,7 +462,6 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
         </div>
       )}
       <JyinxSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} activeModel={activeModel} onModelChange={setActiveModel} selectedRepositoryId={selectedRepository?.id} onRepositoryChange={(repository) => { if (repository) setSelectedRepository(repository); }} redirectPath="/jyinx" />
-      {createOpen && <CreateProjectModal open onClose={() => setCreateOpen(false)} onCreated={(repo) => { setCreateOpen(false); setNotice(`Project created: ${repo.fullName}`); }} />}
       {costOpen && <div className="fixed inset-0 z-[70] bg-black/70 p-4 sm:p-6" onClick={() => setCostOpen(false)}><section className="mx-auto mt-8 h-full max-h-[70vh] max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}><header className="flex items-center justify-between border-b border-border pb-3"><p className="text-sm font-semibold">Cost & keys</p><button type="button" onClick={() => setCostOpen(false)} className="rounded-lg border border-border px-2 py-1 text-xs text-muted">Close</button></header><div className="py-4"><CostTracker /></div></section></div>}
       <CustomizeSidebar open={customizeSidebarOpen} onClose={() => setCustomizeSidebarOpen(false)} queue={queue} activeModel={activeModelInfo} onModelChange={setActiveModel} selectedRepository={selectedRepository} onSelectRepository={setSelectedRepository} onAutonomousToggle={() => setAgentPanelOpen((current) => !current)} autonomousEnabled={agentPanelOpen} onCostClick={() => { setCostOpen(true); setCustomizeSidebarOpen(false); }} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={bridge.registry.list()} onRun={onRunCommand} state={ideState} />
