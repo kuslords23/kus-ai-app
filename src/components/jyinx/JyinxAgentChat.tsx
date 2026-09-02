@@ -104,7 +104,7 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
         if (parsed.length) return parsed;
       }
     } catch { /* ignore */ }
-    return [{ id: "welcome", role: "assistant", content: "I can modify and commit files in your connected GitHub repository. Ask me to change code and I'll write the edits and commit them when a repository is attached. Say e.g. \"edit `src/App.tsx` to add a button and commit it\"." }];
+    return [{ id: "welcome", role: "assistant", content: "Hi! I'm Jyinx, your coding assistant. I can help you build, edit, and manage your code. Just tell me what you'd like to do in plain English — I'll explain everything as I go. I can also search the web for code examples, browse the marketplace, and commit changes to your GitHub repository." }];
   });
   const [connecting, setConnecting] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);

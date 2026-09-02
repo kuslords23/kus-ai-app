@@ -15,6 +15,7 @@ import {
   saveCompanionMemory,
 } from "@/lib/rag/userContext";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { loadSelection } from "@/lib/models/catalog";
 
 function handleDeepLink(action?: RagAction) {
   if (!action) return;
@@ -110,11 +111,46 @@ export function ChatPanel() {
     saveChatHistory(uid, toStore);
   }, [messages, user?.id]);
 
-  const sendMessage = useCallback(
+const sendMessage = useCallback(
     async (raw: string) => {
       const query = raw.trim();
       if (!query || isStreaming) return;
 
+      // Check if the user has selected a non-Royal model
+      const modelSel = loadSelection();
+      const useCustomModel = modelSel && modelSel.model !== "kus-ai/royal" && modelSel.model !== "openrouter/auto";
+
+      // Custom model path: route through Jyinx chat
+      if (useCustomModel) {
+        const userMsgC: ChatMessageData = { id: `ai_u_${Date.now()}`, role: "user", content: query };
+        const replyIdC = `ai_r_${Date.now()}`;
+        setMessages((prev) => [...prev, userMsgC, { id: replyIdC, role: "assistant", content: "" }]);
+        setIsStreaming(true);
+        setStatus(modelSel?.modelLabel || "AI");
+        try {
+          let assembled = "";
+          const res = await fetch("/api/jyinx/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: query,
+              model: modelSel?.model || "openrouter/free",
+              code: "", file: "royal-chat", repository: "local", branch: "main", repositoryContext: "",
+              history: messages.filter((m) => m.content && (m.role === "user" || m.role === "assistant")).slice(-16).map((m) => ({ role: m.role, content: m.content })),
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json() as { content?: string; error?: string };
+            assembled = data.content || data.error || "No response";
+          } else { assembled = "Couldn't reach the AI — try again."; }
+          setMessages((prev) => prev.map((m) => m.id === replyIdC ? { ...m, content: assembled } : m));
+        } catch {
+          setMessages((prev) => prev.map((m) => m.id === replyIdC ? { ...m, content: "Network error — check your connection." } : m));
+        } finally { setIsStreaming(false); setStatus(""); }
+        return;
+      }
+
+      // Default: route through the hub RAG brain (original flow)
       if (query === "__open_sports__") {
         window.open(
           process.env.NEXT_PUBLIC_SPORTS_COMPANION_URL ||
@@ -261,62 +297,11 @@ export function ChatPanel() {
               : m
           )
         );
-        setStatus("");
+setStatus("");
       } finally {
         setIsStreaming(false);
       }
     },
     [isStreaming, messages, user?.id, userContext]
-  );
-
-  const onChip = useCallback(
-    (chip: { label: string; prompt?: string; url?: string }) => {
-      if (chip.url) {
-        window.open(chip.url, "_blank");
-        return;
-      }
-      sendMessage(chip.prompt || chip.label);
-    },
-    [sendMessage]
-  );
-
-  return (
-    <div className="flex flex-col h-full min-h-0">
-      <div
-        ref={scrollRef}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3"
-      >
-        {messages.map((msg, i) => (
-          <ChatMessage
-            key={msg.id}
-            message={msg}
-            isStreaming={
-              isStreaming &&
-              i === messages.length - 1 &&
-              msg.role === "assistant"
-            }
-            onChipClick={onChip}
-          />
-        ))}
-      </div>
-
-      <div className="shrink-0 px-3 pt-1 space-y-2 pb-2">
-        {status && (
-          <p className="text-[10px] px-1">
-            {status === "Thinking…" && <span className="text-muted animate-pulse">💭 Thinking…</span>}
-            {status === "Sports" && <span className="text-success">⚽ Sports Expert</span>}
-            {status === "News" && <span className="text-gold">🔎 Web Search</span>}
-            {status === "Kus AI" && <span className="text-purple-soft">🤖 Kus AI</span>}
-            {!["Thinking…", "Sports", "News", "Kus AI"].includes(status) && <span className="text-muted">{status}</span>}
-          </p>
-        )}
-        <SuggestionChips chips={chips} onSelect={onChip} />
-        <ChatInput
-          onSend={sendMessage}
-          disabled={isStreaming}
-          placeholder="Ask Kus AI — sports, wallet, music, leagues…"
-        />
-      </div>
-    </div>
   );
 }
