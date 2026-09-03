@@ -115,12 +115,39 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
   const [repoRefOpen, setRepoRefOpen] = useState(false);
   const [referencedRepos, setReferencedRepos] = useState<Array<{ repo: string; files: Array<{ path: string; content: string }> }>>([]);
   const abortRef = useRef<AbortController | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const [backgroundTask, setBackgroundTask] = useState(false);
+
+  // Request wake lock to prevent screen sleep during autonomous tasks
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+        wakeLockRef.current.addEventListener('release', () => {
+          // Re-acquire if task is still running
+          if (sending) {
+            navigator.wakeLock.request('screen').then((wl) => { wakeLockRef.current = wl; }).catch(() => {});
+          }
+        });
+      }
+    } catch { /* Wake lock not supported */ }
+  };
+
+  const releaseWakeLock = async () => {
+    if (wakeLockRef.current) {
+      try { await wakeLockRef.current.release(); } catch { /* ignore */ }
+      wakeLockRef.current = null;
+    }
+  };
 
   const stop = () => {
     if (abortRef.current) {
       abortRef.current.abort();
       abortRef.current = null;
     }
+    releaseWakeLock();
+    setBackgroundTask(false);
+    try { localStorage.removeItem("jyinx:background-task"); } catch { /* ignore */ }
     setSending(false);
     setMessages((current) => [...current, { id: `stop-${Date.now()}`, role: "assistant", content: "⏹ Stopped by user.", kind: "done", label: "⏹ Stopped", summary: "Process stopped by user." }]);
   };
@@ -216,6 +243,9 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
   const sendAutonomous = async (text: string) => {
     setMessages((current) => [...current, { id: `user-${Date.now()}`, role: "user", content: text }]);
     setSending(true);
+    setBackgroundTask(true);
+    try { localStorage.setItem("jyinx:background-task", JSON.stringify({ repo: repository, prompt: text.slice(0, 100), at: Date.now() })); } catch { /* ignore */ }
+    void requestWakeLock();
     const controller = new AbortController();
     abortRef.current = controller;
     try {
@@ -272,7 +302,7 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setMessages((current) => [...current, { id: `error-${Date.now()}`, role: "system", content: error instanceof Error ? error.message : "Failed to connect to the agent pipeline." }]);
-    } finally { setSending(false); abortRef.current = null; }
+    } finally { setSending(false); releaseWakeLock(); setBackgroundTask(false); abortRef.current = null; }
   };
 
   const pushAgentEvent = (event: AgentExecutionEvent) => {
@@ -424,6 +454,12 @@ export function JyinxAgentChat({ open, onClose, model, code, file, workspaceId =
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {backgroundTask && !sending && (
+            <span className="rounded-md border border-gold/30 bg-gold/10 px-2 py-1 text-[10px] text-gold flex items-center gap-1">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-gold animate-pulse" />
+              Background
+            </span>
+          )}
           {sending && (
             <button
               type="button"

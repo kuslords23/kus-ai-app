@@ -348,6 +348,17 @@ const filesPanel = <aside className="flex h-full min-h-0 flex-col overflow-y-aut
         <div className="hidden sm:flex items-center gap-2 text-[10px] text-muted">
           {uncommittedCount > 0 && <span className="flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-gold"><span className="h-1.5 w-1.5 rounded-full bg-gold" />{uncommittedCount} unsaved</span>}
           <span className="font-mono">{activePath}</span>
+          {(() => {
+            try {
+              const bg = localStorage.getItem("jyinx:background-task");
+              if (bg) {
+                const data = JSON.parse(bg) as { repo?: string; at?: number };
+                const elapsed = data.at ? Math.floor((Date.now() - data.at) / 1000) : 0;
+                return <span className="flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-gold text-[10px] ml-2"><span className="inline-block h-1.5 w-1.5 rounded-full bg-gold animate-pulse" />{elapsed > 60 ? `${Math.floor(elapsed / 60)}m` : `${elapsed}s`}</span>;
+              }
+            } catch { /* ignore */ }
+            return null;
+          })()}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <button type="button" onClick={() => void commitWorkspace()} disabled={commitState === "committing" || uncommittedCount === 0} className="rounded-md border border-border px-2 py-1 text-[10px] font-medium text-muted hover:text-foreground hover:border-gold/40 transition-colors disabled:opacity-50">{commitState === "committing" ? "…" : `Commit${uncommittedCount > 0 ? ` (${uncommittedCount})` : ""}`}</button>
