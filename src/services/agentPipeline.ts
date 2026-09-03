@@ -46,6 +46,48 @@ async function searchMarketplace(query: string): Promise<string> {
   } catch { return ""; }
 }
 
+/**
+ * Check the status of the latest Vercel deployments.
+ */
+async function checkVercelStatus(): Promise<string> {
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "https://kus-ai-app.vercel.app"}/api/jyinx/tools`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool: "vercel_deployments", args: { limit: 3 } }),
+      cache: "no-store",
+    });
+    if (!res.ok) return "";
+    const data = await res.json() as { ok?: boolean; data?: Array<{ project?: string; state?: string; url?: string; branch?: string; message?: string }> };
+    if (!data.ok || !data.data?.length) return "";
+    return data.data.map((d) =>
+      `- ${d.project || "Project"}: ${d.state || "unknown"}${d.branch ? ` (${d.branch})` : ""}${d.url ? ` → ${d.url}` : ""}`
+    ).join("\n");
+  } catch { return ""; }
+}
+
+/**
+ * Check GitHub Actions runs for the repository.
+ */
+async function checkGitHubActions(repo: string): Promise<string> {
+  if (!repo || !repo.includes("/")) return "";
+  const [owner, name] = repo.split("/");
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "https://kus-ai-app.vercel.app"}/api/jyinx/tools`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool: "github_actions", args: { owner, repo: name, limit: 5 } }),
+      cache: "no-store",
+    });
+    if (!res.ok) return "";
+    const data = await res.json() as { ok?: boolean; data?: Array<{ name?: string; status?: string; conclusion?: string; branch?: string; url?: string }> };
+    if (!data.ok || !data.data?.length) return "";
+    return data.data.map((r) =>
+      `- ${r.name || "Workflow"}: ${r.status} → ${r.conclusion || "running"}${r.branch ? ` (${r.branch})` : ""}`
+    ).join("\n");
+  } catch { return ""; }
+}
+
 export type AgentPipelineConfig = {
   model: string;
   endpoint?: string;
@@ -178,36 +220,50 @@ export async function* runAgentFlow(cfg: AgentRun): AsyncGenerator<AgentExecutio
     yield { type: "reasoning", message: "No scaffold request detected — proceeding directly to the coder loop." };
   }
 
-  // ── Smart search phase: fetch relevant code, marketplace, and library context ──
+  // ── Smart search phase: fetch relevant code, marketplace, tools context ──
   let searchContext = "";
   try {
-    yield { type: "log", message: "Searching the web, marketplace, and code library for relevant context…" };
-    yield { type: "reasoning", message: "Scanning available code snippets, packages, and marketplace listings…" };
+    yield { type: "log", message: "Searching the web, marketplace, Vercel, and GitHub tools for context…" };
+    yield { type: "reasoning", message: "Scanning available code, services, and deployment status…" };
     const searchResults = await Promise.all([
       searchWebCode(config.request),
       searchMarketplace(config.request),
+      checkVercelStatus(),
+      checkGitHubActions(config.repository),
     ]);
     const webCode = searchResults[0];
     const marketplace = searchResults[1];
-    if (webCode || marketplace) {
-      searchContext = [
-        webCode ? `\nRelevant code from the web:\n${webCode}` : "",
-        marketplace ? `\nRelevant marketplace items:\n${marketplace}` : "",
-      ].filter(Boolean).join("\n");
-      yield { type: "narration", message: `Found relevant context from the web and marketplace.`, detail: searchContext.slice(0, 500) };
+    const vercelStatus = searchResults[2];
+    const githubActions = searchResults[3];
+    const parts = [
+      webCode ? `\nRelevant code from the web:\n${webCode}` : "",
+      marketplace ? `\nRelevant marketplace items:\n${marketplace}` : "",
+      vercelStatus ? `\nVercel deployment status:\n${vercelStatus}` : "",
+      githubActions ? `\nGitHub Actions status:\n${githubActions}` : "",
+    ];
+    searchContext = parts.filter(Boolean).join("\n");
+    if (webCode || marketplace || vercelStatus || githubActions) {
+      yield { type: "narration", message: `Found relevant context from the web, marketplace, and connected services.`, detail: searchContext.slice(0, 500) };
     }
   } catch {
     yield { type: "log", message: "Search phase skipped (non-fatal)." };
   }
 
 const coderSystem = [
-    "You are Jyinx, a helpful assistant that explains everything in simple, plain language.",
+    "You are Jyinx, a helpful autonomous agent that explains everything in simple, plain language.",
     "A non-technical person is reading your responses. Avoid jargon. Explain what you're doing and why, step by step.",
-    "You have access to these tools:",
+    "",
+    "You have access to these capabilities:",
     "- Web Code Search: Find code snippets from GitHub, Stack Overflow, and npm packages.",
     "- Marketplace: Browse published apps, templates, and components.",
-    "- Code Library: Access stored code snippets and templates.",
-    "When a task needs external code, libraries, or references, search the web for the best solutions.",
+    "- Vercel Status: Check recent deployments and their status (live, failed, building).",
+    "- GitHub Actions: Check workflow runs and their results for any repository.",
+    "- Deploy Hooks: Trigger and check deployment hook status.",
+    "- Git: Create commits and push changes to the repository.",
+    "",
+    "When the user asks about deployment status, check Vercel. When they ask about build failures, check GitHub Actions.",
+    "When you need external code, search the web for the best solutions.",
+    "",
     "Respond with:",
     "1) A short plain-language explanation of WHAT you will change and WHY (in simple terms).",
     "2) One fenced code block per file to write, each preceded by a line declaring the path like `PATH: src/foo.ts`.",
