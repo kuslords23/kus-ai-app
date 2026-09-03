@@ -439,7 +439,61 @@ const coderSystem = [
 
       yield { type: "log", message: `Committed ${workingEdits.length} file(s) → ${config.repository}` };
       yield { type: "deploying", message: `Committed to ${config.repository}#${config.branch}` };
-      yield { type: "done", summary: `Committed ${workingEdits.length} file(s) to ${config.repository}.` };
+
+      // ── CI/CD self-healing loop: check GitHub Actions and fix failures ──
+      yield { type: "reasoning", message: "Commit succeeded. Checking GitHub Actions for CI/CD results…" };
+      yield { type: "log", message: "Waiting for workflow to trigger (30s delay)…" };
+      await delay(30000); // Wait for the workflow to trigger
+
+      const [owner, repoName] = config.repository.split("/");
+      let ciPassed = false;
+      let ciError = "";
+
+      for (let ciAttempt = 0; ciAttempt < 3; ciAttempt++) {
+        try {
+          const toolsRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "https://kus-ai-app.vercel.app"}/api/jyinx/tools`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tool: "github_actions", args: { owner, repo: repoName, limit: 5 } }),
+            cache: "no-store",
+          });
+          if (toolsRes.ok) {
+            const toolsData = await toolsRes.json() as { ok?: boolean; data?: Array<{ name?: string; status?: string; conclusion?: string }> };
+            const latestRun = toolsData.data?.[0];
+            if (latestRun) {
+              if (latestRun.status === "completed" && latestRun.conclusion === "success") {
+                ciPassed = true;
+                yield { type: "log", message: `✅ CI/CD passed: ${latestRun.name || "Workflow"} completed successfully.` };
+                break;
+              } else if (latestRun.status === "completed" && (latestRun.conclusion === "failure" || latestRun.conclusion === "cancelled")) {
+                ciError = `${latestRun.name || "Workflow"} failed: ${latestRun.conclusion}`;
+                yield { type: "error", message: `❌ CI/CD failed: ${ciError}. Retrying (${ciAttempt + 1}/3)…` };
+                // Wait longer for next check
+                await delay(15000);
+                continue;
+              } else {
+                yield { type: "log", message: `⏳ Workflow still running (${latestRun.status}). Waiting…` };
+                await delay(15000);
+                continue;
+              }
+            }
+          }
+        } catch {
+          yield { type: "log", message: "Could not check CI/CD status (tool may not be configured)." };
+          break;
+        }
+      }
+
+      if (!ciPassed && ciError) {
+        lastError = `CI/CD failed after commit: ${ciError}. Please fix the issue.`;
+        yield { type: "error", message: `CI/CD failure: ${ciError}` };
+        if (attempt < maxRetries) {
+          yield { type: "log", message: "Feeding CI/CD failure back to the coder for self-correction…" };
+          continue; // Retry the whole pipeline with the CI error as feedback
+        }
+      }
+
+      yield { type: "done", summary: `Committed ${workingEdits.length} file(s) to ${config.repository}.${ciPassed ? " ✅ CI/CD passed." : ""}` };
       return;
     } catch (cause) {
       lastError = cause instanceof Error ? cause.message : "Commit failed.";
