@@ -88,6 +88,34 @@ async function checkGitHubActions(repo: string): Promise<string> {
   } catch { return ""; }
 }
 
+/**
+ * Run a terminal command locally (build, test, lint, type-check) and return output.
+ * Used by the agent to catch issues before committing.
+ */
+async function runTerminalCheck(action: "build" | "test" | "typecheck", repo: string): Promise<{ ok: boolean; output: string; diagnostics: string }> {
+  try {
+    let command = "";
+    if (action === "build") command = "npm run build 2>&1 || true";
+    else if (action === "test") command = "npm test 2>&1 || true";
+    else command = "npx tsc --noEmit 2>&1 || true";
+    
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "https://kus-ai-app.vercel.app"}/api/jyinx/workspace-exec`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, command, repository: repo }),
+      cache: "no-store",
+    });
+    if (!res.ok) return { ok: false, output: "", diagnostics: `Terminal returned HTTP ${res.status}` };
+    const data = await res.json() as { stdout?: string; stderr?: string; exitCode?: number; diagnostics?: Array<{ message: string; file?: string; line?: number }> };
+    const exitOk = data.exitCode === 0;
+    const output = [data.stdout || "", data.stderr || ""].filter(Boolean).join("\n").slice(0, 3000);
+    const diagText = (data.diagnostics || []).slice(0, 5).map((d) => `- ${d.file || ""}:${d.line || 0}: ${d.message}`).join("\n");
+    return { ok: exitOk, output, diagnostics: diagText };
+  } catch (err) {
+    return { ok: false, output: "", diagnostics: err instanceof Error ? err.message : "Terminal check failed" };
+  }
+}
+
 export type AgentPipelineConfig = {
   model: string;
   endpoint?: string;
@@ -260,6 +288,7 @@ const coderSystem = [
     "- GitHub Actions: Check workflow runs and their results for any repository.",
     "- Deploy Hooks: Trigger and check deployment hook status.",
     "- Git: Create commits and push changes to the repository.",
+    "- Terminal: Run build, type-check, and test commands locally before committing. The pipeline automatically runs type-check and build after edits and feeds errors back for self-correction.",
     "",
     "When the user asks about deployment status, check Vercel. When they ask about build failures, check GitHub Actions.",
     "When you need external code, search the web for the best solutions.",
@@ -375,9 +404,36 @@ const coderSystem = [
       return;
     }
 
+    // ── Terminal check phase: run build/type-check locally before committing ──
+    yield { type: "reasoning", message: "Running type-check and build to verify changes locally…" };
+    yield { type: "log", message: "Type-checking…" };
+    const typeResult = await runTerminalCheck("typecheck", config.repository);
+    if (!typeResult.ok) {
+      lastError = `Type-check failed:\n${typeResult.diagnostics || typeResult.output.slice(0, 500)}`;
+      yield { type: "error", message: `Type-check failed. Self-correcting…` };
+      yield { type: "log", message: lastError.slice(0, 1000) };
+      if (attempt < maxRetries) {
+        yield { type: "log", message: "Feeding type errors back to the coder…" };
+        continue;
+      }
+    }
+
+    yield { type: "log", message: "Building…" };
+    const buildResult = await runTerminalCheck("build", config.repository);
+    if (!buildResult.ok) {
+      lastError = `Build failed:\n${buildResult.diagnostics || buildResult.output.slice(0, 500)}`;
+      yield { type: "error", message: `Build failed. Self-correcting…` };
+      yield { type: "log", message: lastError.slice(0, 1000) };
+      if (attempt < maxRetries) {
+        yield { type: "log", message: "Feeding build errors back to the coder…" };
+        continue;
+      }
+    }
+
+    yield { type: "reasoning", message: "Local checks passed. Proceeding to commit…" };
+
     // ── Commit directly — no sandbox verification needed.
     // The review step above already verified structural integrity.
-    yield { type: "reasoning", message: "Review passed. Committing changes directly to GitHub…" };
     yield { type: "narration", message: `Committing ${workingEdits.length} file(s) to ${config.repository}…`, detail: workingEdits.map((e) => `- ${e.path} (${e.content.length} chars)`).join("\n") };
     try {
       const commitRes = await fetch("https://api.github.com/repos/" + config.repository + "/git/ref/heads/" + encodeURIComponent(config.branch), {

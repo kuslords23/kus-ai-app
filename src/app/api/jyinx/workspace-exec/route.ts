@@ -97,14 +97,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "A command is required." }, { status: 400 });
   }
 
-  // Determine working directory. If it's a real repo, try to find the checkout.
-  // Otherwise use the project root.
+  // Determine working directory. In serverless, the project code is at process.cwd().
+  // The repo name is used for logging only since we can't clone arbitrary repos.
   let cwd = process.cwd();
   if (repository) {
     const repoPath = join("/tmp", "jyinx", repository.replace("/", "-"));
     if (existsSync(repoPath)) {
       cwd = repoPath;
     }
+    // Fall back to process.cwd() which has the actual project files
   }
 
   // Security: block dangerous commands
