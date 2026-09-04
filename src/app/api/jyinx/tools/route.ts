@@ -88,24 +88,46 @@ export async function POST(request: NextRequest) {
   switch (body.tool) {
     case "vercel_deployments":
     case "vercel_status": {
-      const data = await getVercelDeployments(Number(body.args?.limit) || 5);
-      return NextResponse.json({ ok: !data.error, data: data.error ? null : data, error: data.error });
-    }
+    const data = await getVercelDeployments(Number(body.args?.limit) || 5);
+    
+    // Type narrow or safely check if data is an array or object
+    const hasError = !Array.isArray(data) && data && 'error' in data ? (data as any).error : null;
+
+    return NextResponse.json({ 
+        ok: !hasError, 
+        data: hasError ? null : data, 
+        error: hasError 
+    });
+}
+
 
     case "deploy_hooks":
     case "deploy_hook_status": {
-      const data = await getDeployHookStatus();
-      return NextResponse.json({ ok: !data.error, data: data.error ? null : data, error: data.error });
-    }
+    const data = await getDeployHookStatus();
+    const hasError = !Array.isArray(data) && data && 'error' in data ? (data as any).error : null;
 
-    case "github_actions":
-    case "actions_status": {
-      const owner = String(body.args?.owner || "");
-      const repo = String(body.args?.repo || "");
-      if (!owner || !repo) return NextResponse.json({ ok: false, error: "owner and repo required" }, { status: 400 });
-      const data = await getGitHubActions(owner, repo, Number(body.args?.limit) || 5);
-      return NextResponse.json({ ok: !data.error, data: data.error ? null : data, error: data.error });
-    }
+    return NextResponse.json({ 
+        ok: !hasError, 
+        data: hasError ? null : data, 
+        error: hasError 
+    });
+}
+case "github_actions": {
+    const owner = body.args?.owner;
+    const repo = body.args?.repo;
+    if (!owner || !repo) return NextResponse.json({ ok: false, error: "owner and repo required" });
+    
+    const data = await getGitHubActions(owner, repo, Number(body.args?.limit) || 5);
+    const hasError = !Array.isArray(data) && data && 'error' in data ? (data as any).error : null;
+
+    return NextResponse.json({ 
+        ok: !hasError, 
+        data: hasError ? null : data, 
+        error: hasError 
+    });
+}
+
+
 
     default:
       return NextResponse.json({ ok: false, error: `Unknown tool: ${body.tool}` }, { status: 400 });
