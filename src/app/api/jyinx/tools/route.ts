@@ -112,10 +112,15 @@ export async function POST(request: NextRequest) {
         error: hasError 
     });
 }
-case "github_actions": {
-    const owner = body.args?.owner;
-    const repo = body.args?.repo;
-    if (!owner || !repo) return NextResponse.json({ ok: false, error: "owner and repo required" });
+
+
+ case "github_actions": {
+    const owner = typeof body.args?.owner === "string" ? body.args.owner : "";
+    const repo = typeof body.args?.repo === "string" ? body.args.repo : "";
+    
+    if (!owner || !repo) {
+        return NextResponse.json({ ok: false, error: "owner and repo required" });
+    }
     
     const data = await getGitHubActions(owner, repo, Number(body.args?.limit) || 5);
     const hasError = !Array.isArray(data) && data && 'error' in data ? (data as any).error : null;
@@ -126,6 +131,7 @@ case "github_actions": {
         error: hasError 
     });
 }
+
 
 
 
